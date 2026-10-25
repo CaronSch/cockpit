@@ -73,6 +73,14 @@ is newer. The daemon prints its version at start.
   (`rename`) and `modes/rpc/rpc-session-settle.ts`, then update `daemon/omp-session.js`
   and the fake.
 
+- **Idle compaction leans on omp's usage and `compact`.** `daemon/idle-compaction.js`
+  (checked against 18.12.6's source) reads the cache entry from an assistant
+  `message_end`'s `usage.cttl.ephemeral1h`, times it from that message's `message_start`,
+  and sends RPC `compact`, whose answer carries the summary. omp runs its own idle
+  compaction only in its TUI; PR can1357/oh-my-pi#14468 would move it into the session
+  for RPC too. A change shows up as long sessions never compacted, or compacted twice.
+  *Response:* re-read `session/cache-warmer.ts`, `modes/rpc/rpc-mode.ts` (`compact`) and,
+  once omp runs idle compaction over RPC, drop the daemon's in favour of omp's.
 - **Unread marks lean on omp's conversation id.** A session's mark is kept under
   `get_state`'s `sessionId`, which must be its journal header's `id` (what the Sessions
   window lists a past session by), also when resumed (`SessionManager` sets it from the

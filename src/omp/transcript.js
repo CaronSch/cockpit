@@ -426,6 +426,10 @@ function applyFrame(state, frame, at) {
   }
 }
 
+/** What the transcript says while the daemon compacts the session while it is idle, and once it did. */
+export const IDLE_COMPACTING = 'Compacting while idle, before the prompt cache expires…';
+export const IDLE_COMPACTED = 'Compacted while idle, before the prompt cache expired · turn off in Config';
+
 /** @param {Transcript} state @param {Record<string, any>} frame */
 function applyResponse(state, frame) {
   const command = String(frame.command ?? 'command');
@@ -463,6 +467,10 @@ function applyResponse(state, frame) {
     case 'login':
       state.openUrl = null;
       return note(state, 'info', 'login', `Logged in${frame.data?.providerId ? ` to ${frame.data.providerId}` : ''}`);
+    case 'compact':
+      // Only the daemon's idle compaction sends `compact` (daemon/idle-compaction.js); a user's
+      // `/compact` is a prompt, reported by omp's own frames.
+      return note(state, 'muted', 'compaction', IDLE_COMPACTED, typeof frame.data?.summary === 'string' ? frame.data.summary : null);
     default:
       // Other successful replies are consumed by whoever sent the command.
       return;
@@ -580,6 +588,9 @@ function applySent(state, command) {
   } else if (command?.type === 'login') {
     // omp answers a login only once it is done: say what is under way meanwhile.
     note(state, 'muted', 'login', `Logging in to ${String(command.providerId ?? 'a provider')}…`);
+  } else if (command?.type === 'compact') {
+    // Likewise a compaction, which only the daemon's idle compaction sends (see applyResponse).
+    note(state, 'muted', 'compaction', IDLE_COMPACTING);
   }
   // Every other command shows up through omp's own frames (messages, responses).
 }

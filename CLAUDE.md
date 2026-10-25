@@ -72,8 +72,13 @@ Planned capabilities:
   unused for 30 minutes (`daemon/sleep.js`: no turn, nothing asked, nothing queued,
   no event and no `seen` from a window being used); windows keep showing the
   conversation from its journal, and the next message, or the box being focused,
-  wakes it (`omp --resume`, queued until ready). After a daemon restart nothing is
-  awake. A rewind moves omp onto a new journal: windows follow `get_state`'s
+  wakes it (`omp --resume`, queued until ready). A conversation of 200K tokens or
+  more whose last request wrote a one-hour prompt cache is instead compacted while
+  idle, as Claude Code does, 54 minutes after that request (90% of the cache's life,
+  while the summary still reads it from the cache), and stays awake until then
+  (`daemon/idle-compaction.js`; omp's own idle compaction runs only in its TUI;
+  a switch in Config, kept by the daemon in `~/.cockpit/settings.json`, turns it off:
+  `daemon/settings.js`). After a daemon restart nothing is awake. A rewind moves omp onto a new journal: windows follow `get_state`'s
   `sessionFile`, and the daemon archives the old one (`onRewound`). Which conversations
   are unread is the daemon's too (`daemon/unread.js`, keyed by omp's conversation
   id, kept in `~/.cockpit/unread.json`), so every window and page agrees on what
@@ -118,7 +123,9 @@ What runs today:
   tool calls with output), pick model and thinking level, log in to
   providers, use slash commands, answer approval and `ask` dialogs, steer or stop
   a running turn, and carry on a conversation whatever became of its omp (asleep,
-  a daemon restart). A pane shows one conversation at a time: **New**, **Fork**,
+  a daemon restart). A long conversation compacted while idle says so in its
+  transcript while it runs ("Compacting while idle…") and once done ("Compacted while
+  idle, before the prompt cache expired"), with the summary. A pane shows one conversation at a time: **New**, **Fork**,
   **Accounts** and **Stop** sit in the window's title bar (`ctx.headActions`).
   **New** starts another one there, in the same directory unless the setup
   screen's Directory is changed, while the one shown before carries on. The
@@ -198,6 +205,8 @@ What runs today:
   Docs does, whole words gliding into place (`src/omp/drag-highlight.js`), with the
   browser's own highlight hidden under it. Snapping (`src/ui/word-snap.js`) leaves a
   selection inside one word alone and takes a long token (a path, a URL) by segment.
+  Below those, the daemon's own switches, the same for every browser: *Compact idle
+  conversations* (on).
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
@@ -311,7 +320,8 @@ telemetry views, cmux-parity features beyond the above.
   new address (`127.0.0.1` still works) needs the printed URL once. `--port`,
   `--omp <path>` (or `COCKPIT_OMP`), `--cwd <dir>` (or `COCKPIT_CWD`: the
   directory a new agent window suggests, home by default) and `COCKPIT_STATE_DIR`
-  override the defaults.
+  override the defaults; `COCKPIT_IDLE_COMPACT_MIN_TOKENS` sets idle compaction's
+  threshold (at least 100K).
 - Before committing, all of these must pass (CI in `.github/workflows/ci.yml`
   runs the same on every push to `main` and every PR):
   - `bun run typecheck`
@@ -454,10 +464,12 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/guard.js` — Loopback guard: decides which requests may reach the daemon (CLAUDE.md, Invariants).
 - `daemon/history.js` — Past omp sessions, read from omp's session files: one summary per conversation, searchable by title, directory and what the user asked.
 - `daemon/hub.js` — The daemon's omp sessions and the single ordered event log the browser replays.
+- `daemon/idle-compaction.js` — Idle compaction, as Claude Code does it: a long conversation left idle is compacted shortly before its prompt cache expires, while the summary request can still read the conversation from the cache, so coming back later sends a summary instead of the whole conversation at full price.
 - `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback and runs the omp processes it shows.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
 - `daemon/scratchpad.js` — Scratchpads: plain Markdown files the daemon keeps, one per pad, with pasted screenshots and files stored beside them.
 - `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), all behind the loopback guard.
+- `daemon/settings.js` — The daemon's settings: switches for what the daemon does, so every page sees and changes the same ones (a page's own look is kept per browser: src/ui/settings.js).
 - `daemon/sleep.js` — When the daemon puts a session to sleep: ends its omp process, as nobody needs it running.
 - `daemon/token.js` — The daemon's access token: random, created once, kept owner-only in the state directory so a browser stays signed in across daemon restarts.
 - `daemon/ui-files.js` — The files that make up the browser UI: which ones the daemon serves, and a version that changes whenever any of them does, so an open page can tell it is running older code.
@@ -485,6 +497,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/grid.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

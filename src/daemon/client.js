@@ -6,8 +6,9 @@
  * all along. When the daemon restarts, its sessions are gone: buffers are cleared and
  * `onReset` listeners fire before any event from the new daemon is delivered.
  *
- * It keeps which conversations are unread (daemon/unread.js), as the daemon last said: every
- * window reads them here, so all of them, and every page, agree.
+ * It keeps which conversations are unread (daemon/unread.js), and the daemon's settings
+ * (daemon/settings.js), as the daemon last said: every window reads them here, so all of
+ * them, and every page, agree.
  *
  * `replayed` tells events the daemon replays on (re)connecting, which happened before this
  * page heard of them, from those happening now: the replay is everything up to the `hello`'s
@@ -20,6 +21,7 @@
 /** @import { Conversation, DaemonConfig, DirListing, HelloEvent, PastSession, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
+/** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
 /** @typedef {{ ok: true, rev: number | null } | { ok: false, current: Screen | null }} ScreenSave */
 
@@ -51,6 +53,9 @@ export class DaemonError extends Error {
  *   onUnread(fn: () => void): () => void,
  *   markRead(ompId: string, at: number): Promise<void>,
  *   markUnread(ompId: string): Promise<void>,
+ *   settings(): DaemonSettings | null,
+ *   onSettings(fn: () => void): () => void,
+ *   changeSettings(patch: Partial<DaemonSettings>): Promise<void>,
  *   history(query?: string, options?: { archived?: boolean }): Promise<PastSession[]>,
  *   conversation(file: string): Promise<Conversation>,
  *   archivePastSession(file: string): Promise<string>,
@@ -120,6 +125,15 @@ export function createDaemonClient(env = {}) {
     unread = marks;
     for (const fn of unreadListeners) fn();
   };
+  /** Null until the daemon first says. @type {DaemonSettings | null} */
+  let settings = null;
+  /** @type {Set<() => void>} */
+  const settingsListeners = new Set();
+  /** @param {DaemonSettings} next */
+  const setSettings = (next) => {
+    settings = next;
+    for (const fn of settingsListeners) fn();
+  };
   /** @type {Set<(outdated: boolean) => void>} */
   const uiListeners = new Set();
   /** The UI version this page loaded: the first one heard. @type {string | null} */
@@ -162,6 +176,7 @@ export function createDaemonClient(env = {}) {
     setStatus('open');
     sessionsChanged();
     setUnread(hello.unread);
+    setSettings(hello.settings);
   }
 
   /** @param {StreamEvent} event */
@@ -176,6 +191,7 @@ export function createDaemonClient(env = {}) {
       return;
     }
     if (event.kind === 'unread') return setUnread(event.unread);
+    if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'session') {
       metas.set(event.session, event.meta);
       sessionsChanged();
@@ -336,6 +352,14 @@ export function createDaemonClient(env = {}) {
     },
     async markUnread(ompId) {
       await request(unreadPath(ompId), { method: 'PUT' });
+    },
+    settings: () => settings,
+    onSettings(fn) {
+      settingsListeners.add(fn);
+      return () => settingsListeners.delete(fn);
+    },
+    async changeSettings(patch) {
+      await request('/api/settings', { method: 'PUT', body: JSON.stringify(patch) });
     },
     async history(query = '', { archived = false } = {}) {
       const params = new URLSearchParams({ ...(query ? { q: query } : {}), ...(archived ? { archived: '1' } : {}) });

@@ -8,22 +8,28 @@
  * omp defaults to the `omp` on PATH (install it from https://omp.sh). `--cwd` is the
  * directory a new agent window suggests, the home directory unless given.
  * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_CWD, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
- * access token, unread.json (which conversations have news not read yet), scratchpads/,
+ * access token, unread.json (which conversations have news not read yet), settings.json, scratchpads/,
  * attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
- * an idle, unused session stays awake; default 30 minutes, shorter for tests).
+ * an idle, unused session stays awake; default 30 minutes, shorter for tests),
+ * COCKPIT_IDLE_COMPACT_MIN_TOKENS (from what size idle compaction applies, see
+ * idle-compaction.js; default 200000, at least 100000) and
+ * COCKPIT_IDLE_COMPACT_AFTER_MS (how long after its last request; default 54 minutes, shorter
+ * for tests).
  */
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { JournalRefused, createHistory } from './history.js';
 import { createHub } from './hub.js';
+import { IDLE_COMPACT_AFTER_MS, IDLE_COMPACT_MIN_TOKENS, IDLE_COMPACT_TOKENS_FLOOR } from './idle-compaction.js';
 import { createAttachments } from './attachments.js';
 import { createScratchpads } from './scratchpad.js';
 import { createDaemonServer } from './server.js';
 import { createWorkspaces } from './workspace.js';
 import { loadToken } from './token.js';
 import { loadUnread } from './unread.js';
+import { loadSettings } from './settings.js';
 
 const ROOT = resolve(import.meta.dir, '..');
 const VERSION_TIMEOUT_MS = 10_000;
@@ -49,16 +55,26 @@ const ompSessions =
   process.env.COCKPIT_OMP_SESSIONS ?? join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), '.omp', 'agent'), 'sessions');
 
 const token = await loadToken(stateDir);
-const unread = await loadUnread({ file: join(stateDir, 'unread.json') }).catch((err) => {
+/** @param {unknown} err @returns {never} */
+const unreadable = (err) => {
   console.error(`[daemon] ${err instanceof Error ? err.message : err}`);
   process.exit(1);
-});
+};
+const unread = await loadUnread({ file: join(stateDir, 'unread.json') }).catch(unreadable);
+const settings = await loadSettings({ file: join(stateDir, 'settings.json') }).catch(unreadable);
 const history = createHistory({ root: ompSessions, archive: join(stateDir, 'archive', 'sessions') });
 const sleepAfter = Number(process.env.COCKPIT_SLEEP_AFTER_MS);
+const compactAfter = Number(process.env.COCKPIT_IDLE_COMPACT_AFTER_MS);
+const compactFrom = Number(process.env.COCKPIT_IDLE_COMPACT_MIN_TOKENS);
 const hub = createHub({
   ompPath,
   unread,
   ...(sleepAfter > 0 ? { sleepAfterMs: sleepAfter } : {}),
+  idleCompaction: {
+    on: () => settings.all().idleCompaction,
+    afterMs: compactAfter > 0 ? compactAfter : IDLE_COMPACT_AFTER_MS,
+    minTokens: compactFrom > 0 ? Math.max(IDLE_COMPACT_TOKENS_FLOOR, compactFrom) : IDLE_COMPACT_MIN_TOKENS,
+  },
   // The journal a rewind left keeps what was set aside: archived, out of the list, restorable.
   // One outside omp's sessions (400) is not listed, so there is nothing to put away.
   onRewound: (file) =>
@@ -77,6 +93,7 @@ try {
     attachments: createAttachments({ dir: join(stateDir, 'attachments') }),
     workspaces: createWorkspaces({ dir: join(stateDir, 'workspaces') }),
     unread,
+    settings,
     token,
     root: ROOT,
     port,
