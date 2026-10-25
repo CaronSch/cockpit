@@ -50,6 +50,7 @@ test('an idle long conversation is compacted before its cache expires, staying a
     await expect(pane.locator('.omp-assistant').last()).toContainText('You said: long');
     const note = pane.locator('.omp-note', { hasText: 'Compacted while idle, before the prompt cache expired' });
     await expect(note).toBeVisible({ timeout: 5000 });
+    await expect(pane.locator('.omp-note', { hasText: 'Compacting while idle, before the prompt cache expires…' })).toBeVisible();
     expect(await awake(), 'awake until compacted').toHaveLength(1);
     await expect.poll(awake, { timeout: 5000 }).toEqual([]);
     await expect(note).toHaveCount(1);

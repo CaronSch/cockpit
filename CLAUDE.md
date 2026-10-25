@@ -124,7 +124,8 @@ What runs today:
   providers, use slash commands, answer approval and `ask` dialogs, steer or stop
   a running turn, and carry on a conversation whatever became of its omp (asleep,
   a daemon restart). A long conversation compacted while idle says so in its
-  transcript ("Compacted while idle, before the prompt cache expired"), with the summary. A pane shows one conversation at a time: **New**, **Fork**,
+  transcript while it runs ("Compacting while idle…") and once done ("Compacted while
+  idle, before the prompt cache expired"), with the summary. A pane shows one conversation at a time: **New**, **Fork**,
   **Accounts** and **Stop** sit in the window's title bar (`ctx.headActions`).
   **New** starts another one there, in the same directory unless the setup
   screen's Directory is changed, while the one shown before carries on. The
