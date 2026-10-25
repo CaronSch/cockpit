@@ -30,7 +30,7 @@ import { WIDGETS, newWidgetLeaf } from './widgets/registry.js';
 /** @import { Palette } from './ui/palette.js' */
 /** @import { GridApi } from './interaction/drag-controller.js' */
 
-export const LAYOUT_OPTIONS = Object.freeze({ gap: 6, minWidth: 180, minHeight: 120 });
+const LAYOUT_OPTIONS = Object.freeze({ gap: 6, minWidth: 180, minHeight: 120 });
 const STACK_BREAKPOINT = 640;
 const STACK_ROW_HEIGHT = 260;
 

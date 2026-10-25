@@ -70,7 +70,7 @@ export function parseBlocks(text) {
 }
 
 /** @param {AssetBlock} block */
-export const assetLine = (block) => `${block.kind === 'image' ? '!' : ''}[${block.name.replace(/[[\]\n]/g, '')}](${block.path})`;
+const assetLine = (block) => `${block.kind === 'image' ? '!' : ''}[${block.name.replace(/[[\]\n]/g, '')}](${block.path})`;
 
 /** @param {readonly Block[]} blocks */
 export const serializeBlocks = (blocks) =>

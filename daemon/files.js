@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path';
 /** @import { DirListing } from './wire.js' */
 
 /** Past this many entries a listing is cut short (by name), and says so. */
-export const MAX_ENTRIES = 5000;
+const MAX_ENTRIES = 5000;
 
 /**
  * The absolute path `input` names, read as omp reads one: from home with `~/`, as given when

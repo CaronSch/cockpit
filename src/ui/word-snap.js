@@ -46,14 +46,14 @@ export function isBoundary(text, at) {
 }
 
 /** The start of the word `offset` is in (`offset` itself on a boundary). @param {string} text @param {number} offset */
-export function wordStart(text, offset) {
+function wordStart(text, offset) {
   let at = offset;
   while (!isBoundary(text, at)) at--;
   return at;
 }
 
 /** The end of the word `offset` is in (`offset` itself on a boundary). @param {string} text @param {number} offset */
-export function wordEnd(text, offset) {
+function wordEnd(text, offset) {
   let at = offset;
   while (!isBoundary(text, at)) at++;
   return at;

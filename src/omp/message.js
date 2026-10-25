@@ -22,7 +22,7 @@ export const asQuote = (text) =>
     .join('\n');
 
 /** omp's file mention for `path`, quoted so spaces survive. @param {string} path */
-export const mention = (path) => (path.includes('"') ? `@'${path}'` : `@"${path}"`);
+const mention = (path) => (path.includes('"') ? `@'${path}'` : `@"${path}"`);
 
 /**
  * The text to send, or '' when there is nothing to send.
