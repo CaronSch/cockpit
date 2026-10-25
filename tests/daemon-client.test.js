@@ -31,7 +31,7 @@ const meta = (id, status = 'ready') => ({ id, cwd: '/p', resume: null, fork: nul
 const frame = (session, seq) => ({ kind: 'frame', frame: { type: 'agent_start' }, seq, at: 0, session });
 
 /** @param {string} bootId @param {SessionMeta[]} [sessions] @param {string} [ui] @param {Record<string, number>} [unread] @param {number} [seq] @returns {StreamEvent} */
-const hello = (bootId, sessions = [], ui = 'v1', unread = {}, seq = 0) => ({ kind: 'hello', bootId, seq, sessions, unread, ui });
+const hello = (bootId, sessions = [], ui = 'v1', unread = {}, seq = 0) => ({ kind: 'hello', bootId, seq, sessions, unread, settings: { idleCompaction: true }, ui });
 
 /** The daemon's answer to POST /rpc: the id omp's response will carry on the stream. */
 const accepted = () => new Response(JSON.stringify({ id: 'ac_7' }), { status: 202 });

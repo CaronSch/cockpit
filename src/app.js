@@ -379,7 +379,7 @@ export async function createApp(root) {
     createScreenSwitcher({ opened, describe: (tree) => describeWindows(tree, titleOf) }).root,
   );
   query(root, '.topbar-actions').prepend(createZoomControl().root);
-  query(root, '.topbar-actions').prepend(createConfigMenu().root);
+  query(root, '.topbar-actions').prepend(createConfigMenu({ daemon }).root);
   query(root, '.topbar-actions').prepend(
     createNotifier({
       daemon,

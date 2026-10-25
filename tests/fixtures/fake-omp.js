@@ -18,6 +18,9 @@
  * - contains "interrupt": the reply ends as an aborted one does (`stopReason: 'aborted'` with
  *   "Interrupted by user"), and the prompt's result says it was aborted; with "early" too, the
  *   reply is aborted before it says anything (no content), as omp journals one
+ * - contains "long": the reply's usage is that of a 250K-token conversation read from a
+ *   one-hour prompt cache entry (`cttl.ephemeral1h`), as Anthropic's are reported
+ * - `compact`: answers with a summary in omp 18.12.6's `CompactionResult` shape (from its source)
  * - `/rename [title]`: like omp's builtin, names the session (with no title, from the first
  *   prompt that says something: "hi" alone is too little to name a session by; that
  *   outcome follows the answer, as omp's background title generation does)
@@ -128,6 +131,7 @@ const out = (frame) => process.stdout.write(`${JSON.stringify(frame)}\n`);
 /** @param {string | undefined} id @param {string} command @param {unknown} [data] */
 const ok = (id, command, data) => out({ id, type: 'response', command, success: true, ...(data === undefined ? {} : { data }) });
 const usage = { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15, cost: { total: 0.0125 } };
+const longUsage = { input: 10, output: 5, cacheRead: 249_000, cacheWrite: 1000, totalTokens: 250_015, cttl: { ephemeral1h: 1000 }, cost: { total: 0.15 } };
 
 /** The entry id of the message at `index`: stable while the conversation only grows or rewinds. @param {number} index */
 const entryId = (index) => `e${index.toString(16).padStart(8, '0')}`;
@@ -143,10 +147,11 @@ function record(message) {
 /**
  * @param {string} text @param {string | null} [thinking] streamed as a thinking block ahead of the text
  * @param {{ stopReason: string, errorMessage?: string }} [ending] how the message ends
+ * @param {Record<string, any>} [used] the request's usage
  */
-function streamAssistant(text, thinking = null, ending = { stopReason: 'stop' }) {
+function streamAssistant(text, thinking = null, ending = { stopReason: 'stop' }, used = usage) {
   const content = [...(thinking === null ? [] : [{ type: 'thinking', thinking }]), { type: 'text', text }];
-  const final = { role: 'assistant', content, provider: model.provider, model: model.id, usage, ...ending, timestamp: Date.now() };
+  const final = { role: 'assistant', content, provider: model.provider, model: model.id, usage: used, ...ending, timestamp: Date.now() };
   const messageId = record(final);
   out({ type: 'message_start', message: final, messageId }); // pre-filled, like real omp
   /** @param {Record<string, any>} event */
@@ -272,7 +277,7 @@ async function runPrompt(id, text) {
   } else if (/table/.test(text)) {
     streamAssistant('Here it is:\n| When | What happens | Code |\n|---|---|---|\n| Now | Stuff happened | `tracked.rs:67` |');
   } else {
-    streamAssistant(`You said: **${text}**\n\n- one\n- two`, /think/.test(text) ? 'Weighing what to say.' : null);
+    streamAssistant(`You said: **${text}**\n\n- one\n- two`, /think/.test(text) ? 'Weighing what to say.' : null, undefined, /long/.test(text) ? longUsage : usage);
   }
   out({ type: 'turn_end', message: messages.at(-1), toolResults: [] });
   out({ type: 'extension_ui_request', id: `ui-${Date.now()}-w`, method: 'setWidget', widgetKey: 'autoresearch' }); // omp clears it every turn
@@ -466,6 +471,8 @@ lines.on('line', (line) => {
       if (cancelled) finishSideQuestion({ status: 'cancelled' });
       return ok(id, type, { cancelled });
     }
+    case 'compact':
+      return ok(id, type, { summary: 'The user and the agent talked at length.', shortSummary: 'A long talk', firstKeptEntryId: entryId(messages.length - 1), tokensBefore: longUsage.totalTokens });
     case 'abort_and_restore_queue':
       out({ type: 'queue_update', steering: [], followUp: [], liveSteered: 0 });
       return ok(id, type, { steering: [], followUp: [] });

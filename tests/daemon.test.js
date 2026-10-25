@@ -12,6 +12,7 @@ import { createDaemonServer } from '../daemon/server.js';
 import { listDirectory } from '../daemon/files.js';
 import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
+import { loadSettings } from '../daemon/settings.js';
 import { HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
@@ -25,6 +26,8 @@ let server;
 let hub;
 /** @type {import('../daemon/unread.js').UnreadStore} */
 let unread;
+/** @type {import('../daemon/settings.js').SettingsStore} */
+let settings;
 let port = 0;
 let cwd = '';
 
@@ -137,15 +140,17 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'settings' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
   unread = await loadUnread({ file: join(cwd, 'state', 'unread.json') });
+  settings = await loadSettings({ file: join(cwd, 'state', 'settings.json') });
   hub = createHub({ ompPath: FAKE_OMP, unread });
   server = createDaemonServer({
     hub,
     unread,
+    settings,
     history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
@@ -630,6 +635,7 @@ describe('unread conversations', () => {
     const next = createDaemonServer({
       hub: nextHub,
       unread: marks,
+      settings,
       history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
       scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
       attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
@@ -658,6 +664,35 @@ describe('unread conversations', () => {
     assert.equal('conv-guard' in unread.all(), false, 'nothing was marked');
     assert.equal((await call({ method: 'PUT', path: '/api/unread/a%20b' })).status, 404);
     assert.equal((await call({ method: 'POST', path: '/api/unread/conv-guard/read', body: { at: 'later' } })).status, 400);
+  });
+});
+
+describe('settings', () => {
+  test('every page hears them first thing and after each change, which the next daemon starts with', async () => {
+    const stream = await openStream();
+    const changed = await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false } });
+    assert.equal(changed.status, 200);
+    assert.deepEqual(changed.json, { idleCompaction: false });
+    const { events } = await stream.until((events) => events.some((e) => e.kind === 'settings'));
+    assert.deepEqual(events[0].kind === 'hello' && events[0].settings, { idleCompaction: true });
+    assert.deepEqual(events.find((e) => e.kind === 'settings'), { kind: 'settings', settings: { idleCompaction: false } });
+    assert.deepEqual((await loadSettings({ file: join(cwd, 'state', 'settings.json') })).all(), { idleCompaction: false });
+    assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: true } })).status, 200);
+  });
+
+  test('only known settings with values of their type are taken; like every API route they need the token and Origin', async () => {
+    for (const body of [{ idleCompaction: 'no' }, { sleepy: true }, [true], null]) {
+      assert.equal((await call({ method: 'PUT', path: '/api/settings', body })).status, 400, JSON.stringify(body));
+    }
+    assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, auth: false })).status, 401);
+    assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, origin: false })).status, 403);
+    assert.deepEqual(settings.all(), { idleCompaction: true });
+  });
+
+  test('a settings file the daemon cannot read stops it rather than being replaced', async () => {
+    const file = join(cwd, 'bad-settings.json');
+    await Bun.write(file, '{"version":1,"settings":{"idleCompaction":"off"}}');
+    await assert.rejects(loadSettings({ file }), /not a settings file/);
   });
 });
 

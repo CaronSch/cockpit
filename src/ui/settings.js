@@ -4,9 +4,13 @@
  * click, which keeps it open until a click elsewhere or Esc.
  *
  * Each setting is a switch with its default; only the ones set away from it are stored.
+ * Below them the menu lists the daemon's settings (daemon/settings.js), the same for every
+ * browser, while the daemon can be reached.
  */
 import { button, el } from './dom.js';
 import { createAtom } from '../state/atom.js';
+/** @import { DaemonClient } from '../daemon/client.js' */
+/** @import { DaemonSettings } from '../../daemon/settings.js' */
 
 const SETTINGS_KEY = 'cockpit.settings';
 /** How long the menu stays open after the pointer leaves it, so crossing the gap to it does not close it. */
@@ -28,6 +32,17 @@ const SETTINGS = [
     label: 'Animated selection',
     detail: 'Highlight whole words while dragging over a reply, gliding between them',
     initial: true,
+  },
+];
+
+/** @typedef {{ key: keyof DaemonSettings, label: string, detail: string }} DaemonSetting */
+
+/** The daemon's settings, in the order the menu lists them. @type {readonly DaemonSetting[]} */
+const DAEMON_SETTINGS = [
+  {
+    key: 'idleCompaction',
+    label: 'Compact idle conversations',
+    detail: 'Compact a conversation of 200K tokens or more left idle, just before its one-hour prompt cache expires, as Claude Code does; for every browser',
   },
 ];
 
@@ -76,8 +91,19 @@ function set(key, on) {
   store(next);
 }
 
-/** The top bar's Config button and its menu. */
-export function createConfigMenu() {
+/** @param {string} label @param {string} detail @param {boolean} checked @param {(on: boolean, box: HTMLInputElement) => void} onChange */
+function switchRow(label, detail, checked, onChange) {
+  const row = el('label', 'config-setting');
+  const box = el('input');
+  box.type = 'checkbox';
+  box.checked = checked;
+  box.addEventListener('change', () => onChange(box.checked, box));
+  row.append(box, el('span', '', label), el('span', 'config-detail', detail));
+  return { row, box };
+}
+
+/** The top bar's Config button and its menu. @param {{ daemon: DaemonClient }} options */
+export function createConfigMenu({ daemon }) {
   const root = el('div', 'config');
   const toggle = button('topbar-btn config-toggle', 'Config');
   toggle.setAttribute('aria-haspopup', 'true');
@@ -113,18 +139,34 @@ export function createConfigMenu() {
       hovering = false;
       return;
     }
+    render();
+  });
+  /** The daemon's settings' switches, while the menu is open. @type {Map<keyof DaemonSettings, HTMLInputElement>} */
+  const daemonBoxes = new Map();
+  function render() {
     const now = settings.get();
+    const atDaemon = daemon.settings();
+    daemonBoxes.clear();
     menu.replaceChildren(
-      ...SETTINGS.map((setting) => {
-        const row = el('label', 'config-setting');
-        const box = el('input');
-        box.type = 'checkbox';
-        box.checked = now[setting.key];
-        box.addEventListener('change', () => set(setting.key, box.checked));
-        row.append(box, el('span', '', setting.label), el('span', 'config-detail', setting.detail));
-        return row;
-      }),
+      ...SETTINGS.map((setting) => switchRow(setting.label, setting.detail, now[setting.key], (on) => set(setting.key, on)).row),
+      ...(atDaemon
+        ? DAEMON_SETTINGS.map((setting) => {
+            const { row, box } = switchRow(setting.label, setting.detail, atDaemon[setting.key], (on, box) => {
+              // The daemon tells every page, this one too; until then the switch shows the choice.
+              daemon.changeSettings({ [setting.key]: on }).catch(() => (box.checked = !on));
+            });
+            daemonBoxes.set(setting.key, box);
+            return row;
+          })
+        : []),
     );
+  }
+  // Another page may change them while the menu is open here.
+  daemon.onSettings(() => {
+    const atDaemon = daemon.settings();
+    if (!atDaemon || !menu.matches(':popover-open')) return;
+    if (daemonBoxes.size === 0) return render();
+    for (const [key, box] of daemonBoxes) box.checked = atDaemon[key];
   });
   return { root };
 }

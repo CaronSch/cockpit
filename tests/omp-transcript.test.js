@@ -1,6 +1,6 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
-import { addNote, applyEvent, askAnswers, conversationName, createTranscript, needsLogin, seedConversation } from '../src/omp/transcript.js';
+import { IDLE_COMPACTED, addNote, applyEvent, askAnswers, conversationName, createTranscript, needsLogin, seedConversation } from '../src/omp/transcript.js';
 /** @import { SessionEvent } from '../daemon/wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
 
@@ -239,6 +239,12 @@ describe('notes', () => {
   test('a login under way is a note, from the command the daemon sent', () => {
     const state = run([sent({ type: 'login', providerId: 'anthropic', id: 'ac_7' })]);
     assert.ok(state.items[0].kind === 'note' && state.items[0].text === 'Logging in to anthropic…');
+  });
+
+  test('a compaction the daemon ran while idle is a note carrying its summary', () => {
+    const state = run([frame({ type: 'response', id: 'ac_9', command: 'compact', success: true, data: { summary: 'All of it, briefly.', firstKeptEntryId: 'e1', tokensBefore: 250_000 } })]);
+    const item = state.items[0];
+    assert.ok(item.kind === 'note' && item.text === IDLE_COMPACTED && item.detail === 'All of it, briefly.');
   });
 
   test('the pane can add its own notes', () => {
