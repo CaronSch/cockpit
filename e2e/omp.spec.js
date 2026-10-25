@@ -318,6 +318,14 @@ test('status lines under a reply look like transcript notes', async ({ page }) =
   expect(await font(status)).toEqual(await font(aborted));
 });
 
+test('a reply stopped before it said anything shows only that the prompt was aborted', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'interrupt early');
+  await expect(pane.locator('.omp-transcript > .omp-note', { hasText: 'prompt: Aborted' })).toBeVisible();
+  await expect(pane.locator('.omp-assistant')).toHaveCount(0);
+});
+
 test('the message box grows with the prompt, up to half the pane, and shrinks again after sending', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
