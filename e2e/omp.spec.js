@@ -326,6 +326,16 @@ test('a reply stopped before it said anything shows only that the prompt was abo
   await expect(pane.locator('.omp-assistant')).toHaveCount(0);
 });
 
+test('omp’s info notices are hidden like the messages it does not display; its warnings show', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'notice me');
+  const info = pane.locator('.omp-transcript > .omp-note', { hasText: 'xdev' });
+  await expect(info).toHaveClass(/is-hidden/);
+  await expect(info).toHaveText('xdev'); // its text one click away
+  await expect(pane.locator('.omp-transcript > .omp-note.is-warning')).toHaveText('Hindsight: Memory retention failed');
+});
+
 test('the message box grows with the prompt, up to half the pane, and shrinks again after sending', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

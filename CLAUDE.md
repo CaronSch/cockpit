@@ -133,7 +133,9 @@ What runs today:
   Sessions the daemon runs get a title during their first turn: once the first
   prompt is in a session omp has not named, the daemon sends `/rename` once and omp
   generates one while the agent works; untitled ones show their first prompt. A slash command's one-line output (such as that rename's) is a quiet
-  note; output of several lines shows open. **Fork** continues
+  note; output of several lines shows open. omp's info notices (such as the tools it
+  mounted) fold into a dim line naming their source, as the messages omp does not display
+  do; its warnings and errors show. **Fork** continues
   a copy of a pane's conversation in a new pane, as a session of its own (omp's
   `--fork`: a new journal, the original runs on untouched); it stays off until
   omp has saved the conversation, which a new session does once the model has

@@ -14,6 +14,7 @@
  * - contains "todo": a `todo` tool call setting a three-task list, one done and one in progress
  *   (its result carries the whole list in `details.phases`, as omp's does; so does `get_state`)
  * - contains "think": the final reply opens with a thinking block
+ * - contains "notice": omp's notices first, an info one (the tools xdev mounted) and a warning
  * - contains "interrupt": the reply ends as an aborted one does (`stopReason: 'aborted'` with
  *   "Interrupted by user"), and the prompt's result says it was aborted; with "early" too, the
  *   reply is aborted before it says anything (no content), as omp journals one
@@ -241,6 +242,10 @@ async function runPrompt(id, text) {
   out({ type: 'message_start', message: user, messageId: userId });
   out({ type: 'message_end', message: user, messageId: userId });
   if (/mystery/.test(text)) out({ type: 'mystery_frame', payload: 42 });
+  if (/notice/.test(text)) {
+    out({ type: 'notice', level: 'info', message: 'xd://: github (12 tools); linear (8 tools)', source: 'xdev' });
+    out({ type: 'notice', level: 'warning', message: 'Memory retention failed', source: 'Hindsight' });
+  }
   if (/garble/.test(text)) process.stdout.write('this line is not json\n');
   if (/tool/.test(text)) toolCall();
   if (/todo/.test(text)) todoCall();

@@ -367,8 +367,14 @@ function applyFrame(state, frame, at) {
     }
     case 'irc_message':
       return note(state, 'info', `irc ${frame.message?.customType ?? ''}`.trim(), contentText(frame.message?.content));
-    case 'notice':
-      return note(state, levelOf(frame.level), frame.source ?? 'notice', String(frame.message ?? ''));
+    case 'notice': {
+      const level = levelOf(frame.level);
+      const source = frame.source ?? 'notice';
+      // An info notice (the tools omp mounted, a mode it switched) is omp's own news, not the
+      // conversation: hidden as the messages omp does not display are, its text one click away.
+      if (level === 'info') return upsertNote(state, null, source, '', String(frame.message ?? ''), true);
+      return note(state, level, source, String(frame.message ?? ''));
+    }
     case 'goal_updated':
       return frame.goal
         ? note(state, 'muted', 'goal', `Goal ${frame.goal.status}: ${frame.goal.objective}`)

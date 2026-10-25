@@ -197,6 +197,20 @@ describe('notes', () => {
     assert.ok(stderr.kind === 'note' && stderr.detail === 'Decompression error: ZlibError\nsecond');
   });
 
+  test('an info notice is hidden as the messages omp does not display are; warnings and errors show', () => {
+    const state = run([
+      frame({ type: 'notice', level: 'info', message: 'xd://: github, linear', source: 'xdev' }),
+      frame({ type: 'notice', level: 'warning', message: 'low disk', source: 'fs' }),
+      frame({ type: 'notice', level: 'error', message: 'cannot save', source: 'session-persistence' }),
+    ]);
+    const notes = state.items.map((i) => i.kind === 'note' && { level: i.level, source: i.source, text: i.text, detail: i.detail, hidden: i.hidden });
+    assert.deepEqual(notes, [
+      { level: 'muted', source: 'xdev', text: '', detail: 'xd://: github, linear', hidden: true },
+      { level: 'warning', source: 'fs', text: 'low disk', detail: null, hidden: false },
+      { level: 'error', source: 'session-persistence', text: 'cannot save', detail: null, hidden: false },
+    ]);
+  });
+
   test('a message without a messageId shows once, whole, at its end', () => {
     const m = { role: 'custom', customType: 'mount-notice', content: 'tools changed', display: false, timestamp: 7 };
     const reply = assistant([{ type: 'text', text: 'Hello' }]);
