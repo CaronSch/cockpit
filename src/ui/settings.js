@@ -16,7 +16,7 @@ const CLOSE_DELAY_MS = 250;
 /** @typedef {{ key: SettingKey, label: string, detail: string, initial: boolean }} Setting */
 
 /** The settings, in the order the menu lists them. @type {readonly Setting[]} */
-export const SETTINGS = [
+const SETTINGS = [
   {
     key: 'onlyResponses',
     label: 'Only prompts and responses',

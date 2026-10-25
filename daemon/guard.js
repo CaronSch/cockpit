@@ -20,13 +20,13 @@ export const TOKEN_COOKIE = 'ac_token';
 const HOSTNAMES = ['127.0.0.1', 'localhost', 'cockpit.localhost'];
 
 /** @param {number} port */
-export const ownOrigins = (port) => HOSTNAMES.map((name) => `http://${name}:${port}`);
+const ownOrigins = (port) => HOSTNAMES.map((name) => `http://${name}:${port}`);
 
 /** @param {string | null} host @param {number} port */
 export const isAllowedHost = (host, port) => HOSTNAMES.some((name) => host === `${name}:${port}`);
 
 /** @param {string | null} header @returns {Map<string, string>} */
-export function parseCookies(header) {
+function parseCookies(header) {
   const cookies = new Map();
   for (const part of (header ?? '').split(';')) {
     const eq = part.indexOf('=');

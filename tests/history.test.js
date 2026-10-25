@@ -125,21 +125,40 @@ describe('archive', () => {
 
   test('watch tells, coalesced, which journals changed or moved, and not files deeper down', async () => {
     const history = createHistory({ root, archive });
-    /** Follows `history.watch`, keeping every notice it gives. */
-    const listen = () => {
+    /** A journal written only to learn that a watch has started; no notice is checked for it. */
+    const probe = join(root, '-p-beta', '2026-10-09_probe.jsonl');
+    /**
+     * Follows `history.watch`, keeping every notice it gives (without the probe), once it
+     * hears changes: macOS starts a watch a moment after `watch` returns, and `fs.watch` cannot
+     * say when, so a write made before then is never heard.
+     */
+    const listen = async () => {
       /** @type {(string | null)[][]} */
       const notices = [];
+      let probed = false;
       let heard = () => {};
       const stop = history.watch((changed) => {
-        notices.push([...changed].sort());
+        probed ||= changed.has(probe);
+        const rest = [...changed].filter((file) => file !== probe).sort();
+        if (rest.length) notices.push(rest);
         heard();
       });
+      /** Waits for the next notice, or for `ms` when given, whichever comes first. @param {number} [ms] */
+      const next = (ms) =>
+        new Promise((resolve) => {
+          const timer = ms === undefined ? undefined : setTimeout(resolve, ms);
+          heard = () => resolve(clearTimeout(timer));
+        });
+      for (let n = 0; !probed; n++) {
+        await writeFile(probe, journal([header('probe', '/p/beta'), user(`probe ${n}`)]));
+        await next(1000);
+      }
       /**
        * Waits for a notice naming `file`, then hands over every notice since the last wait.
        * @param {string} file
        */
       const told = async (file) => {
-        while (!notices.some((n) => n.includes(file))) await new Promise((resolve) => (heard = () => resolve(undefined)));
+        while (!notices.some((n) => n.includes(file))) await next();
         return notices.splice(0);
       };
       return { notices, told, stop };
@@ -151,7 +170,7 @@ describe('archive', () => {
       return file;
     };
 
-    const watching = listen();
+    const watching = await listen();
     try {
       // macOS may still report the writes this test's setup made just before the watch began;
       // they come before the first marker's notice.
@@ -172,7 +191,7 @@ describe('archive', () => {
       watching.stop();
     }
     // A second watch hears the next change; the stopped one must not.
-    const still = listen();
+    const still = await listen();
     try {
       const after = await marker('m4');
       await still.told(after);

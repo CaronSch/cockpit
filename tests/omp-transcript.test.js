@@ -1,6 +1,6 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
-import { addNote, applyEvent, askAnswers, conversationName, createTranscript, needsLogin } from '../src/omp/transcript.js';
+import { addNote, applyEvent, askAnswers, conversationName, createTranscript, needsLogin, seedConversation } from '../src/omp/transcript.js';
 /** @import { SessionEvent } from '../daemon/wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
 
@@ -195,6 +195,20 @@ describe('notes', () => {
     assert.deepEqual(kinds(state), ['note', 'note', 'note']);
     const stderr = state.items[2];
     assert.ok(stderr.kind === 'note' && stderr.detail === 'Decompression error: ZlibError\nsecond');
+  });
+
+  test('an info notice is hidden as the messages omp does not display are; warnings and errors show', () => {
+    const state = run([
+      frame({ type: 'notice', level: 'info', message: 'xd://: github, linear', source: 'xdev' }),
+      frame({ type: 'notice', level: 'warning', message: 'low disk', source: 'fs' }),
+      frame({ type: 'notice', level: 'error', message: 'cannot save', source: 'session-persistence' }),
+    ]);
+    const notes = state.items.map((i) => i.kind === 'note' && { level: i.level, source: i.source, text: i.text, detail: i.detail, hidden: i.hidden });
+    assert.deepEqual(notes, [
+      { level: 'muted', source: 'xdev', text: '', detail: 'xd://: github, linear', hidden: true },
+      { level: 'warning', source: 'fs', text: 'low disk', detail: null, hidden: false },
+      { level: 'error', source: 'session-persistence', text: 'cannot save', detail: null, hidden: false },
+    ]);
   });
 
   test('a message without a messageId shows once, whole, at its end', () => {
@@ -411,6 +425,31 @@ describe('bash and resume', () => {
     const state = run([session('/s/old.jsonl'), frame({ type: 'notice', level: 'info', message: 'hello' }), messagesReply('ac_3')]);
     assert.deepEqual(kinds(state), ['user', 'assistant', 'note']);
     assert.equal(state.tools.get('c1')?.status, 'ok');
+  });
+
+  test('a reply aborted before it said anything leaves only the Aborted note, live or from a journal', () => {
+    const aborted = (/** @type {string} */ errorMessage) => assistant([], { stopReason: 'aborted', errorMessage });
+    const notes = (/** @type {Transcript} */ state) => state.items.map((i) => (i.kind === 'note' ? `${i.level} ${i.source}: ${i.text}` : i.kind));
+    const live = run([
+      frame({ type: 'message_start', message: { role: 'user', content: [{ type: 'text', text: 'go' }] }, messageId: 'u1' }),
+      frame({ type: 'message_start', message: assistant([]), messageId: 'a1' }),
+      frame({ type: 'message_end', message: aborted('Interrupted by user'), messageId: 'a1' }),
+      frame({ type: 'prompt_result', id: 'p1', status: 'aborted' }),
+    ]);
+    assert.deepEqual(notes(live), ['user', 'muted prompt: Aborted']);
+
+    // As omp's journals keep them: stopped by the user, or ended with its process.
+    const messages = [
+      { role: 'user', content: [{ type: 'text', text: 'go' }], timestamp: 1 },
+      aborted('Interrupted by user'),
+      { role: 'user', content: [{ type: 'text', text: 'again' }], timestamp: 2 },
+      aborted('Previous OMP process exited before completing the turn.'),
+      { role: 'user', content: [{ type: 'text', text: 'think' }], timestamp: 3 },
+      assistant([{ type: 'thinking', thinking: 'hmm' }], { stopReason: 'aborted', errorMessage: 'Request was aborted' }),
+    ];
+    const asleep = createTranscript();
+    seedConversation(asleep, { messages, title: null, model: null, thinkingLevel: null });
+    assert.deepEqual(notes(asleep), ['user', 'muted prompt: Aborted', 'user', 'muted prompt: Aborted', 'user', 'assistant']);
   });
 
   test('after a rewind, the history omp answers with replaces the transcript, cost kept', () => {

@@ -10,7 +10,7 @@
 /** Outer grid edge the pointer hugs. @typedef {Exclude<Direction, 'center'>} EdgeZone */
 
 /** Pointer must be this far (normalized) from every edge to count as center. */
-export const CENTER_BAND = 0.25;
+const CENTER_BAND = 0.25;
 
 /** @param {number} v */
 const clamp01 = (v) => Math.min(1, Math.max(0, v));

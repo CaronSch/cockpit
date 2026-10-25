@@ -11,7 +11,7 @@
  */
 
 /** One indent level: two spaces, which Markdown reads as nesting and omp's prompts keep as typed. */
-export const INDENT = '  ';
+const INDENT = '  ';
 
 /**
  * Replace `from`…`to` of the text with `text`, then select `start`…`end` of the result.

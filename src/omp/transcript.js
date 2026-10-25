@@ -367,8 +367,14 @@ function applyFrame(state, frame, at) {
     }
     case 'irc_message':
       return note(state, 'info', `irc ${frame.message?.customType ?? ''}`.trim(), contentText(frame.message?.content));
-    case 'notice':
-      return note(state, levelOf(frame.level), frame.source ?? 'notice', String(frame.message ?? ''));
+    case 'notice': {
+      const level = levelOf(frame.level);
+      const source = frame.source ?? 'notice';
+      // An info notice (the tools omp mounted, a mode it switched) is omp's own news, not the
+      // conversation: hidden as the messages omp does not display are, its text one click away.
+      if (level === 'info') return upsertNote(state, null, source, '', String(frame.message ?? ''), true);
+      return note(state, level, source, String(frame.message ?? ''));
+    }
     case 'goal_updated':
       return frame.goal
         ? note(state, 'muted', 'goal', `Goal ${frame.goal.status}: ${frame.goal.objective}`)
@@ -618,7 +624,7 @@ const messageKey = (frame) => (typeof frame.messageId === 'string' ? `msg:${fram
 /**
  * @param {Transcript} state @param {any} message @param {string | null} key @param {boolean} final
  * @param {number | null} [at] when it arrived, live; none for history (`get_messages`), whose
- *   jobs ran in an omp process gone since
+ *   jobs ran in an omp process gone since and whose prompt results were not kept
  */
 function applyMessage(state, message, key, final, at = null) {
   const role = message?.role;
@@ -626,6 +632,15 @@ function applyMessage(state, message, key, final, at = null) {
   if (key === null && !final) return;
   switch (role) {
     case 'assistant': {
+      // A reply aborted before it said anything (the user stopped the turn, or its omp was
+      // ended mid-turn) has nothing to show. Live, the prompt's result says the turn was
+      // aborted (a `prompt` note); a journal keeps no prompt results, so there the reply
+      // leaves that note in its place.
+      if (final && message.stopReason === 'aborted' && !(Array.isArray(message.content) && message.content.length)) {
+        if (key) removeItem(state, key);
+        if (at === null) note(state, 'muted', 'prompt', 'Aborted');
+        return;
+      }
       const item = upsert(state, key, emptyAssistant);
       if (item.kind !== 'assistant') return unrecognised(state, 'assistant (id clash)', message);
       item.blocks = Array.isArray(message.content) ? message.content.map(toBlock) : [];

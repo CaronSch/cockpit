@@ -31,7 +31,7 @@
 /** @typedef {{ source: DropSource, target: DropTarget, dir: Direction }} DropOp */
 
 /** @type {readonly Axis[]} */
-export const AXES = Object.freeze(['row', 'col']);
+const AXES = Object.freeze(['row', 'col']);
 
 const MAX_DEPTH = 32;
 const SUM_TOLERANCE = 1e-6;
@@ -49,9 +49,9 @@ export const branch = (axis, children, sizes) => ({
 });
 
 /** @param {Direction} dir @returns {Axis} */
-export const axisFor = (dir) => (dir === 'left' || dir === 'right' ? 'row' : 'col');
+const axisFor = (dir) => (dir === 'left' || dir === 'right' ? 'row' : 'col');
 /** @param {Direction} dir */
-export const isBefore = (dir) => dir === 'left' || dir === 'up';
+const isBefore = (dir) => dir === 'left' || dir === 'up';
 
 /** @param {Tree} node @returns {Leaf[]} */
 export function listLeaves(node) {

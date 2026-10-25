@@ -14,8 +14,10 @@
  * - contains "todo": a `todo` tool call setting a three-task list, one done and one in progress
  *   (its result carries the whole list in `details.phases`, as omp's does; so does `get_state`)
  * - contains "think": the final reply opens with a thinking block
+ * - contains "notice": omp's notices first, an info one (the tools xdev mounted) and a warning
  * - contains "interrupt": the reply ends as an aborted one does (`stopReason: 'aborted'` with
- *   "Interrupted by user"), and the prompt's result says it was aborted
+ *   "Interrupted by user"), and the prompt's result says it was aborted; with "early" too, the
+ *   reply is aborted before it says anything (no content), as omp journals one
  * - `/rename [title]`: like omp's builtin, names the session (with no title, from the first
  *   prompt that says something: "hi" alone is too little to name a session by; that
  *   outcome follows the answer, as omp's background title generation does)
@@ -240,6 +242,10 @@ async function runPrompt(id, text) {
   out({ type: 'message_start', message: user, messageId: userId });
   out({ type: 'message_end', message: user, messageId: userId });
   if (/mystery/.test(text)) out({ type: 'mystery_frame', payload: 42 });
+  if (/notice/.test(text)) {
+    out({ type: 'notice', level: 'info', message: 'xd://: github (12 tools); linear (8 tools)', source: 'xdev' });
+    out({ type: 'notice', level: 'warning', message: 'Memory retention failed', source: 'Hindsight' });
+  }
   if (/garble/.test(text)) process.stdout.write('this line is not json\n');
   if (/tool/.test(text)) toolCall();
   if (/todo/.test(text)) todoCall();
@@ -254,6 +260,11 @@ async function runPrompt(id, text) {
     const answer = await askDialog();
     const picked = answer.cancelled ? 'nothing (cancelled)' : (answer.answers?.[0]?.selectedOptions?.[0] ?? answer.answers?.[0]?.customInput);
     streamAssistant(`You picked **${picked}**.`);
+  } else if (/interrupt/.test(text) && /early/.test(text)) {
+    const aborted = { role: 'assistant', content: [], provider: model.provider, model: model.id, usage, stopReason: 'aborted', errorMessage: 'Interrupted by user', timestamp: Date.now() };
+    const messageId = record(aborted);
+    out({ type: 'message_start', message: aborted, messageId });
+    out({ type: 'message_end', message: aborted, messageId });
   } else if (/interrupt/.test(text)) {
     streamAssistant('I was about to', null, { stopReason: 'aborted', errorMessage: 'Interrupted by user' });
   } else if (/wide/.test(text) && /table/.test(text)) {

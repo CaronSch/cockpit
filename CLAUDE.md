@@ -133,7 +133,9 @@ What runs today:
   Sessions the daemon runs get a title during their first turn: once the first
   prompt is in a session omp has not named, the daemon sends `/rename` once and omp
   generates one while the agent works; untitled ones show their first prompt. A slash command's one-line output (such as that rename's) is a quiet
-  note; output of several lines shows open. **Fork** continues
+  note; output of several lines shows open. omp's info notices (such as the tools it
+  mounted) fold into a dim line naming their source, as the messages omp does not display
+  do; its warnings and errors show. **Fork** continues
   a copy of a pane's conversation in a new pane, as a session of its own (omp's
   `--fork`: a new journal, the original runs on untouched); it stays off until
   omp has saved the conversation, which a new session does once the model has
@@ -426,7 +428,6 @@ particular, move a capability into "Current state" when it ships.
 - `src/state/atom.js` — Tiny observable cell: get/set/subscribe.
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
-- `src/ui/confirm.js` — Asking before an action that cannot be undone: a small popover beside the button that asked for it, saying what will happen, with the action and Cancel (Esc or a click elsewhere cancel too).
 - `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key, Shift+F10 or a ⋯ button opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
 - `src/ui/dom.js` — Element construction helpers: elements, buttons that never submit a form, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.

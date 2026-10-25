@@ -19,7 +19,7 @@ import { errorMessage } from '../ui/format.js';
  * @typedef {{ setTimeout: typeof setTimeout, clearTimeout: typeof clearTimeout }} Timers
  */
 
-export const SAVE_DELAY_MS = 400;
+const SAVE_DELAY_MS = 400;
 
 /** @param {{ daemon: DaemonClient, id: string, timers?: Timers, delayMs?: number }} options */
 export function createScratchpadStore({ daemon, id, timers = globalThis, delayMs = SAVE_DELAY_MS }) {
