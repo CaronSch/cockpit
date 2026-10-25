@@ -38,6 +38,8 @@
  *   without the windows hearing of it.
  * - logins: the default model's provider, `fake`, is not logged in (a `login` to it stays
  *   under way); `keyed` is, and its `keyed-model` can be picked from the models
+ * Started in a directory whose name contains "slow-start", it takes 1.5 s to say it is ready,
+ * as a real omp can in a project it has not seen before.
  * With `--resume <file>`, the session continues the journal's conversation: its messages (what
  * `get_messages` returns), title and id (its `session` header's, as omp's `SessionManager`
  * does), and it writes the journal from then on, after every message.
@@ -50,7 +52,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 /** Shaped like a real omp reply: a heading, a table too wide for a narrow pane, then long list lines. */
@@ -359,6 +361,7 @@ function finishSideQuestion(patch) {
   sideQuestion = null;
 }
 
+if (basename(cwd).includes('slow-start')) await Bun.sleep(1500);
 out({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 out({ type: 'extension_ui_request', id: 'ui-start-w', method: 'setWidget', widgetKey: 'autoresearch' });
 out({ type: 'advisor_cost_changed' });

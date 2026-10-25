@@ -1728,6 +1728,24 @@ test('New starts another session in the window, in the same directory, and the o
   await stopSession(page, before);
 });
 
+test('using the message box while omp is still starting talks to that session, never a second one', async ({ page }) => {
+  const project = mkdtempSync(join(tmpdir(), 'ac-e2e-slow-start-')); // the fake takes its time here
+  await openWorkbench(page);
+  const pane = await addOmpPane(page);
+  await pane.locator('input').fill(project);
+  await pane.getByRole('button', { name: 'Start agent' }).click();
+  /** The daemon's sessions in the project. @returns {Promise<{ id: string, status: string }[]>} */
+  const inProject = async () => (await (await page.request.get('/api/sessions')).json()).sessions.filter((/** @type {any} */ s) => s.cwd === project);
+  await expect.poll(async () => (await inProject()).map((s) => s.status)).toEqual(['starting']);
+
+  await pane.locator('textarea').click();
+  await send(pane, 'said while it started');
+  await expect(pane.locator('.omp-assistant').last()).toContainText('You said: said while it started');
+  const sessions = await inProject();
+  expect(sessions.map((s) => s.status), 'one session').toEqual(['ready']);
+  await stopSession(page, sessions[0].id);
+});
+
 test('asleep, a window keeps showing its conversation; a message sent wakes it and goes once omp is up', async ({ page }) => {
   const workspace = await openWorkbench(page);
   const pane = await startedPane(page);
