@@ -45,11 +45,13 @@ const size = (bytes) =>
  *   upload: (file: Blob, name: string) => Promise<string>,
  *   onError: (message: string) => void,
  *   shellDir: () => { label: string, path: string },
+ *   onText?: (text: string) => void,
  * }} options `pane`: caps the draft's height and takes dropped files; `upload` stores a file
  * and answers with its path; `onError` hears about a file that could not be attached;
- * `shellDir` names the directory a shell command runs in, for shell mode's marker.
+ * `shellDir` names the directory a shell command runs in, for shell mode's marker; `onText`
+ * hears the draft's text whenever it changes.
  */
-export function createComposer({ pane, upload, onError, shellDir }) {
+export function createComposer({ pane, upload, onError, shellDir, onText = () => {} }) {
   const root = el('div', 'omp-composer');
   const cards = el('div', 'omp-cards');
   cards.hidden = true;
@@ -80,10 +82,11 @@ export function createComposer({ pane, upload, onError, shellDir }) {
 
   const maxHeight = () => Math.max(MIN_MAX_PX, pane.clientHeight * MAX_SHARE);
   const fit = () => autosize(draft, { max: maxHeight() });
-  /** The draft's text changed: refit it, and switch shell mode on or off. */
+  /** The draft's text changed: refit it, switch shell mode on or off, and say so. */
   const changed = () => {
     fit();
     drawMode();
+    onText(draft.value);
   };
   draft.addEventListener('input', changed);
   // The cap follows the pane, and the wrap follows the draft's width.
