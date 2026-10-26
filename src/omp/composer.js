@@ -23,6 +23,8 @@ import { composeMessage, shellCommand } from './message.js';
  * @typedef {{ kind: 'file', name: string, size: number, preview: string | null, path: string | null, stored: Promise<void> }} FileCard
  */
 /** One card above the draft. @typedef {({ kind: 'comment' } & QuoteComment) | FileCard} Card */
+/** A card as kept with an unsent message (omp/drafts.js): a comment, or a stored file. @typedef {({ kind: 'comment' } & QuoteComment) | { kind: 'file', name: string, size: number, path: string }} KeptCard */
+/** What the box holds worth keeping: its text and its cards. @typedef {{ text: string, cards: KeptCard[] }} Kept */
 
 /** The draft never grows past this share of the pane, nor shrinks its cap below MIN_MAX_PX. */
 const MAX_SHARE = 0.5;
@@ -45,13 +47,13 @@ const size = (bytes) =>
  *   upload: (file: Blob, name: string) => Promise<string>,
  *   onError: (message: string) => void,
  *   shellDir: () => { label: string, path: string },
- *   onText?: (text: string) => void,
+ *   onChange?: () => void,
  * }} options `pane`: caps the draft's height and takes dropped files; `upload` stores a file
  * and answers with its path; `onError` hears about a file that could not be attached;
- * `shellDir` names the directory a shell command runs in, for shell mode's marker; `onText`
- * hears the draft's text whenever it changes.
+ * `shellDir` names the directory a shell command runs in, for shell mode's marker; `onChange`
+ * hears whenever what the box keeps (`kept`) may have changed.
  */
-export function createComposer({ pane, upload, onError, shellDir, onText = () => {} }) {
+export function createComposer({ pane, upload, onError, shellDir, onChange = () => {} }) {
   const root = el('div', 'omp-composer');
   const cards = el('div', 'omp-cards');
   cards.hidden = true;
@@ -86,7 +88,7 @@ export function createComposer({ pane, upload, onError, shellDir, onText = () =>
   const changed = () => {
     fit();
     drawMode();
-    onText(draft.value);
+    onChange();
   };
   draft.addEventListener('input', changed);
   // The cap follows the pane, and the wrap follows the draft's width.
@@ -205,6 +207,7 @@ export function createComposer({ pane, upload, onError, shellDir, onText = () =>
     cards.classList.toggle('is-held', held);
     cards.replaceChildren(...(held ? [heldNote] : []), ...items.map(cardView));
     cards.hidden = items.length === 0;
+    onChange();
   }
 
   /** Shell mode while the draft is a `!` command: it looks like one and says where it runs. */
@@ -271,6 +274,24 @@ export function createComposer({ pane, upload, onError, shellDir, onText = () =>
     sendBtn,
     get text() {
       return draft.value;
+    },
+    /** The text and the cards, as kept with an unsent message: a file once it is stored. @returns {Kept} */
+    get kept() {
+      return {
+        text: draft.value,
+        cards: items.flatMap((c) =>
+          /** @type {KeptCard[]} */ (
+            c.kind === 'comment' ? [{ kind: 'comment', quote: c.quote, comment: c.comment }] : c.path ? [{ kind: 'file', name: c.name, size: c.size, path: c.path }] : []
+          ),
+        ),
+      };
+    },
+    /** Puts back what was kept: its text and its cards (a file without its thumbnail). @param {Kept} kept */
+    load(kept) {
+      draft.value = kept.text;
+      items = kept.cards.map((c) => (c.kind === 'file' ? { ...c, preview: null, stored: Promise.resolve() } : c));
+      changed();
+      drawCards();
     },
     /** Replaces the draft (a restored or prefilled message) and fits it. @param {string} text */
     setText(text) {

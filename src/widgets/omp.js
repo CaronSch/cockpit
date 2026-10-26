@@ -62,6 +62,14 @@ const FORK_TITLE = 'Fork: continue a copy of this conversation in a new window';
 const NOTHING_TO_FORK = 'Nothing to fork yet: the conversation is saved once the agent has replied';
 const SEND_TITLE = 'Drag onto the grid to send this in a fork of the conversation instead';
 
+/**
+ * Whether the page is going away: its requests are cut off then, which says nothing of whether
+ * omp got them, so a message cut off this way is not given back to the box (and kept there).
+ */
+let leaving = false;
+addEventListener('pagehide', () => (leaving = true));
+addEventListener('pageshow', () => (leaving = false));
+
 export default {
   type: 'omp',
   title: 'Agent',
@@ -441,7 +449,7 @@ function createPane(body, ctx, daemon) {
       },
       shellDir: () => ({ label: tildeHome(cwd(), home), path: cwd() }),
       // Kept for the conversation; while rewinding, what the box held before (see `rewind`).
-      onText: () => keepDraft(),
+      onChange: () => keepDraft(),
     });
     const { draft, sendBtn } = composer;
     const selectionPopup = attachSelectionPopup({
@@ -600,10 +608,10 @@ function createPane(body, ctx, daemon) {
     /** Keeps what the box holds; while rewinding, what it held before (see `rewind`). */
     function keepDraft() {
       const key = draftKey();
-      if (key) writeDraft(key, rewind ? rewind.draft : draft.value);
+      if (key) writeDraft(key, rewind ? { ...composer.kept, text: rewind.draft } : composer.kept);
     }
     const kept = draftKey();
-    if (kept) composer.setText(readDraft(kept));
+    if (kept) composer.load(readDraft(kept));
 
     const rewindBar = el('div', 'omp-rewind-bar');
     rewindBar.setAttribute('role', 'status');
@@ -729,7 +737,7 @@ function createPane(body, ctx, daemon) {
             : { type: 'prompt', message: text };
       void rpc(request).then((res) => {
         // Give it all back if omp refused it and nothing new has been written since.
-        if (!res || !res.success) taken.restore();
+        if ((!res || !res.success) && !leaving) taken.restore();
       });
     }
 
@@ -1219,7 +1227,7 @@ function createPane(body, ctx, daemon) {
         // The conversation's key may change with it (a new one's session named it so far).
         const before = draftKey();
         file = reported;
-        if (before && before !== draftKey()) writeDraft(before, '');
+        if (before && before !== draftKey()) writeDraft(before, { text: '', cards: [] });
         keepDraft();
         ctx.setParams({ sessionFile: reported });
       }
