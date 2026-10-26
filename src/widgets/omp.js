@@ -37,7 +37,8 @@ import { turnProgress } from '../omp/todos.js';
 import { elapsed, runningWork } from '../omp/running-work.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
 import { branchEntry, pointKey, rewindPoint } from '../omp/rewind.js';
-import { isRunning } from '../sessions/running.js';
+import { conversationKey, isRunning } from '../sessions/running.js';
+import { readDraft, writeDraft } from '../omp/drafts.js';
 import { focusOnClick } from '../ui/click-focus.js';
 import { settings } from '../ui/settings.js';
 /** @import { WidgetContext } from './registry.js' */
@@ -439,6 +440,8 @@ function createPane(body, ctx, daemon) {
         schedule();
       },
       shellDir: () => ({ label: tildeHome(cwd(), home), path: cwd() }),
+      // Kept for the conversation; while rewinding, what the box held before (see `rewind`).
+      onText: () => keepDraft(),
     });
     const { draft, sendBtn } = composer;
     const selectionPopup = attachSelectionPopup({
@@ -591,6 +594,17 @@ function createPane(body, ctx, daemon) {
     // path in the journal) and sends the box as the prompt in its place.
     /** The prompt this window is rewinding to (`key` as the transcript has it now), and the box as it was before. @type {{ key: string, point: import('../omp/rewind.js').RewindPoint, draft: string } | null} */
     let rewind = null;
+
+    // ── the unsent message, kept for the conversation (omp/drafts.js) ──
+    const draftKey = () => conversationKey({ sessionFile: file, session: session ?? started.session });
+    /** Keeps what the box holds; while rewinding, what it held before (see `rewind`). */
+    function keepDraft() {
+      const key = draftKey();
+      if (key) writeDraft(key, rewind ? rewind.draft : draft.value);
+    }
+    const kept = draftKey();
+    if (kept) composer.setText(readDraft(kept));
+
     const rewindBar = el('div', 'omp-rewind-bar');
     rewindBar.setAttribute('role', 'status');
     const rewindText = el('span', 'omp-rewind-text');
@@ -672,6 +686,7 @@ function createPane(body, ctx, daemon) {
       const res = await rpc({ type: 'branch', entryId });
       if (!res?.success) return false;
       rewind = null;
+      keepDraft();
       if (state.rewinds === after) await new Promise((resolve) => reseedWaiters.push({ after, resolve: () => resolve(undefined) }));
       return true;
     }
@@ -1201,7 +1216,11 @@ function createPane(body, ctx, daemon) {
       // with it. omp reports a new conversation's journal as it starts (and another on /new).
       const reported = meta()?.sessionFile;
       if (reported && reported !== file) {
+        // The conversation's key may change with it (a new one's session named it so far).
+        const before = draftKey();
         file = reported;
+        if (before && before !== draftKey()) writeDraft(before, '');
+        keepDraft();
         ctx.setParams({ sessionFile: reported });
       }
       const name = conversationName(state);

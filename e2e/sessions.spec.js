@@ -284,6 +284,34 @@ test('a click shows a conversation in a new agent window when there is none, the
   await expect(page.locator('.widget[data-widget="sessions"]'), 'the list stays').toHaveCount(1);
 });
 
+test('what is typed in a conversation waits there while the window shows another, and across a reload', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  await row(window, 'Fix the login flow').click();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  const box = pane.locator('textarea');
+  await box.fill('half a thought');
+  await row(window, 'Zebra cleanup').click();
+  await expect.poll(() => shownConversation(page, pane)).toBe(fileOf('zebra'));
+  await expect(box, 'each conversation its own').toHaveValue('');
+  await box.fill('another');
+
+  await row(window, 'Fix the login flow').click();
+  await expect.poll(() => shownConversation(page, pane)).toBe(fileOf('login'));
+  await expect(box).toHaveValue('half a thought');
+  await page.reload();
+  await expect(box).toHaveValue('half a thought');
+
+  // Sent, it is gone: nothing comes back after another reload.
+  await box.press('Enter');
+  await expect(pane.locator('.omp-user').last()).toContainText('half a thought');
+  await expect(box).toHaveValue('');
+  await page.reload();
+  await expect(pane.locator('.omp-user').last()).toContainText('half a thought');
+  await expect(box).toHaveValue('');
+  await row(window, 'Zebra cleanup').click();
+  await expect(box).toHaveValue('another');
+});
+
 test('a conversation whose directory is gone shows, and says so once something is sent', async ({ page }) => {
   const gone = join(tmpdir(), 'ac-e2e-gone-dir-that-does-not-exist');
   writeFileSync(
