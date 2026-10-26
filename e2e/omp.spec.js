@@ -1684,6 +1684,40 @@ test('a shell the agent backgrounds shows as running until its result comes', as
   await expect(running).toBeHidden();
 });
 
+test('a comment and a file waiting for the next prompt are kept with it across a reload', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'hello');
+  await pane.locator('.omp-assistant').last().locator('strong').dblclick();
+  await pane.getByRole('button', { name: 'Comment' }).click();
+  const box = pane.getByRole('textbox', { name: 'Comment on the selected text' });
+  await box.fill('why this word?');
+  await box.press('Enter');
+  const draft = pane.locator('textarea');
+  await draft.evaluate((node) => {
+    const data = new DataTransfer();
+    data.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(pane.locator('.omp-card.is-file')).not.toHaveClass(/is-uploading/);
+  await draft.fill('and the next step?');
+
+  await page.reload();
+  await expect(draft).toHaveValue('and the next step?');
+  await expect(pane.locator('.omp-card.is-comment')).toContainText('why this word?');
+  await expect(pane.locator('.omp-card.is-file')).toContainText('notes.txt');
+
+  const sent = page.waitForRequest((r) => r.url().endsWith('/rpc') && r.postDataJSON()?.type === 'prompt');
+  await draft.press('Enter');
+  const message = (await sent).postDataJSON().message;
+  expect(message).toContain('> hello\n\nwhy this word?');
+  expect(message).toContain('notes.txt');
+  await expect(pane.locator('.omp-card')).toHaveCount(0);
+  await page.reload();
+  await expect(pane.locator('.omp-user').last()).toContainText('and the next step?');
+  await expect(pane.locator('.omp-card'), 'sent: nothing comes back').toHaveCount(0);
+});
+
 /** The daemon's view of session `id`. @param {Page} page @param {string} id */
 const daemonSession = async (page, id) => (await (await page.request.get('/api/sessions')).json()).sessions.find((/** @type {any} */ s) => s.id === id);
 
