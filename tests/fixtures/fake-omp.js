@@ -77,6 +77,7 @@ if (args.includes('--version')) {
 const option = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : null);
 const resumed = option('--resume');
 const forkedFrom = option('--fork');
+const appendedPrompt = option('--append-system-prompt');
 
 /** A journal's lines; a missing one ends the process, as omp's `--resume` and `--fork` do. @param {string} file */
 function readJournal(file) {
@@ -406,6 +407,7 @@ lines.on('line', (line) => {
         sessionFile,
         sessionId,
         ...(sessionName ? { sessionName } : {}),
+        ...(appendedPrompt ? { appendedPrompt } : {}), // the fake's own: what the daemon appended
         autoCompactionEnabled: true,
         queuedMessageCount: 0,
         hasPendingAsyncWork: false,
