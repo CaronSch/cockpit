@@ -9,7 +9,8 @@
  *   prompt, attached files as the `files` note omp's `fileMention` message becomes
  * - the user's `!` shell runs (`bash` items: omp records bash and python executions only
  *   for commands the user runs; the agent's shell runs are tool calls)
- * - every response (below), without its thinking
+ * - every response (below), and the agent's narration between tool calls (what it says
+ *   it is doing, as Claude Code shows it), both without their thinking and tool calls
  * - errors (every `error` note: a failed prompt, command, attachment, exhausted retries)
  *   and how a prompt ended (`prompt` notes: failed or aborted)
  * - slash-command output (`command` notes): the answer to what the user typed
@@ -17,16 +18,17 @@
  *   and never hides it (CLAUDE.md, Invariants)
  * Dialogs waiting for an answer are not transcript items: the pane always shows them.
  *
- * Hidden: thinking, tool calls and their output, the agent's narration between tool calls,
- * messages injected into the conversation (`byAgent` user items: another agent's prompts,
+ * Hidden: thinking, tool calls and their output, messages injected into the conversation (`byAgent` user items: another agent's prompts,
  * omp's own nudges), and every other note.
  *
  * A response is an assistant message that ended (`message_end`) without asking for tools:
  * its `stopReason` is `stop`, `length`, `error` or `aborted`, not `toolUse`; the agent
  * spoke and was done. Every one is shown, not only a turn's last: omp may carry on after
  * one (a todo nudge, an injected message), and the answer the user asked for is then not
- * the last thing the agent said. Narration (a message that goes on to call tools) is work.
- * While a turn runs, the work since the user's prompt is summarised as `working`.
+ * the last thing the agent said. Narration is a message that goes on to call tools: its
+ * text shows, the calls do not. A message still streaming shows its text so far; one cut
+ * off for good (omp exited mid-stream) is neither. While a turn runs, the work since the
+ * user's prompt is summarised as `working`.
  */
 /** @import { AssistantItem, Item } from './transcript.js' */
 
@@ -55,7 +57,7 @@ export function promptsAndResponses(items, streaming) {
         break;
       case 'assistant':
         steps++;
-        if (isResponse(item)) shown.push(withoutWork(item));
+        if (isResponse(item) || saysSomething(item, streaming)) shown.push(withoutWork(item));
         break;
       case 'bash':
       case 'unrecognised':
@@ -76,6 +78,13 @@ const NOTE_SOURCES = new Set(['files', 'prompt', 'command']);
 
 /** @param {AssistantItem} item */
 const isResponse = (item) => item.ended && item.stopReason !== 'toolUse';
+
+/**
+ * Narration, or a message still streaming, with text to show.
+ * @param {AssistantItem} item @param {boolean} streaming
+ */
+const saysSomething = (item, streaming) =>
+  (item.ended || streaming) && item.blocks.some((b) => b.kind === 'text' && b.text.trim() !== '');
 
 /**
  * The response as the user reads it: its text (and images or blocks the pane does not
