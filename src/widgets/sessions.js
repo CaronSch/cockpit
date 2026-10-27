@@ -14,7 +14,8 @@
  *
  * Archive moves a conversation out of omp's sessions into the daemon's archive (omp's own
  * resume no longer offers it); "Archived" switches the window to the archived ones, each with
- * Restore. One whose agent is working is not archived until it is done.
+ * Restore. One whose agent is working is not archived until it is done. A new session
+ * nothing was sent to has no journal yet: archiving it ends it, and it is gone, not archived.
  *
  * A conversation with news its user has not read (daemon/unread.js) has a blue dot and a bold
  * title, archived or not, and the window's top bar counts those it lists. Showing one from
@@ -211,6 +212,16 @@ function createSessionsWindow(body, ctx, daemon) {
     return f ? runningWork(f.transcript).length : 0;
   }
 
+  /**
+   * Whether Archive is offered for `c`: a listed journal, or a new session omp has not written
+   * one for (nothing sent yet, nothing to keep), unless it is still starting or working.
+   * @param {Listed} c
+   */
+  const archivable = (c) => (isEmpty(c) ? stateOf(c) === 'idle' : sessions.some((s) => s.file === c.file));
+
+  /** An awake session with no listed journal: a new one nothing was sent to. @param {Listed} c */
+  const isEmpty = (c) => c.meta !== null && !sessions.some((s) => s.file === c.file);
+
   /** The row's conversation, as last drawn. @param {HTMLElement} row */
   const conversationAt = (row) => shown.get(row.dataset.key ?? '') ?? null;
 
@@ -266,7 +277,7 @@ function createSessionsWindow(body, ctx, daemon) {
     /** The row's own button for an action, which shows that the action is under way. @param {string} kind */
     const control = (kind) => /** @type {HTMLButtonElement} */ (row.querySelector(`.sessions-${kind}`));
     if (c?.file && showArchived()) items.push({ label: 'Restore', run: () => void move(c, control('restore')) });
-    else if (c?.file && sessions.some((s) => s.file === c.file)) items.push({ label: 'Archive', run: () => void move(c, control('archive')) });
+    else if (c && archivable(c)) items.push({ label: 'Archive', run: () => void move(c, control('archive')) });
     openContextMenu(anchor, items, at);
   }
 
@@ -278,7 +289,9 @@ function createSessionsWindow(body, ctx, daemon) {
     control.disabled = true;
     moveError = null;
     try {
-      await (showArchived() ? daemon.restorePastSession(c.file) : daemon.archivePastSession(c.file));
+      if (showArchived()) await daemon.restorePastSession(c.file);
+      else if (c.meta && isEmpty(c)) await daemon.end(c.meta.id);
+      else await daemon.archivePastSession(c.file);
     } catch (err) {
       moveError = `Could not ${showArchived() ? 'restore' : 'archive'} “${nameOf(c) ?? c.file}”: ${errorMessage(err)}`;
       control.disabled = false;
@@ -342,7 +355,7 @@ function createSessionsWindow(body, ctx, daemon) {
     if (work) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', `${work} running`));
     const actions = el('div', 'sessions-actions');
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
-    else if (c.file && sessions.some((s) => s.file === c.file)) actions.append(button('sessions-action sessions-archive', 'Archive'));
+    else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
     actions.append(moreButton());
     row.append(rowDot(unread), main, actions);
     return row;

@@ -72,6 +72,7 @@ export class DaemonError extends Error {
  *   config(): Promise<DaemonConfig>,
  *   createSession(options: { cwd: string, resume?: string, fork?: string }): Promise<SessionMeta>,
  *   seen(session: string): Promise<void>,
+ *   end(session: string): Promise<void>,
  *   rpc(session: string, command: Record<string, unknown>): Promise<RpcResponse>,
  *   respondUi(session: string, response: Record<string, unknown>): Promise<void>,
  *   listFiles(dir: string): Promise<DirListing>,
@@ -427,6 +428,9 @@ export function createDaemonClient(env = {}) {
     },
     async seen(session) {
       await request(`${sessionPath(session)}/seen`, { method: 'POST' });
+    },
+    async end(session) {
+      await request(sessionPath(session), { method: 'DELETE' });
     },
     async rpc(session, command) {
       const { id } = await request(`${sessionPath(session)}/rpc`, { method: 'POST', body: JSON.stringify(command) });

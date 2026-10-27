@@ -291,6 +291,7 @@ test('a focused message box lifts its border instead of drawing the accent outli
       const s = getComputedStyle(el);
       return { outline: s.outlineStyle, border: s.borderTopColor };
     });
+  await draft.blur(); // a new agent's box starts focused
   const idle = await look();
   await draft.focus();
   const focused = await look();
@@ -1233,6 +1234,14 @@ test('a tool call is one card whose output appears when expanded', async ({ page
   await expect(card).toContainText('bash');
   await card.locator('summary').click();
   await expect(card.locator('pre').last()).toHaveText('hi');
+});
+
+test('starting an agent puts the cursor in its message box', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await addOmpPane(page);
+  await pane.locator('input').fill(PROJECT);
+  await pane.locator('input').press('Enter');
+  await expect(pane.locator('textarea')).toBeFocused();
 });
 
 test('the top bar’s Config opens on hover or a click and shows only prompts and final replies in every agent window, across a reload', async ({ page }) => {
