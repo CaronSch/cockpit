@@ -234,8 +234,9 @@ What runs today:
   own resume offers it; the **Archived** toggle lists archived sessions (searchable and
   sortable the same way), each with **Restore**, which moves it back and never replaces a
   file that is there now. An idle conversation's session goes to sleep before it
-  moves; one whose agent works is not archived until it is done. Nothing is
-  ever deleted: there is no delete. An unread conversation (archived too, which
+  moves; one whose agent works is not archived until it is done. A new session
+  nothing was sent to has no journal yet: Archive ends it (`DELETE /api/sessions/:id`)
+  and it is gone, not archived. Nothing is ever deleted: there is no delete. An unread conversation (archived too, which
   keeps its mark) has a blue dot and a bold title, and the window's top bar counts the
   unread ones it lists; showing a session from here reads it. Right-click on a row, its
   **⋯** button, or Shift+F10 / the ContextMenu key on a focused row opens its menu

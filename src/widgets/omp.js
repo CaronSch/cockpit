@@ -113,6 +113,8 @@ function createPane(body, ctx, daemon) {
   let view = null;
   /** Views made so far, so each gets its own id. */
   let views = 0;
+  /** Whether the next view to show takes the focus: the agent just started from the setup form. */
+  let focusNext = false;
   /** @type {string | null} */
   let home = null;
   daemon
@@ -192,6 +194,10 @@ function createPane(body, ctx, daemon) {
     }
     show(`view:${view.id}`, () => [view?.root ?? el('div')]);
     view.update();
+    if (focusNext) {
+      focusNext = false;
+      view.focus();
+    }
   }
 
   /** @param {string} status */
@@ -279,6 +285,8 @@ function createPane(body, ctx, daemon) {
         .createSession({ cwd: dir })
         .then((meta) => {
           ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: null });
+          // The folder picked, the prompt comes next: its box takes the focus from the form.
+          focusNext = true;
           schedule();
         })
         .catch((err) => {
@@ -349,7 +357,7 @@ function createPane(body, ctx, daemon) {
   /**
    * The conversation the window's params name: awake (a session's events) or asleep (its
    * journal), and woken by what needs omp.
-   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, update(): void, markRead(): void, destroy(): void }} SessionView
+   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, update(): void, focus(): void, markRead(): void, destroy(): void }} SessionView
    * @returns {SessionView}
    */
   function createSessionView() {
@@ -1280,6 +1288,7 @@ function createPane(body, ctx, daemon) {
       root: node,
       shows: (p) => (p.sessionFile !== null && p.sessionFile === file) || (p.session !== null && (p.session === session || p.session === started.session)),
       update,
+      focus: () => draft.focus(),
       markRead: used,
       destroy() {
         closed = true;

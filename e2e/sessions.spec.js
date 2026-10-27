@@ -406,6 +406,18 @@ test('a conversation running a background job says so while it runs', async ({ p
   await expect(fresh.locator('.sessions-state')).toHaveCount(0);
 });
 
+test('a new session nothing was sent to is archived by ending it: gone from the list, and not among the archived', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  await window.getByRole('combobox', { name: 'Directory' }).selectOption(ALPHA); // only this test's sessions
+  const pane = await startedPane(page, ALPHA);
+  const fresh = keyRow(window, await shownConversation(page, pane));
+  await expect(fresh.locator('.sessions-title')).toHaveText('New session');
+  await fresh.getByRole('button', { name: 'Archive' }).click();
+  await expect(fresh).toHaveCount(0);
+  await window.getByRole('button', { name: 'Archived' }).click();
+  await expect(window.locator('.sessions-title', { hasText: 'New session' })).toHaveCount(0);
+});
+
 test('awake conversations are listed with how each is doing; a click shows one in the agent window used last', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await window.getByRole('combobox', { name: 'Directory' }).selectOption(ALPHA); // only this test's sessions
