@@ -13,7 +13,7 @@ import { listDirectory } from '../daemon/files.js';
 import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
 import { loadSettings } from '../daemon/settings.js';
-import { HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
+import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -275,6 +275,13 @@ describe('sessions', () => {
     const readyAt = mine.findIndex((e) => e.kind === 'session' && e.meta.status === 'ready');
     const sent = mine.slice(0, readyAt).flatMap((e) => (e.kind === 'sent' ? [e.command.type] : []));
     assert.deepEqual(sent, SETUP_COMMANDS.map((c) => c.type));
+  });
+
+  test('every session is asked to say what it is doing as it works', async () => {
+    const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
+    await waitForStatus(json.session.id, 'ready');
+    const state = await rpc(json.session.id, { type: 'get_state' });
+    assert.equal(state.data.appendedPrompt, APPEND_SYSTEM_PROMPT);
   });
 
   test('a session started from a journal has its earlier history in the log before it is ready', async () => {

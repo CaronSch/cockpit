@@ -46,7 +46,9 @@ Planned capabilities:
   `bun start` runs it; it serves the UI on `127.0.0.1:4777` (`Bun.serve`), opened as
   `http://cockpit.localhost:4777/` and
   launches each omp session as `omp --mode rpc-ui` in the chosen directory
-  (`Bun.spawn`), owning those processes. omp is the `omp` on PATH unless `--omp`
+  (`Bun.spawn`), owning those processes, with `--append-system-prompt` asking the
+  agent for progress updates as it works, in Claude Code's wording
+  (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has). omp is the `omp` on PATH unless `--omp`
   says otherwise. Prefer Bun's own APIs where they make the code smaller.
   The workbench is self-contained: it shows agents it launched and does not attach
   to sessions started in other terminals. Later it also samples process trees,
