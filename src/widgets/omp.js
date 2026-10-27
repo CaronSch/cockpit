@@ -65,8 +65,11 @@ const SEND_TITLE = 'Drag onto the grid to send this in a fork of the conversatio
 /**
  * Whether the page is going away: its requests are cut off then, which says nothing of whether
  * omp got them, so a message cut off this way is not given back to the box (and kept there).
+ * Set from `beforeunload`, which comes before the browser cuts them off (a busy page can hear
+ * of the cut-off request before `pagehide`), and from `pagehide`, for a page left without it.
  */
 let leaving = false;
+addEventListener('beforeunload', () => (leaving = true));
 addEventListener('pagehide', () => (leaving = true));
 addEventListener('pageshow', () => (leaving = false));
 
