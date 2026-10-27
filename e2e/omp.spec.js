@@ -1271,11 +1271,11 @@ test('the top bar’s Config opens on hover or a click and shows only prompts an
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
-  // A running turn is one indicator: its intermediate reply and tool run stay hidden.
+  // A running turn is one indicator: its tool run stays hidden, its narration shows.
   await send(pane, 'slow');
   await expect(pane.locator('.omp-working')).toHaveText('Working… 2 steps');
   await expect(pane.locator('.omp-tool')).toHaveCount(0);
-  await expect(pane.getByText('Let me check first.')).toHaveCount(0);
+  await expect(pane.getByText('Let me check first.')).toBeVisible();
   await expect(pane.locator('.omp-assistant').last()).toContainText('You said: slow');
   await expect(pane.locator('.omp-working')).toHaveCount(0);
 
@@ -1291,7 +1291,6 @@ test('the top bar’s Config opens on hover or a click and shows only prompts an
   await only.uncheck();
   await expect(pane.locator('.omp-tool')).toHaveCount(2);
   await expect(pane.locator('.omp-thinking')).toHaveCount(1);
-  await expect(pane.getByText('Let me check first.')).toBeVisible();
   await expect(other.locator('.omp-tool')).toHaveCount(1);
 });
 
