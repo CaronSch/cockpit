@@ -18,7 +18,7 @@
  *
  * New, Fork, Accounts and Stop sit in the window's top bar, beside its close button.
  */
-import { button, el } from '../ui/dom.js';
+import { button, el, setText } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
@@ -1167,24 +1167,24 @@ function createPane(body, ctx, daemon) {
     }
 
     function drawToolbar() {
-      cwdEl.textContent = shortCwd(cwd());
+      setText(cwdEl, shortCwd(cwd()));
       cwdEl.title = cwd();
       const s = state.session;
-      modelBtn.textContent = s.model ? s.model.name || s.model.id : 'model…';
+      setText(modelBtn, s.model ? s.model.name || s.model.id : 'model…');
       modelBtn.title = s.model ? `${s.model.provider}/${s.model.id}` : 'Choose model';
-      thinkingBtn.textContent = s.thinkingLevel ? `think: ${s.thinkingLevel}` : 'think…';
-      activity.textContent = state.streaming ? 'working' : waking ? 'waking…' : 'idle';
+      setText(thinkingBtn, s.thinkingLevel ? `think: ${s.thinkingLevel}` : 'think…');
+      setText(activity, state.streaming ? 'working' : waking ? 'waking…' : 'idle');
       activity.classList.toggle('is-streaming', state.streaming);
       const progress = turnProgress(state);
       progressEl.hidden = !progress;
       if (progress) {
         progressBar.max = progress.total;
         progressBar.value = progress.done;
-        progressCount.textContent = `${progress.done}/${progress.total}`;
+        setText(progressCount, `${progress.done}/${progress.total}`);
         progressEl.title = `${progress.done} of ${progress.total} tasks done${progress.current ? `\nNow: ${progress.current}` : ''}`;
       }
-      contextEl.textContent = s.contextPercent !== null ? `ctx ${s.contextPercent.toFixed(1)}%` : '';
-      costEl.textContent = state.cost > 0 ? `$${state.cost < 1 ? state.cost.toFixed(3) : state.cost.toFixed(2)}` : '';
+      setText(contextEl, s.contextPercent !== null ? `ctx ${s.contextPercent.toFixed(1)}%` : '');
+      setText(costEl, state.cost > 0 ? `$${state.cost < 1 ? state.cost.toFixed(3) : state.cost.toFixed(2)}` : '');
       errorBadge.hidden = !state.lastError;
       errorBadge.title = state.lastError ?? '';
       const live = ready();
