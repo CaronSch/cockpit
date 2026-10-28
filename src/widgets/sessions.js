@@ -22,6 +22,9 @@
  * here reads it. Each row's menu (a right-click, the ContextMenu key, Shift+F10, or its ⋯
  * button) marks it read or unread, beside the row's other actions.
  *
+ * Pinned conversations (daemon/pins.js) come first, in the window's order, each with a ★; the
+ * ☆ on a row pointed at, or its menu, pins it.
+ *
  * Rows show where their conversations are on this screen (sessions/links.js): a bar at the
  * left edge for one shown in an agent window, brighter for the one in the agent window used last
  * (where a click shows conversations). Pointing at a row (hover, or keyboard focus: a click
@@ -199,6 +202,9 @@ function createSessionsWindow(body, ctx, daemon) {
   /** @param {Listed} c */
   const isUnread = (c) => daemon.unreadSince(c.meta?.ompId ?? (c.id || null)) !== null;
 
+  /** @param {Listed} c */
+  const isPinned = (c) => daemon.isPinned(c.meta?.ompId ?? (c.id || null));
+
   /** How an awake conversation is doing, or null for one asleep. @param {Listed} c @returns {RunningState | null} */
   function stateOf(c) {
     if (!c.meta) return null;
@@ -252,6 +258,16 @@ function createSessionsWindow(body, ctx, daemon) {
     });
   }
 
+  /** Pins the row's conversation to the top, or unpins it. @param {HTMLElement} row @param {boolean} pinned */
+  function pin(row, pinned) {
+    const id = ompIdOf(row);
+    if (id === null) return;
+    daemon.pin(id, pinned).catch((err) => {
+      moveError = `Could not ${pinned ? 'pin' : 'unpin'} it: ${errorMessage(err)}`;
+      draw();
+    });
+  }
+
   /** Shows the row's conversation in the agent window this screen used last; that reads it. @param {HTMLElement} row */
   function show(row) {
     const params = paramsFor(row);
@@ -273,6 +289,8 @@ function createSessionsWindow(body, ctx, daemon) {
     if (id !== null) {
       const unread = daemon.unreadSince(id) !== null;
       items.push({ label: unread ? 'Mark as read' : 'Mark as unread', run: () => mark(row, !unread) });
+      const pinned = daemon.isPinned(id);
+      items.push({ label: pinned ? 'Unpin' : 'Pin to top', run: () => pin(row, !pinned) });
     }
     /** The row's own button for an action, which shows that the action is under way. @param {string} kind */
     const control = (kind) => /** @type {HTMLButtonElement} */ (row.querySelector(`.sessions-${kind}`));
@@ -335,6 +353,15 @@ function createSessionsWindow(body, ctx, daemon) {
     return more;
   }
 
+  /** The row's ★ (pinned) or ☆, which pins or unpins it. @param {boolean} pinned */
+  function pinButton(pinned) {
+    const star = button('sessions-action sessions-pin', pinned ? '★' : '☆');
+    star.title = pinned ? 'Unpin' : 'Pin to the top';
+    star.setAttribute('aria-label', 'Pin to top');
+    star.setAttribute('aria-pressed', String(pinned));
+    return star;
+  }
+
   /** States worth a word in the row: the rest read from the dot (done) or need none (idle). */
   const SAID = new Set(['starting', 'working', 'asking']);
 
@@ -342,8 +369,9 @@ function createSessionsWindow(body, ctx, daemon) {
   function renderRow(c, now) {
     const archived = showArchived();
     const unread = isUnread(c);
+    const pinned = isPinned(c);
     const state = stateOf(c);
-    const row = el('li', `sessions-item${state ? ` is-${state}` : ''}${archived ? ' is-archived' : ''}${unread ? ' is-unread' : ''}`);
+    const row = el('li', `sessions-item${state ? ` is-${state}` : ''}${archived ? ' is-archived' : ''}${unread ? ' is-unread' : ''}${pinned ? ' is-pinned' : ''}`);
     row.tabIndex = 0;
     row.dataset.key = c.key;
     const hint = archived ? 'Archived: Restore to show it' : 'Click to show it in the last agent window used, or drag it onto one';
@@ -357,7 +385,7 @@ function createSessionsWindow(body, ctx, daemon) {
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
     else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
     actions.append(moreButton());
-    row.append(rowDot(unread), main, actions);
+    row.append(rowDot(unread), main, actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
     return row;
   }
 
@@ -401,14 +429,15 @@ function createSessionsWindow(body, ctx, daemon) {
     drawDirectories();
 
     const now = Date.now();
-    const conversations = sortSessions(listed(), sortKey(), dir);
+    const sorted = sortSessions(listed(), sortKey(), dir);
+    const conversations = [...sorted.filter(isPinned), ...sorted.filter((c) => !isPinned(c))];
     shown = new Map(conversations.map((c) => [c.key, c]));
     drawStatus(conversations.length);
     // Rows are rebuilt only when what they show changed, so a redraw does not steal focus.
     const live = new Set();
     conversations.forEach((c, i) => {
       live.add(c.key);
-      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
+      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), isPinned(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
       let entry = rows.get(c.key);
       if (!entry || entry.signature !== signature) {
         const node = renderRow(c, now);
@@ -461,6 +490,7 @@ function createSessionsWindow(body, ctx, daemon) {
     const control = /** @type {Element} */ (event.target).closest('button');
     const c = conversationAt(row);
     if (!control) show(row);
+    else if (c && control.classList.contains('sessions-pin')) pin(row, !isPinned(c));
     else if (control.classList.contains('sessions-more')) openRowMenu(row, /** @type {HTMLElement} */ (control));
     else if (c && (control.classList.contains('sessions-archive') || control.classList.contains('sessions-restore'))) void move(c, /** @type {HTMLButtonElement} */ (control));
   });
@@ -515,6 +545,7 @@ function createSessionsWindow(body, ctx, daemon) {
   });
 
   const offUnread = daemon.onUnread(scheduleDraw);
+  const offPins = daemon.onPins(scheduleDraw);
   const offSessions = daemon.onSessions(() => {
     syncFollowed();
     scheduleDraw();
@@ -580,6 +611,7 @@ function createSessionsWindow(body, ctx, daemon) {
       requestSeq++; // drop any answer still on its way
       offSessions();
       offUnread();
+      offPins();
       offStatus();
       for (const entry of followed.values()) entry.off();
       cancelAnimationFrame(frame);

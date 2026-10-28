@@ -264,3 +264,20 @@
   color: var(--color-text-faint);
   cursor: default;
 }
+
+/* A pinned row's ★ stays in view; another row's ☆ shows with its actions. */
+.sessions-pin {
+  flex: none;
+  font-size: var(--text-sm);
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+
+.sessions-item:is(:hover, :focus-within) .sessions-pin,
+.sessions-item.is-pinned .sessions-pin {
+  opacity: 1;
+}
+
+.sessions-item.is-pinned .sessions-pin {
+  color: var(--color-text);
+}

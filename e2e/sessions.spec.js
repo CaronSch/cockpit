@@ -74,10 +74,11 @@ test.beforeEach(async ({ page }) => {
   workspace = newWorkspace();
   await page.goto(workbenchPath(workspace));
   await expect(page.locator('.screen-switch')).toBeVisible(); // the app has started
-  // Unread marks outlive sessions: an earlier test's must not show in this one.
+  // Unread marks and pins outlive sessions: an earlier test's must not show in this one.
   await page.evaluate(async (ids) => {
     for (const id of ids) {
       await fetch(`/api/unread/${id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ at: Number.MAX_SAFE_INTEGER }) });
+      await fetch(`/api/pins/${id}`, { method: 'DELETE' });
     }
   }, JOURNALS.map((j) => j.name));
 });
@@ -598,7 +599,7 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
   const menu = page.getByRole('menu');
   const zebra = row(window, 'Zebra cleanup');
   await zebra.click({ button: 'right' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Archive']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Pin to top', 'Archive']);
   await expect(menu.getByRole('menuitem').first()).toBeFocused();
   await menu.getByRole('menuitem', { name: 'Mark as unread' }).click();
   await expect(menu).toHaveCount(0);
@@ -607,7 +608,7 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
 
   await zebra.hover();
   await zebra.getByRole('button', { name: 'More actions' }).click();
-  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as read', 'Archive']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as read', 'Pin to top', 'Archive']);
   await menu.getByRole('menuitem', { name: 'Mark as read' }).click();
   await expect(zebra).not.toHaveClass(/is-unread/);
 
@@ -617,9 +618,37 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
   await expect(titles(window)).toHaveText(['Fix the login flow']);
   await window.getByRole('button', { name: 'Archived' }).click();
   await zebra.click({ button: 'right' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Mark as unread', 'Restore']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Mark as unread', 'Pin to top', 'Restore']);
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
+});
+
+test('a pinned session is listed first, whatever the sort, in every window and across a reload, until it is unpinned', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
+  const fix = row(window, 'Fix the login flow');
+  await expect(fix.getByRole('button', { name: 'Pin to top' })).toHaveCSS('opacity', '0');
+  await fix.hover();
+  await fix.getByRole('button', { name: 'Pin to top' }).click();
+  await expect(titles(window)).toHaveText(['Fix the login flow', 'Zebra cleanup', 'deploy staging']);
+  await expect(fix).toHaveClass(/is-pinned/);
+  await expect(fix.getByRole('button', { name: 'Pin to top' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Pinned ones keep the window's order among themselves, before the rest.
+  await row(window, 'deploy staging').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Pin to top' }).click();
+  await expect(titles(window)).toHaveText(['deploy staging', 'Fix the login flow', 'Zebra cleanup']);
+  await window.getByRole('combobox', { name: 'Sort by' }).selectOption('title');
+  await expect(titles(window)).toHaveText(['deploy staging', 'Fix the login flow', 'Zebra cleanup']);
+  await window.getByRole('button', { name: 'Reverse sort order' }).click();
+  await expect(titles(window)).toHaveText(['Fix the login flow', 'deploy staging', 'Zebra cleanup']);
+
+  await page.reload();
+  const again = page.locator('.widget[data-widget="sessions"]');
+  await expect(titles(again)).toHaveText(['Fix the login flow', 'deploy staging', 'Zebra cleanup']);
+  await row(again, 'Fix the login flow').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Unpin' }).click();
+  await expect(titles(again)).toHaveText(['deploy staging', 'Zebra cleanup', 'Fix the login flow']);
 });
 
 test('from the keyboard, Shift+F10 opens a row’s menu; Mark as unread lights its window, which the pointer resting there does not clear', async ({ page }) => {
@@ -634,7 +663,7 @@ test('from the keyboard, Shift+F10 opens a row’s menu; Mark as unread lights i
   const menu = page.getByRole('menu');
   await zebra.focus();
   await page.keyboard.press('Shift+F10');
-  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Archive']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Pin to top', 'Archive']);
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(zebra, 'Esc gives focus back to the row').toBeFocused();
