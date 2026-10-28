@@ -10,6 +10,7 @@ import { SessionNotRunning } from './omp-session.js';
 import { OMP_ID } from './unread.js';
 import { isSettingsPatch } from './settings.js';
 import { listDirectory, resolvePath } from './files.js';
+import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
 import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
 import { isValidTree } from '../src/layout/grid-model.js';
@@ -46,6 +47,9 @@ const ASSET_HEADERS = {
   'cache-control': 'private, max-age=31536000, immutable',
   'content-security-policy': "sandbox; default-src 'none'; img-src 'self'; frame-ancestors 'none'",
 };
+
+/** An image file an agent showed: never run as a page, and read fresh (it may be redrawn). */
+const IMAGE_HEADERS = { ...BASE_HEADERS, 'content-security-policy': ASSET_HEADERS['content-security-policy'] };
 
 class HttpError extends Error {
   /** @param {number} status @param {string} message */
@@ -398,6 +402,15 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
         },
       }),
       '/api/files': api({ GET: (req) => listing(req, homedir()) }),
+      '/api/image': api({
+        GET: async (req) => {
+          const path = resolvePath(new URL(req.url).searchParams.get('path') ?? '', homedir());
+          const type = IMAGE_TYPES[extname(path).toLowerCase()];
+          const file = Bun.file(path);
+          if (!type || !(await file.exists())) throw new HttpError(404, 'no such image');
+          return new Response(file, { headers: { ...IMAGE_HEADERS, 'content-type': type } });
+        },
+      }),
       '/api/sessions/:id/ui': api({
         POST: async (req) => {
           const session = sessionOf(req);

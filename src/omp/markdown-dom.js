@@ -104,9 +104,31 @@ function renderInline(node) {
       a.rel = 'noopener noreferrer';
       return a;
     }
+    case 'image':
+      return renderImage(node.path, node.alt);
     case 'math':
       return renderMath(node.tex, node.display);
   }
+}
+
+/**
+ * An image file on this machine, served by the daemon (`/api/image`): a click opens it full
+ * size. One that cannot be shown (gone, unreadable) says so, with its path.
+ * @param {string} path @param {string} alt @returns {HTMLElement}
+ */
+function renderImage(path, alt) {
+  const src = `/api/image?path=${encodeURIComponent(path)}`;
+  const a = el('a', 'md-image');
+  a.href = src;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.title = path;
+  const img = el('img');
+  img.src = src;
+  img.alt = alt;
+  img.addEventListener('error', () => a.replaceWith(el('span', 'md-image-missing', `${alt ? `${alt}: ` : ''}image not found (${path})`)), { once: true });
+  a.append(img);
+  return a;
 }
 
 /**

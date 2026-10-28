@@ -3,7 +3,7 @@
  *
  * Supported: paragraphs (newlines kept as line breaks), ATX headings, fenced code with a
  * language, inline code, bold/italic, bullet and numbered lists, block quotes, horizontal
- * rules, links and autolinks, and GFM tables (column alignment, inline formatting in cells;
+ * rules, links and autolinks, images on this machine (`![alt](/abs/or/~/path.png)`), and GFM tables (column alignment, inline formatting in cells;
  * a table may start right under a paragraph line), and TeX math: `$$…$$` and `\[…\]` on their
  * own as display math, `$…$` and `\(…\)` inline (markdown-dom.js renders it). Raw HTML is
  * plain text. Only
@@ -18,6 +18,7 @@
  *   | { type: 'strong', children: Inline[] }
  *   | { type: 'em', children: Inline[] }
  *   | { type: 'link', href: string, children: Inline[] }
+ *   | { type: 'image', path: string, alt: string }
  *   | { type: 'break' }
  *   | { type: 'math', tex: string, display: boolean }
  * )} Inline
@@ -46,6 +47,8 @@ const QUOTE = /^ {0,3}> ?(.*)$/;
 const LIST_ITEM = /^( {0,3})([-*+]|\d{1,9}[.)])(?:[ \t]+(.*))?$/;
 const TABLE_DIVIDER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const SAFE_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+/** An image file named by an absolute or `~/` path (the daemon serves these: `/api/image`). */
+export const LOCAL_IMAGE = /^~?\/[^\s]*\.(png|jpe?g|gif|webp|avif)$/i;
 
 /**
  * Returns the href if it is an absolute http(s) or mailto URL, else null.
@@ -334,6 +337,16 @@ export function parseInline(text) {
       continue;
     }
 
+    if (ch === '!' && text[i + 1] === '[') {
+      const image = parseImage(text, i);
+      if (image) {
+        flush();
+        out.push(image.node);
+        i = image.next;
+        continue;
+      }
+    }
+
     if (ch === '[') {
       const link = parseLink(text, i);
       if (link) {
@@ -441,11 +454,37 @@ function parseEmphasis(text, start) {
 }
 
 /**
+ * `![alt](path)` for an image file on this machine (an absolute or `~/` path); null for any
+ * other target, which is then read as a link: a remote image is never fetched, since the URL
+ * an agent picks could carry what it read.
+ * @param {string} text @param {number} start at the `!`
+ * @returns {{ node: Inline, next: number } | null}
+ */
+function parseImage(text, start) {
+  const parts = linkParts(text, start + 1);
+  if (!parts || !LOCAL_IMAGE.test(parts.target)) return null;
+  return { node: { type: 'image', path: parts.target, alt: parts.label }, next: parts.next };
+}
+
+/**
  * `[label](target)`. Unsafe targets keep their label as plain text.
  * @param {string} text @param {number} start
  * @returns {{ nodes: Inline[], next: number } | null}
  */
 function parseLink(text, start) {
+  const parts = linkParts(text, start);
+  if (!parts) return null;
+  const children = parseInline(parts.label);
+  const href = safeHref(parts.target);
+  return { nodes: href ? [{ type: 'link', href, children }] : children, next: parts.next };
+}
+
+/**
+ * The label and target of `[label](target)` at `start`, and where it ends.
+ * @param {string} text @param {number} start
+ * @returns {{ label: string, target: string, next: number } | null}
+ */
+function linkParts(text, start) {
   let depth = 0;
   let end = -1;
   for (let j = start; j < text.length; j++) {
@@ -470,8 +509,6 @@ function parseLink(text, start) {
     }
   }
   if (close === -1) return null;
-  const target = text.slice(end + 2, close).trim().split(/\s+/)[0] ?? '';
-  const children = parseInline(text.slice(start + 1, end));
-  const href = safeHref(target.replace(/^<|>$/g, ''));
-  return { nodes: href ? [{ type: 'link', href, children }] : children, next: close + 1 };
+  const target = (text.slice(end + 2, close).trim().split(/\s+/)[0] ?? '').replace(/^<|>$/g, '');
+  return { label: text.slice(start + 1, end), target, next: close + 1 };
 }
