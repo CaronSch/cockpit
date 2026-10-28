@@ -571,6 +571,15 @@ describe('sessions', () => {
     assert.deepEqual(sentAfterPrompt(await turn(id, 'fix the login bug')), ['fix the login bug', 'get_state', 'get_state']);
   });
 
+  test('a fork is named again by its first prompt, though it has its parent’s name; once', async () => {
+    const journal = join(cwd, 'titled-parent.jsonl');
+    await Bun.write(journal, `${JSON.stringify({ type: 'title', v: 1, title: 'Earlier work' })}\n`);
+    const id = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, fork: journal } })).json.session.id;
+    await waitForStatus(id, 'ready');
+    assert.deepEqual(sentAfterPrompt(await turn(id, 'try the other approach')), ['try the other approach', '/rename', 'get_state', 'get_state']);
+    assert.equal(sentAfterPrompt(await turn(id, 'and test it')).filter((m) => m === '/rename').length, 1, 'asked once');
+  });
+
   test('a missing omp binary fails the session with the reason instead of hanging', async () => {
     const missing = createHub({ ompPath: join(cwd, 'no-such-omp'), unread });
     /** @type {Promise<void>} */

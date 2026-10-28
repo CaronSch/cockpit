@@ -6,6 +6,8 @@
  * first prompt of a session with no name is in its conversation, the daemon sends `/rename`
  * with no title, as a user would: omp's title model names the conversation in the
  * background while the agent works on the turn. (Sent any earlier, omp has nothing to name.)
+ * A fork is named again by its first prompt, though it has its parent's name: it is going
+ * somewhere else, and omp's title model reads the latest messages along with the first.
  */
 import { createFrameDecoder } from './frame-decoder.js';
 /** @import { RpcResponse, SessionEvent, SessionMeta } from './wire.js' */
@@ -171,7 +173,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     if (frame.type === 'session_info_update' && frame.title) named = true;
     if (frame.type === 'message_end' && frame.message?.role === 'user' && !titleAsked) {
       titleAsked = true;
-      if (!named) send(RENAME).response.catch(() => {});
+      if (!named || fork) send(RENAME).response.catch(() => {});
     }
     if (frame.type === 'response' && typeof frame.id === 'string') {
       const waiter = pending.get(frame.id);
