@@ -13,6 +13,7 @@ export function inlineText(inlines) {
       if (node.type === 'text' || node.type === 'code') return node.text;
       if (node.type === 'break') return '\n';
       if (node.type === 'math') return node.tex; // its TeX, the closest plain text there is
+      if (node.type === 'image') return node.alt;
       return inlineText(node.children);
     })
     .join('');

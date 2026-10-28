@@ -142,6 +142,22 @@ test('a streamed reply renders once, as markdown, even though omp pre-fills mess
   await expect(pane.getByText('idle')).toBeVisible();
 });
 
+test('an image file a reply names is shown in it, a click away from full size; one that is gone says so', async ({ page }) => {
+  // A 1×1 PNG, as an agent's chart would be written.
+  const png = join(mkdtempSync(join(tmpdir(), 'ac-e2e-image-')), 'chart.png');
+  writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64'));
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, `see ![p90 chart](${png}) and ![gone](${png}.missing.png)`);
+  const reply = pane.locator('.omp-assistant').last();
+  const image = reply.getByRole('img', { name: 'p90 chart' });
+  await expect(image).toBeVisible();
+  expect(await image.evaluate((img) => /** @type {HTMLImageElement} */ (img).naturalWidth)).toBe(1);
+  await expect(reply.locator('a.md-image')).toHaveAttribute('target', '_blank');
+  await expect(reply.locator('.md-image-missing')).toHaveText(`gone: image not found (${png}.missing.png)`);
+  problems = problems.filter((p) => !p.includes('404')); // the browser logs the missing image's 404 itself
+});
+
 test('the conversation reads like a terminal: no "you" label, one font for the whole app', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

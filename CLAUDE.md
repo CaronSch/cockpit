@@ -47,8 +47,8 @@ Planned capabilities:
   `http://cockpit.localhost:4777/` and
   launches each omp session as `omp --mode rpc-ui` in the chosen directory
   (`Bun.spawn`), owning those processes, with `--append-system-prompt` asking the
-  agent for progress updates as it works, in Claude Code's wording
-  (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has). omp is the `omp` on PATH unless `--omp`
+  agent for progress updates as it works, in Claude Code's wording, and telling it
+  what the window renders, inviting visuals (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has). omp is the `omp` on PATH unless `--omp`
   says otherwise. Prefer Bun's own APIs where they make the code smaller.
   The workbench is self-contained: it shows agents it launched and does not attach
   to sessions started in other terminals. Later it also samples process trees,
@@ -121,8 +121,10 @@ What runs today:
   own folders, arrows move, Enter picks the folder the arrows moved to, else starts omp
   in the folder typed, Esc closes;
   a relative directory is found from home), chat with it from its
-  structured event stream (streamed replies with Markdown, tables and TeX math as
-  MathML, thinking,
+  structured event stream (streamed replies with Markdown, tables, TeX math as
+  MathML, and images on this machine, `![alt](/abs/path.png)`, served by `/api/image`
+  as raster only and sandboxed; remote images are never fetched, so a URL can't carry
+  out what an agent read), thinking,
   tool calls with output), pick model and thinking level, log in to
   providers, use slash commands, answer approval and `ask` dialogs, steer or stop
   a running turn, and carry on a conversation whatever became of its omp (asleep,
