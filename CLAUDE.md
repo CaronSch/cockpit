@@ -490,6 +490,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), all behind the loopback guard.
 - `daemon/settings.js` — The daemon's settings: switches for what the daemon does, so every page sees and changes the same ones (a page's own look is kept per browser: src/ui/settings.js).
 - `daemon/sleep.js` — When the daemon puts a session to sleep: ends its omp process, as nobody needs it running.
+- `daemon/state-file.js` — A value the daemon keeps in one small JSON file in the state directory (unread marks, pins, settings): read once as the daemon starts, written whole after every change (write-then-rename, one write at a time, so a crash mid-write leaves the old value, never half of the new one), and every change heard by its subscribers.
 - `daemon/token.js` — The daemon's access token: random, created once, kept owner-only in the state directory so a browser stays signed in across daemon restarts.
 - `daemon/ui-files.js` — The files that make up the browser UI: which ones the daemon serves, and a version that changes whenever any of them does, so an open page can tell it is running older code.
 - `daemon/unread.js` — Which omp conversations have news their user has not read: kept in one small file in the state directory, so a mark outlives windows, browsers, daemon restarts and the session itself (a stopped session is a past one, still unread).

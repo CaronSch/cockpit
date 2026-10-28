@@ -3,12 +3,10 @@
  * the same ones (a page's own look is kept per browser: src/ui/settings.js). They are picked
  * in the Config menu and kept in one small file in the state directory.
  *
- * `<file>`: `{ version: 1, settings: { [key]: value } }`, written whole after every change
- * (write-then-rename, one write at a time); a key it lacks has its default. A file that cannot
- * be read as one stops the daemon from starting, naming the file, rather than being replaced.
+ * `<file>` (state-file.js): `{ version: 1, settings: { [key]: value } }`; a key it lacks has
+ * its default.
  */
-import { mkdir, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { loadStateFile } from './state-file.js';
 
 const VERSION = 1;
 
@@ -36,50 +34,19 @@ export function isSettingsPatch(value) {
  * @param {{ file: string }} options
  */
 export async function loadSettings({ file }) {
-  /** @type {DaemonSettings} */
-  let settings = { ...DEFAULT_SETTINGS };
-  const stored = Bun.file(file);
-  if (await stored.exists()) {
-    /** @type {any} */
-    let data;
-    try {
-      data = JSON.parse(await stored.text());
-    } catch {}
-    if (data?.version !== VERSION || !isSettingsPatch(data.settings)) {
-      throw new Error(`${file} is not a settings file this daemon can read; fix it or move it away`);
-    }
-    settings = { ...settings, ...data.settings };
-  }
-  /** @type {Set<(settings: DaemonSettings) => void>} */
-  const listeners = new Set();
-  /** @type {Promise<unknown>} */
-  let queue = Promise.resolve();
-  let tmpSeq = 0;
-
-  async function store() {
-    await mkdir(dirname(file), { recursive: true, mode: 0o700 });
-    // Write-then-rename: a crash mid-write leaves the old settings, never half of the new ones.
-    const tmp = `${file}.${process.pid}.${++tmpSeq}.tmp`;
-    await writeFile(tmp, `${JSON.stringify({ version: VERSION, settings }, null, 2)}\n`, { mode: 0o600 });
-    await rename(tmp, file);
-  }
-
+  const settings = await loadStateFile({
+    file,
+    what: 'a settings file',
+    initial: /** @type {DaemonSettings} */ ({ ...DEFAULT_SETTINGS }),
+    read: (data) => (data?.version === VERSION && isSettingsPatch(data.settings) ? { ...DEFAULT_SETTINGS, ...data.settings } : null),
+    write: (all) => ({ version: VERSION, settings: all }),
+  });
   return {
-    /** @returns {DaemonSettings} */
-    all: () => settings,
+    all: settings.get,
     /** Changes the settings `patch` names. @param {Partial<DaemonSettings>} patch */
-    async set(patch) {
-      settings = { ...settings, ...patch };
-      for (const fn of listeners) fn(settings);
-      // Each write stores the settings as they are when it runs, so the last one leaves the newest.
-      queue = queue.then(store).catch((err) => console.error(`[daemon] could not save ${file}:`, err));
-      await queue;
-    },
-    /** Hears every change, with all the settings. @param {(settings: DaemonSettings) => void} fn */
-    subscribe(fn) {
-      listeners.add(fn);
-      return () => listeners.delete(fn);
-    },
+    set: (patch) => settings.set({ ...settings.get(), ...patch }),
+    /** Hears every change, with all the settings. */
+    subscribe: settings.subscribe,
   };
 }
 
