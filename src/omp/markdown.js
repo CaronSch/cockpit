@@ -3,7 +3,7 @@
  *
  * Supported: paragraphs (newlines kept as line breaks), ATX headings, fenced code with a
  * language, inline code, bold/italic, bullet and numbered lists, block quotes, horizontal
- * rules, links and autolinks, images on this machine (`![alt](/abs/or/~/path.png)`), and GFM tables (column alignment, inline formatting in cells;
+ * rules, links and autolinks, `mermaid` diagrams and `vega-lite` charts (a closed fence), images on this machine (`![alt](/abs/or/~/path.png)`), and GFM tables (column alignment, inline formatting in cells;
  * a table may start right under a paragraph line), and TeX math: `$$…$$` and `\[…\]` on their
  * own as display math, `$…$` and `\(…\)` inline (markdown-dom.js renders it). Raw HTML is
  * plain text. Only
@@ -29,6 +29,7 @@
  *   | { type: 'paragraph', children: Inline[] }
  *   | { type: 'heading', level: number, children: Inline[] }
  *   | { type: 'code', lang: string, text: string }
+ *   | { type: 'visual', lang: VisualLang, source: string }
  *   | { type: 'list', ordered: boolean, start: number, items: Block[][] }
  *   | { type: 'quote', children: Block[] }
  *   | { type: 'table', align: Align[], head: Inline[][], rows: Inline[][][], source: string }
@@ -47,7 +48,10 @@ const QUOTE = /^ {0,3}> ?(.*)$/;
 const LIST_ITEM = /^( {0,3})([-*+]|\d{1,9}[.)])(?:[ \t]+(.*))?$/;
 const TABLE_DIVIDER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const SAFE_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
-/** An image file named by an absolute or `~/` path (the daemon serves these: `/api/image`). */
+/** Fenced languages drawn rather than shown as code (visuals.js). @typedef {'mermaid' | 'vega-lite'} VisualLang */
+/** @param {string} lang @returns {lang is VisualLang} */
+const isVisualLang = (lang) => lang === 'mermaid' || lang === 'vega-lite';
+/** An image file named by an absolute or `~/` path (the daemon serves these: `/api/file`). */
 export const LOCAL_IMAGE = /^~?\/[^\s]*\.(png|jpe?g|gif|webp|avif)$/i;
 
 /**
@@ -123,17 +127,22 @@ function parseBlocks(lines) {
       const indent = line.length - line.trimStart().length;
       /** @type {string[]} */
       const body = [];
+      let closed = false;
       i++;
       while (i < lines.length) {
         const close = lines[i].trim();
         if (close[0] === marker[0] && close.length >= marker.length && /^(`+|~+)$/.test(close)) {
+          closed = true;
           i++;
           break;
         }
         body.push(stripIndent(lines[i], indent));
         i++;
       }
-      blocks.push({ type: 'code', lang: fence[2] ?? '', text: body.join('\n') });
+      const lang = fence[2] ?? '';
+      // A diagram or chart is drawn once its fence closes; while it streams in, it is code.
+      if (closed && isVisualLang(lang)) blocks.push({ type: 'visual', lang, source: body.join('\n') });
+      else blocks.push({ type: 'code', lang, text: body.join('\n') });
       continue;
     }
 

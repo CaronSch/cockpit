@@ -4,6 +4,7 @@
  * JSONL protocol with frame shapes recorded from omp 18.12.3, and answers prompts by keyword.
  *
  * - default: streams "You said: <prompt>" (assistant message_start arrives pre-filled, as omp's does)
+ * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
  * - contains "ask": an `ask` dialog; the reply names the chosen option
  * - contains "mystery": emits a frame type no client knows
@@ -262,7 +263,9 @@ async function runPrompt(id, text) {
     toolCall();
     await Bun.sleep(1500);
   }
-  if (/ask/.test(text)) {
+  if (text.startsWith('say:')) {
+    streamAssistant(text.slice('say:'.length).trim());
+  } else if (/ask/.test(text)) {
     const answer = await askDialog();
     const picked = answer.cancelled ? 'nothing (cancelled)' : (answer.answers?.[0]?.selectedOptions?.[0] ?? answer.answers?.[0]?.customInput);
     streamAssistant(`You picked **${picked}**.`);

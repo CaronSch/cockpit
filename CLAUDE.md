@@ -122,9 +122,11 @@ What runs today:
   in the folder typed, Esc closes;
   a relative directory is found from home), chat with it from its
   structured event stream (streamed replies with Markdown, tables, TeX math as
-  MathML, and images on this machine, `![alt](/abs/path.png)`, served by `/api/image`
-  as raster only and sandboxed; remote images are never fetched, so a URL can't carry
-  out what an agent read), thinking,
+  MathML, `mermaid` diagrams and `vega-lite` charts drawn once their fence closes
+  (`src/omp/visuals.js`: kept as SVG by source, live on hover; Vega's loader reads
+  only local files), and images on this machine, `![alt](/abs/path.png)`; images and
+  chart data are served by `/api/file`, raster and data types only, sandboxed;
+  nothing remote is ever fetched, so a URL can't carry out what an agent read), thinking,
   tool calls with output), pick model and thinking level, log in to
   providers, use slash commands, answer approval and `ask` dialogs, steer or stop
   a running turn, and carry on a conversation whatever became of its omp (asleep,
@@ -305,6 +307,9 @@ telemetry views, cmux-parity features beyond the above.
   - `temml` (TeX to MathML, so the browser typesets agents' math itself): its ES
     module is served at `/vendor/temml.mjs` (`VENDOR_FILES` in
     `daemon/ui-files.js`, the import map in `index.html`), loaded with the page.
+  - `mermaid`, `vega` and `vega-lite` (diagrams and charts agents write as fenced
+    blocks, `src/omp/visuals.js`): their UMD builds are served at `/vendor/…` and
+    loaded as classic scripts only when a reply first holds one.
 - omp is not a dependency: the user installs it on its own (https://omp.sh) and
   the daemon runs the `omp` on PATH. The version the fake omp in `tests/` was
   recorded from is in `RISKS.md`; a newer installed omp means re-recording frames.
@@ -439,6 +444,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/todos.js` — How far along the agent is, from the todo list omp agents keep with their `todo` tool: how many of its tasks are done and which one it is on.
 - `src/omp/transcript.js` — Transcript reducer for one omp session: folds the daemon's SessionEvents into display items plus derived session state, with no DOM.
 - `src/omp/visibility.js` — Which transcript items an agent pane shows when it is set to only prompts and responses: what the user said and ran, and what the agent finally answered, without the work in between.
+- `src/omp/visuals.js` — Diagrams and charts in agent replies: a closed ```mermaid fence is drawn by Mermaid, a closed ```vega-lite fence (a Vega-Lite spec, JSON) by Vega.
 - `src/render/drop-indicator.js` — Landing preview for drag & drop, plus the sash snap guide.
 - `src/render/grid-renderer.js` — Imperative, diffed DOM writer for the grid.
 - `src/scratchpad/blocks.js` — A scratchpad's text as blocks to edit: runs of text, and the images and files it references, kept free of the DOM so the round trip can be tested.

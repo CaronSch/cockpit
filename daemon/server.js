@@ -48,7 +48,15 @@ const ASSET_HEADERS = {
   'content-security-policy': "sandbox; default-src 'none'; img-src 'self'; frame-ancestors 'none'",
 };
 
-/** An image file an agent showed: never run as a page, and read fresh (it may be redrawn). */
+/** What a reply may show from this machine: images, and the data files a chart reads. */
+const LOCAL_FILE_TYPES = /** @type {Record<string, string>} */ ({
+  ...IMAGE_TYPES,
+  '.json': 'application/json',
+  '.csv': 'text/csv; charset=utf-8',
+  '.tsv': 'text/tab-separated-values; charset=utf-8',
+});
+
+/** A file an agent's reply showed: never run as a page, and read fresh (it may be redrawn). */
 const IMAGE_HEADERS = { ...BASE_HEADERS, 'content-security-policy': ASSET_HEADERS['content-security-policy'] };
 
 class HttpError extends Error {
@@ -402,12 +410,12 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
         },
       }),
       '/api/files': api({ GET: (req) => listing(req, homedir()) }),
-      '/api/image': api({
+      '/api/file': api({
         GET: async (req) => {
           const path = resolvePath(new URL(req.url).searchParams.get('path') ?? '', homedir());
-          const type = IMAGE_TYPES[extname(path).toLowerCase()];
+          const type = LOCAL_FILE_TYPES[extname(path).toLowerCase()];
           const file = Bun.file(path);
-          if (!type || !(await file.exists())) throw new HttpError(404, 'no such image');
+          if (!type || !(await file.exists())) throw new HttpError(404, 'no such image or data file');
           return new Response(file, { headers: { ...IMAGE_HEADERS, 'content-type': type } });
         },
       }),

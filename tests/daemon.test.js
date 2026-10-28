@@ -1163,19 +1163,22 @@ describe('file listings for @ mentions', () => {
     assert.equal((await call({ path: `${files}?dir=${encodeURIComponent('~/')}` })).json.dir, homedir());
   });
 
-  test('an image file is served for a reply to show, never run as a page; anything else is a 404', async () => {
+  test('an image or data file is served for a reply to show, never run as a page; anything else is a 404', async () => {
     const png = join(cwd, 'images', 'chart.png');
     await Bun.write(png, new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
-    const image = (/** @type {string} */ path) => call({ path: `/api/image?path=${encodeURIComponent(path)}` });
+    const image = (/** @type {string} */ path) => call({ path: `/api/file?path=${encodeURIComponent(path)}` });
     const shown = await image(png);
     assert.equal(shown.status, 200);
     assert.equal(shown.headers.get('content-type'), 'image/png');
     assert.match(shown.headers.get('content-security-policy') ?? '', /sandbox/);
     assert.equal(shown.headers.get('cache-control'), 'no-store', 'redrawn under the same name, it shows anew');
+    const series = join(cwd, 'images', 'series.json');
+    await Bun.write(series, '[{"p90": 10}]');
+    assert.equal((await image(series)).headers.get('content-type'), 'application/json', 'a chart reads its data the same way');
     assert.equal((await image(join(project, 'notes with space.md'))).status, 404);
     assert.equal((await image(join(project, 'missing.png'))).status, 404);
-    assert.equal((await call({ path: `/api/image?path=${encodeURIComponent(png)}`, auth: false })).status, 401);
-    assert.equal((await call({ path: `/api/image?path=${encodeURIComponent(png)}`, headers: { 'sec-fetch-site': 'cross-site' } })).status, 403);
+    assert.equal((await call({ path: `/api/file?path=${encodeURIComponent(png)}`, auth: false })).status, 401);
+    assert.equal((await call({ path: `/api/file?path=${encodeURIComponent(png)}`, headers: { 'sec-fetch-site': 'cross-site' } })).status, 403);
   });
 
   test('a relative folder is listed from home, as a new session’s directory is found', async () => {
