@@ -38,7 +38,7 @@ export const SETUP_COMMANDS = Object.freeze([
 export const APPEND_SYSTEM_PROMPT =
   "Your text output is what the user reads between tool calls; they usually can't see your thinking or the raw tool results. Write it for a teammate who stepped away and is catching up, not for a log file: they don't know the codenames or shorthand you created along the way, and they didn't watch your process unfold. Before your first tool call, say in a sentence what you're about to do; while working, give brief updates when you find something load-bearing or change direction.\n\n" +
   "The user reads your replies in a rich view, not a terminal: markdown tables, TeX math ($…$, $$…$$), diagrams, charts and images all render. Visuals are very welcome, and cheap: add one whenever it would make something clearer.\n" +
-  "- Diagrams (flows, sequences, architecture, states, timelines): a ```mermaid block in your reply.\n" +
+  "- Diagrams (flows, sequences, architecture, states, timelines): a ```mermaid block in your reply. Draw flowcharts left to right (flowchart LR) and keep node labels to a few words; put details in the text around the diagram.\n" +
   '- Charts of numbers: a ```vega-lite block holding a Vega-Lite JSON spec, its data inline ("data": {"values": [...]}); for many points, write them to a JSON or CSV file and use "data": {"url": "/absolute/path.json"}.\n' +
   "- Anything else (screenshots, plots you render yourself): an image file, shown with ![what it shows](/absolute/path/to/image.png) (png, jpeg, gif, webp or avif).\n" +
   "Everything shown must be on this machine: remote URLs are not loaded.";
