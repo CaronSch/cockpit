@@ -44,6 +44,15 @@ const drawings = new Map();
 const INK = { text: '#e6e6e6', dim: '#a5a8b0', faint: '#7d8089', line: '#3d4048' };
 /** The app's typeface (read when first drawing, not on import). */
 const font = () => getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'monospace';
+/** The transcript's reading size, in pixels (`--text-sm`, which follows the text size the top bar sets). */
+function textSize() {
+  const probe = el('span');
+  probe.style.fontSize = 'var(--text-sm)';
+  document.body.append(probe);
+  const size = getComputedStyle(probe).fontSize;
+  probe.remove();
+  return size;
+}
 
 /** A file on this machine, as the daemon serves it; anything else is refused. @param {string} uri */
 function localFile(uri) {
@@ -57,7 +66,19 @@ async function drawMermaid(source) {
   await load(SCRIPTS.mermaid);
   const mermaid = /** @type {any} */ (window).mermaid;
   if (!mermaidReady) {
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark', fontFamily: font(), darkMode: true, suppressErrorRendering: true });
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      suppressErrorRendering: true,
+      theme: 'dark',
+      darkMode: true,
+      // The transcript's own type, and labels that wrap at a line's width rather than a word's,
+      // packed close: a diagram reads as part of the reply, not a poster beside it. Its size is
+      // its own (see `fit`).
+      fontFamily: font(),
+      themeVariables: { fontSize: textSize() },
+      flowchart: { useMaxWidth: false, wrappingWidth: 200, nodeSpacing: 20, rankSpacing: 28, padding: 6 },
+    });
     mermaidReady = true;
   }
   const { svg } = await mermaid.render(`md-mermaid-${drawings.size}`, source);
@@ -143,6 +164,7 @@ export function renderVisual(lang, source) {
   drawing(lang, source).then(
     (svg) => {
       box.innerHTML = svg; // Mermaid's sanitised output, or Vega's own: never the agent's markup
+      fit(box);
       if (lang === 'vega-lite') box.addEventListener('pointerenter', () => void goLive(box, source), { once: true });
     },
     (/** @type {unknown} */ err) => {
@@ -152,6 +174,28 @@ export function renderVisual(lang, source) {
     },
   );
   return box;
+}
+
+/** How far a drawing may shrink to fit the reply: past that its text gets too small to read. */
+const MIN_SCALE = 0.7;
+
+/** How tall a drawing may be, as a share of the window, before it shrinks. */
+const MAX_HEIGHT = 0.6;
+
+/**
+ * A drawing taller than MAX_HEIGHT of the window, or wider than the reply (CSS), shrinks to
+ * fit, down to MIN_SCALE of its own size; past that it keeps that size, scrolling sideways
+ * when too wide.
+ * @param {HTMLElement} box
+ */
+function fit(box) {
+  const svg = box.querySelector('svg');
+  const width = Number(svg?.getAttribute('width'));
+  const height = Number(svg?.getAttribute('height'));
+  if (!svg || !(width > 0) || !(height > 0)) return;
+  const scale = Math.max(MIN_SCALE, Math.min(1, (innerHeight * MAX_HEIGHT) / height));
+  svg.style.width = `${Math.round(width * scale)}px`;
+  svg.style.minWidth = `${Math.round(width * MIN_SCALE)}px`;
 }
 
 /** Swaps a chart's drawing for a live view of it (tooltips), drawn in the same place. @param {HTMLElement} box @param {string} source */
