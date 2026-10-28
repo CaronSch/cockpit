@@ -10,13 +10,10 @@
  * clears the mark unless it became unread after that time, so a read sent from a window that
  * had not heard of newer news never clears it. Only unread conversations are stored.
  *
- * `<file>`: `{ version: 1, unread: { [id]: since } }`, written whole after every change
- * (write-then-rename, one write at a time). A file that cannot be read as one stops the
- * daemon from starting, naming the file, rather than being replaced.
+ * `<file>` (state-file.js): `{ version: 1, unread: { [id]: since } }`.
  */
-import { mkdir, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
 import { daemonNow } from './clock.js';
+import { loadStateFile } from './state-file.js';
 
 const VERSION = 1;
 
@@ -57,56 +54,23 @@ const isUnreadFile = (data) =>
  * @param {{ file: string, now?: () => number }} options
  */
 export async function loadUnread({ file, now = daemonNow }) {
-  /** @type {Unread} */
-  let unread = {};
-  const stored = Bun.file(file);
-  if (await stored.exists()) {
-    /** @type {any} */
-    let data;
-    try {
-      data = JSON.parse(await stored.text());
-    } catch {}
-    if (!isUnreadFile(data)) throw new Error(`${file} is not an unread file this daemon can read; fix it or move it away`);
-    unread = data.unread;
-  }
-  /** @type {Set<(unread: Unread) => void>} */
-  const listeners = new Set();
-  /** @type {Promise<unknown>} */
-  let queue = Promise.resolve();
-  let tmpSeq = 0;
-
-  async function store() {
-    await mkdir(dirname(file), { recursive: true, mode: 0o700 });
-    // Write-then-rename: a crash mid-write leaves the old marks, never half of the new ones.
-    const tmp = `${file}.${process.pid}.${++tmpSeq}.tmp`;
-    await writeFile(tmp, `${JSON.stringify({ version: VERSION, unread }, null, 2)}\n`, { mode: 0o600 });
-    await rename(tmp, file);
-  }
-
-  /** @param {Unread} next */
-  function set(next) {
-    if (next === unread) return queue;
-    unread = next;
-    for (const fn of listeners) fn(unread);
-    // Each write stores the marks as they are when it runs, so the last one leaves the newest.
-    queue = queue.then(store).catch((err) => console.error(`[daemon] could not save ${file}:`, err));
-    return queue;
-  }
-
+  const marks = await loadStateFile({
+    file,
+    what: 'an unread file',
+    initial: /** @type {Unread} */ ({}),
+    read: (data) => (isUnreadFile(data) ? data.unread : null),
+    write: (unread) => ({ version: VERSION, unread }),
+  });
   return {
-    /** @returns {Unread} */
-    all: () => unread,
+    all: marks.get,
     /** The agent of conversation `id` waited on its user at `at` (daemon time). @param {string} id @param {number} at */
-    awaited: (id, at) => set(markUnread(unread, id, at)),
+    awaited: (id, at) => marks.set(markUnread(marks.get(), id, at)),
     /** The user marked conversation `id` unread, now. @param {string} id */
-    unread: (id) => set(markUnread(unread, id, now())),
+    unread: (id) => marks.set(markUnread(marks.get(), id, now())),
     /** The user read conversation `id` as it was at `at`. @param {string} id @param {number} at */
-    read: (id, at) => set(markRead(unread, id, at)),
-    /** Hears every change, with all the marks. @param {(unread: Unread) => void} fn */
-    subscribe(fn) {
-      listeners.add(fn);
-      return () => listeners.delete(fn);
-    },
+    read: (id, at) => marks.set(markRead(marks.get(), id, at)),
+    /** Hears every change, with all the marks. */
+    subscribe: marks.subscribe,
   };
 }
 

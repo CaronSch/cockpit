@@ -57,7 +57,7 @@ const LOCAL_FILE_TYPES = /** @type {Record<string, string>} */ ({
 });
 
 /** A file an agent's reply showed: never run as a page, and read fresh (it may be redrawn). */
-const IMAGE_HEADERS = { ...BASE_HEADERS, 'content-security-policy': ASSET_HEADERS['content-security-policy'] };
+const FILE_HEADERS = { ...BASE_HEADERS, 'content-security-policy': ASSET_HEADERS['content-security-policy'] };
 
 class HttpError extends Error {
   /** @param {number} status @param {string} message */
@@ -416,7 +416,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           const type = LOCAL_FILE_TYPES[extname(path).toLowerCase()];
           const file = Bun.file(path);
           if (!type || !(await file.exists())) throw new HttpError(404, 'no such image or data file');
-          return new Response(file, { headers: { ...IMAGE_HEADERS, 'content-type': type } });
+          return new Response(file, { headers: { ...FILE_HEADERS, 'content-type': type } });
         },
       }),
       '/api/sessions/:id/ui': api({
