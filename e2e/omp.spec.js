@@ -1236,12 +1236,17 @@ test('a tool call is one card whose output appears when expanded', async ({ page
   await expect(card.locator('pre').last()).toHaveText('hi');
 });
 
-test('starting an agent puts the cursor in its message box', async ({ page }) => {
+test('starting an agent puts the cursor in its message box, and starts it once', async ({ page }) => {
   await openWorkbench(page);
+  let created = 0;
+  page.on('request', (r) => void (r.method() === 'POST' && r.url().endsWith('/api/sessions') && created++));
   const pane = await addOmpPane(page);
   await pane.locator('input').fill(PROJECT);
   await pane.locator('input').press('Enter');
   await expect(pane.locator('textarea')).toBeFocused();
+  await send(pane, 'hello');
+  await expect(pane.locator('.omp-assistant', { hasText: 'You said: hello' })).toBeVisible();
+  expect(created).toBe(1);
 });
 
 test('the top bar’s Config opens on hover or a click and shows only prompts and final replies in every agent window, across a reload', async ({ page }) => {

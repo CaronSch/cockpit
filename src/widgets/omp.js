@@ -554,15 +554,16 @@ function createPane(body, ctx, daemon) {
     }
 
     /**
-     * The session holding the conversation, once it is ready: this one, the one another window
-     * woke, or a new one resuming the journal (or, for a conversation omp never saved, a new
-     * one in its directory). Rejects when omp cannot start.
+     * The session holding the conversation, once it is ready: this one (still starting, perhaps),
+     * the one another window woke, or a new one resuming the journal (or, for a conversation omp
+     * never saved, a new one in its directory). Rejects when omp cannot start.
      * @returns {Promise<string>}
      */
     function wake() {
       if (ready() && session) return Promise.resolve(session);
       waking ??= (async () => {
-        const running = holding(file);
+        const own = meta();
+        const running = own && isRunning(own) ? own.id : holding(file);
         const id = running ?? (await daemon.createSession(file && saved() ? { cwd: cwd() || '~', resume: file } : { cwd: cwd() || '~' })).id;
         if (id !== session) follow(id);
         await untilReady(id);
