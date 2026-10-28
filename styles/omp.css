@@ -659,6 +659,24 @@
   width: max-content;
 }
 
+/* A diagram or chart drawn from a reply's fence: its own size, scaled down to fit. */
+.md-visual {
+  margin: var(--space-2) 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.md-visual svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.md-visual-error {
+  color: var(--color-text-dim);
+  font-style: italic;
+}
+
 /* An image the agent showed: as wide as the reply allows, never taller than most of the pane. */
 .md-image {
   display: block;

@@ -43,8 +43,9 @@
  *   POST   /api/sessions/:id/ui        omp `extension_ui_response` → 204
  *   GET    /api/files?dir=path         → DirListing: the folder `dir` names (relative to home,
  *                                      `~/…` or absolute, as `cwd` above), or 404
- *   GET    /api/image?path=path        → an image file (png, jpeg, gif, webp, avif by extension; path
- *                                      as `dir` above) an agent's reply shows, or 404
+ *   GET    /api/file?path=path         → a file an agent's reply shows: an image (png, jpeg, gif, webp,
+ *                                      avif) or a chart's data (json, csv, tsv), by extension; path
+ *                                      as `dir` above; else 404
  *   GET    /api/scratchpads            → { pads: ScratchpadSummary[] } (most recently changed first)
  *   GET    /api/scratchpads/:id        → Scratchpad (empty text for a pad never written)
  *   PUT    /api/scratchpads/:id        { text, base } → { rev }, or 409 { error, current: Scratchpad }

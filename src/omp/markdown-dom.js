@@ -9,6 +9,7 @@ import temml from 'temml';
 import { el } from '../ui/dom.js';
 import { parseMarkdown } from './markdown.js';
 import { tableCopy } from './table-copy.js';
+import { renderVisual } from './visuals.js';
 /** @import { Block, Inline } from './markdown.js' */
 
 /** @param {string} source @returns {DocumentFragment} */
@@ -58,6 +59,8 @@ function renderBlock(block) {
       tableBlock.append(...tableCopy(block, table), wrap);
       return tableBlock;
     }
+    case 'visual':
+      return renderVisual(block.lang, block.source);
     case 'rule':
       return el('hr');
     case 'quote': {
@@ -112,12 +115,12 @@ function renderInline(node) {
 }
 
 /**
- * An image file on this machine, served by the daemon (`/api/image`): a click opens it full
+ * An image file on this machine, served by the daemon (`/api/file`): a click opens it full
  * size. One that cannot be shown (gone, unreadable) says so, with its path.
  * @param {string} path @param {string} alt @returns {HTMLElement}
  */
 function renderImage(path, alt) {
-  const src = `/api/image?path=${encodeURIComponent(path)}`;
+  const src = `/api/file?path=${encodeURIComponent(path)}`;
   const a = el('a', 'md-image');
   a.href = src;
   a.target = '_blank';

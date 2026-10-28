@@ -158,6 +158,40 @@ test('an image file a reply names is shown in it, a click away from full size; o
   problems = problems.filter((p) => !p.includes('404')); // the browser logs the missing image's 404 itself
 });
 
+test('a reply draws its mermaid diagrams and vega-lite charts, reading data only from files on this machine', async ({ page }) => {
+  const data = join(mkdtempSync(join(tmpdir(), 'ac-e2e-chart-')), 'series.json');
+  writeFileSync(data, JSON.stringify([{ build: 'old', p90: 21 }, { build: 'mid', p90: 15 }, { build: 'new', p90: 10 }]));
+  /** @param {object} spec */
+  const chart = (spec) => ['```vega-lite', JSON.stringify(spec), '```'].join('\n');
+  const bars = { mark: 'bar', encoding: { x: { field: 'build', type: 'nominal' }, y: { field: 'p90', type: 'quantitative' } } };
+  /** @type {string[]} */
+  const offsite = [];
+  page.on('request', (r) => void (new URL(r.url()).hostname !== '127.0.0.1' && !r.url().startsWith('data:') && offsite.push(r.url())));
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, ['say: Before and after:', '```mermaid', 'flowchart LR', '  A[Searcher] --> B[Nova]', '```', chart({ ...bars, data: { values: [{ build: 'a', p90: 1 }, { build: 'b', p90: 2 }] } }), chart({ ...bars, data: { url: data } })].join('\n'));
+  const reply = pane.locator('.omp-assistant').last();
+  await expect(reply.locator('.md-visual.is-mermaid svg')).toContainText('Nova');
+  const [inline, fromFile] = [reply.locator('.md-visual.is-vega-lite').nth(0), reply.locator('.md-visual.is-vega-lite').nth(1)];
+  await expect(inline.locator('.mark-rect path')).toHaveCount(2);
+  await expect(fromFile.locator('.mark-rect path')).toHaveCount(3);
+  await expect(reply.locator('pre')).toHaveCount(0); // drawn, not shown as code
+
+  // The pointer resting on a chart turns it live, in place.
+  await inline.hover();
+  await expect(inline.locator('.vega-embed, svg.marks, canvas, svg').first()).toBeVisible();
+  await expect(inline.locator('.mark-rect path')).toHaveCount(2);
+
+  // A spec that would fetch from the web is not drawn: it shows as code, with why.
+  await send(pane, ['say: Remote:', chart({ ...bars, data: { url: 'https://example.com/leak?secret=1' } }), '```mermaid', 'flowchart LR', '  A[ -->', '```'].join('\n'));
+  const failed = pane.locator('.omp-assistant').last();
+  await expect(failed.locator('.md-visual-error').first()).toContainText('only files on this machine');
+  await expect(failed.locator('.md-visual-error')).toHaveCount(2);
+  await expect(failed.locator('pre[data-lang="mermaid"]')).toContainText('flowchart LR');
+  expect(offsite.filter((url) => !url.includes('fonts.')), 'nothing left this machine').toEqual([]);
+  problems = problems.filter((p) => !/mermaid|Parse error|Syntax error/i.test(p)); // Mermaid logs what it could not parse
+});
+
 test('the conversation reads like a terminal: no "you" label, one font for the whole app', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

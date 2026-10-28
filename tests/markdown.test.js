@@ -152,6 +152,18 @@ describe('link safety', () => {
   });
 });
 
+describe('visuals', () => {
+  test('a closed mermaid or vega-lite fence is a visual; one still streaming, or any other language, is code', () => {
+    assert.deepEqual(parseMarkdown('```mermaid\nflowchart LR\n  A --> B\n```'), [{ type: 'visual', lang: 'mermaid', source: 'flowchart LR\n  A --> B' }]);
+    assert.deepEqual(parseMarkdown('```vega-lite\n{"mark": "bar"}\n```\nafter'), [
+      { type: 'visual', lang: 'vega-lite', source: '{"mark": "bar"}' },
+      { type: 'paragraph', children: [{ type: 'text', text: 'after' }] },
+    ]);
+    assert.deepEqual(parseMarkdown('```mermaid\nflowchart LR'), [{ type: 'code', lang: 'mermaid', text: 'flowchart LR' }]);
+    assert.deepEqual(parseMarkdown('```vega\n{}\n```'), [{ type: 'code', lang: 'vega', text: '{}' }]);
+  });
+});
+
 describe('math', () => {
   const math = (/** @type {string} */ tex, display = false) => ({ type: 'math', tex, display });
 

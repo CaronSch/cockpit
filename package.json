@@ -22,6 +22,9 @@
     "typescript": "7.0.2"
   },
   "dependencies": {
-    "temml": "0.14.0"
+    "mermaid": "12.2.0",
+    "temml": "0.14.0",
+    "vega": "6.4.0",
+    "vega-lite": "6.5.0"
   }
 }
