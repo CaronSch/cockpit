@@ -6,7 +6,7 @@
  * all along. When the daemon restarts, its sessions are gone: buffers are cleared and
  * `onReset` listeners fire before any event from the new daemon is delivered.
  *
- * It keeps which conversations are unread (daemon/unread.js), and the daemon's settings
+ * It keeps which conversations are unread (daemon/unread.js) and pinned (daemon/pins.js), and the daemon's settings
  * (daemon/settings.js), as the daemon last said: every window reads them here, so all of
  * them, and every page, agree.
  *
@@ -21,6 +21,7 @@
 /** @import { Conversation, DaemonConfig, DirListing, HelloEvent, PastSession, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
+/** @import { Pinned } from '../../daemon/pins.js' */
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
 /** @typedef {{ ok: true, rev: number | null } | { ok: false, current: Screen | null }} ScreenSave */
@@ -53,6 +54,9 @@ export class DaemonError extends Error {
  *   onUnread(fn: () => void): () => void,
  *   markRead(ompId: string, at: number): Promise<void>,
  *   markUnread(ompId: string): Promise<void>,
+ *   isPinned(ompId: string | null): boolean,
+ *   onPins(fn: () => void): () => void,
+ *   pin(ompId: string, pinned: boolean): Promise<void>,
  *   settings(): DaemonSettings | null,
  *   onSettings(fn: () => void): () => void,
  *   changeSettings(patch: Partial<DaemonSettings>): Promise<void>,
@@ -126,6 +130,15 @@ export function createDaemonClient(env = {}) {
     unread = marks;
     for (const fn of unreadListeners) fn();
   };
+  /** @type {Set<string>} */
+  let pinned = new Set();
+  /** @type {Set<() => void>} */
+  const pinsListeners = new Set();
+  /** @param {Pinned} ids */
+  const setPins = (ids) => {
+    pinned = new Set(ids);
+    for (const fn of pinsListeners) fn();
+  };
   /** Null until the daemon first says. @type {DaemonSettings | null} */
   let settings = null;
   /** @type {Set<() => void>} */
@@ -177,6 +190,7 @@ export function createDaemonClient(env = {}) {
     setStatus('open');
     sessionsChanged();
     setUnread(hello.unread);
+    setPins(hello.pinned);
     setSettings(hello.settings);
   }
 
@@ -192,6 +206,7 @@ export function createDaemonClient(env = {}) {
       return;
     }
     if (event.kind === 'unread') return setUnread(event.unread);
+    if (event.kind === 'pins') return setPins(event.pinned);
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'session') {
       metas.set(event.session, event.meta);
@@ -353,6 +368,15 @@ export function createDaemonClient(env = {}) {
     },
     async markUnread(ompId) {
       await request(unreadPath(ompId), { method: 'PUT' });
+    },
+    /** Whether conversation `ompId` is pinned to the top of the Sessions list. */
+    isPinned: (ompId) => ompId !== null && pinned.has(ompId),
+    onPins(fn) {
+      pinsListeners.add(fn);
+      return () => pinsListeners.delete(fn);
+    },
+    async pin(ompId, on) {
+      await request(`/api/pins/${encodeURIComponent(ompId)}`, { method: on ? 'PUT' : 'DELETE' });
     },
     settings: () => settings,
     onSettings(fn) {

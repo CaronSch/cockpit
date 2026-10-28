@@ -84,7 +84,8 @@ Planned capabilities:
   `sessionFile`, and the daemon archives the old one (`onRewound`). Which conversations
   are unread is the daemon's too (`daemon/unread.js`, keyed by omp's conversation
   id, kept in `~/.cockpit/unread.json`), so every window and page agrees on what
-  needs attention, and a mark outlives the session. **User data lives with the daemon**,
+  needs attention, and a mark outlives the session; so are pins (`daemon/pins.js`,
+  `~/.cockpit/pins.json`). **User data lives with the daemon**,
   not in the layout: anything that must outlive a window, a browser profile or
   a port change (the scratchpad's notes) is a file in the state directory
   (`~/.cockpit`). Closing a window must never delete it.
@@ -243,7 +244,9 @@ What runs today:
   unread ones it lists; showing a session from here reads it. Right-click on a row, its
   **⋯** button, or Shift+F10 / the ContextMenu key on a focused row opens its menu
   (`src/ui/context-menu.js`, a popover the arrow keys move through): **Mark as
-  unread** or **Mark as read**, with Show and Archive / Restore.
+  unread** or **Mark as read**, **Pin to top** or **Unpin**, with Show and Archive /
+  Restore. Pinned conversations come first, in the window's order, with a ★ (a row's ☆,
+  shown on hover, pins it too).
 - Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
   deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
@@ -474,6 +477,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/idle-compaction.js` — Idle compaction, as Claude Code does it: a long conversation left idle is compacted shortly before its prompt cache expires, while the summary request can still read the conversation from the cache, so coming back later sends a summary instead of the whole conversation at full price.
 - `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback and runs the omp processes it shows.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
+- `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
 - `daemon/scratchpad.js` — Scratchpads: plain Markdown files the daemon keeps, one per pad, with pasted screenshots and files stored beside them.
 - `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), all behind the loopback guard.
 - `daemon/settings.js` — The daemon's settings: switches for what the daemon does, so every page sees and changes the same ones (a page's own look is kept per browser: src/ui/settings.js).

@@ -21,6 +21,8 @@
  *   POST   /api/unread/:ompId/read     { at } → 204: the user read it as it was at `at` (daemon
  *                                      time: the `since` they were shown); a mark made after
  *                                      `at` stays. Both are 404 for an id that is not one
+ *   PUT    /api/pins/:ompId            → 204: the conversation is pinned to the top of the Sessions list
+ *   DELETE /api/pins/:ompId            → 204: it is not (see `pins.js`); both 404 for an id that is not one
  *   PUT    /api/settings               Partial<DaemonSettings> → DaemonSettings: the daemon's settings
  *                                      changed (see `settings.js`); 400 for anything but known keys
  *                                      with values of their type
@@ -66,6 +68,7 @@
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
 /** @import { Unread } from './unread.js' */
+/** @import { Pinned } from './pins.js' */
 /** @import { DaemonSettings } from './settings.js' */
 
 /** @typedef {'starting' | 'ready' | 'exited' | 'failed'} SessionStatus */
@@ -141,8 +144,8 @@
  * `ui` is the version of the UI files being served (see `ui-files.js`): a page that loaded
  * other files is running older code than the daemon now serves. `unread` holds the
  * conversations with news their user has not read: when each became unread, by omp id.
- * `settings` are the daemon's (see `settings.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, settings: DaemonSettings, ui: string }} HelloEvent
+ * `pinned` holds the pinned conversations' omp ids. `settings` are the daemon's (see `settings.js`).
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, settings: DaemonSettings, ui: string }} HelloEvent
  */
 
 /** A scratchpad's text; `rev` names this exact text (a hash of it). @typedef {{ text: string, rev: string }} Scratchpad */
@@ -153,9 +156,11 @@
 
 /** Sent to every page after a conversation was marked read or unread, with all the marks. @typedef {{ kind: 'unread', unread: Unread }} UnreadEvent */
 
+/** Sent to every page after a conversation was pinned or unpinned, with all the pins. @typedef {{ kind: 'pins', pinned: Pinned }} PinsEvent */
+
 /** Sent to every page after the daemon's settings changed, with all of them. @typedef {{ kind: 'settings', settings: DaemonSettings }} SettingsEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | SettingsEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | SettingsEvent | SessionEvent} StreamEvent */
 
 /** @typedef {{ defaultCwd: string, home: string, scratchpadDir: string }} DaemonConfig */
 

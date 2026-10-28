@@ -13,6 +13,7 @@ import { listDirectory } from '../daemon/files.js';
 import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
 import { loadSettings } from '../daemon/settings.js';
+import { loadPins } from '../daemon/pins.js';
 import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
@@ -28,6 +29,8 @@ let hub;
 let unread;
 /** @type {import('../daemon/settings.js').SettingsStore} */
 let settings;
+/** @type {import('../daemon/pins.js').PinsStore} */
+let pins;
 let port = 0;
 let cwd = '';
 
@@ -140,16 +143,18 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'settings' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'settings' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
   unread = await loadUnread({ file: join(cwd, 'state', 'unread.json') });
   settings = await loadSettings({ file: join(cwd, 'state', 'settings.json') });
+  pins = await loadPins({ file: join(cwd, 'state', 'pins.json') });
   hub = createHub({ ompPath: FAKE_OMP, unread });
   server = createDaemonServer({
     hub,
     unread,
+    pins,
     settings,
     history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
@@ -642,6 +647,7 @@ describe('unread conversations', () => {
     const next = createDaemonServer({
       hub: nextHub,
       unread: marks,
+      pins,
       settings,
       history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
       scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
@@ -671,6 +677,39 @@ describe('unread conversations', () => {
     assert.equal('conv-guard' in unread.all(), false, 'nothing was marked');
     assert.equal((await call({ method: 'PUT', path: '/api/unread/a%20b' })).status, 404);
     assert.equal((await call({ method: 'POST', path: '/api/unread/conv-guard/read', body: { at: 'later' } })).status, 400);
+  });
+});
+
+describe('pins', () => {
+  test('every page hears them first thing and after each change, which the next daemon starts with', async () => {
+    const stream = await openStream();
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-a' })).status, 204);
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-b' })).status, 204);
+    assert.equal((await call({ method: 'DELETE', path: '/api/pins/conv-a' })).status, 204);
+    const { events } = await stream.until((events) => events.filter((e) => e.kind === 'pins').length === 3);
+    assert.deepEqual(events[0].kind === 'hello' && events[0].pinned, []);
+    assert.deepEqual(events.filter((e) => e.kind === 'pins'), [
+      { kind: 'pins', pinned: ['conv-a'] },
+      { kind: 'pins', pinned: ['conv-a', 'conv-b'] },
+      { kind: 'pins', pinned: ['conv-b'] },
+    ]);
+    assert.deepEqual((await loadPins({ file: join(cwd, 'state', 'pins.json') })).all(), ['conv-b']);
+    assert.equal((await call({ method: 'DELETE', path: '/api/pins/conv-b' })).status, 204);
+  });
+
+  test('like every API route, pins need the token and the page’s Origin; an id that is not one is a 404', async () => {
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-guard', auth: false })).status, 401);
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-guard', origin: false })).status, 403);
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/a%20b' })).status, 404);
+    assert.deepEqual(pins.all(), []);
+  });
+
+  test('a pins file the daemon cannot read stops it rather than being replaced', async () => {
+    const file = join(cwd, 'bad-pins.json');
+    for (const text of ['not json', '{"version":1,"pinned":["../x"]}', '{"version":2,"pinned":[]}']) {
+      await writeFile(file, text);
+      await assert.rejects(loadPins({ file }), /not a pins file/);
+    }
   });
 });
 
