@@ -4,6 +4,7 @@
  * JSONL protocol with frame shapes recorded from omp 18.12.3, and answers prompts by keyword.
  *
  * - default: streams "You said: <prompt>" (assistant message_start arrives pre-filled, as omp's does)
+ * - run in a folder whose name has "slow-start": takes 1.5 s to come up
  * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
  * - contains "ask": an `ask` dialog; the reply names the chosen option
@@ -363,6 +364,8 @@ function finishSideQuestion(patch) {
   sideQuestion = null;
 }
 
+// omp in a folder named for it is slow to come up, as a real one with a long history can be.
+if (/slow-start/.test(process.cwd())) await Bun.sleep(1500);
 out({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 out({ type: 'extension_ui_request', id: 'ui-start-w', method: 'setWidget', widgetKey: 'autoresearch' });
 out({ type: 'advisor_cost_changed' });

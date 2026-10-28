@@ -1434,6 +1434,18 @@ test('Fork continues a copy of the conversation in a new pane, as a session of i
   expect(mine.fork).toBeNull();
 });
 
+test('a fork reached for while its omp is still starting goes on once it is up', async ({ page }) => {
+  await openWorkbench(page);
+  const source = await startedPane(page, mkdtempSync(join(tmpdir(), 'ac-e2e-slow-start-')));
+  await send(source, 'shared start');
+  await expect(source.locator('.omp-assistant').last()).toContainText('You said: shared start');
+  const forked = await paneAddedBy(page, () => source.getByRole('button', { name: 'Fork', exact: true }).click());
+  await forked.locator('textarea').click();
+  await expect(forked.getByText('idle')).toBeVisible({ timeout: 5000 });
+  await send(forked, 'fork only');
+  await expect(forked.locator('.omp-assistant').last()).toContainText('You said: fork only');
+});
+
 test('windows only render: the daemon asks omp for the state and a fork’s history, never the page', async ({ page }) => {
   /** @type {string[]} */
   const asked = [];
