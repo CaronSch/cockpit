@@ -12,20 +12,26 @@ import { tableCopy } from './table-copy.js';
 import { renderVisual } from './visuals.js';
 /** @import { Block, Inline } from './markdown.js' */
 
-/** @param {string} source @returns {DocumentFragment} */
-export function renderMarkdown(source) {
+/**
+ * How a reply is rendered: `reply` names the reply (its item and block), so the images it
+ * shows are its own (see renderImage).
+ * @typedef {{ reply?: string }} RenderOptions
+ */
+
+/** @param {string} source @param {RenderOptions} [options] @returns {DocumentFragment} */
+export function renderMarkdown(source, options = {}) {
   const fragment = document.createDocumentFragment();
-  for (const block of parseMarkdown(source)) fragment.append(renderBlock(block));
+  for (const block of parseMarkdown(source)) fragment.append(renderBlock(block, options));
   return fragment;
 }
 
-/** @param {Block} block @returns {Node} */
-function renderBlock(block) {
+/** @param {Block} block @param {RenderOptions} options @returns {Node} */
+function renderBlock(block, options) {
   switch (block.type) {
     case 'paragraph':
-      return withInline(el('p'), block.children);
+      return withInline(el('p'), block.children, options);
     case 'heading':
-      return withInline(el(/** @type {'h3' | 'h4' | 'h5' | 'h6'} */ (`h${Math.min(6, block.level + 2)}`), 'md-heading'), block.children);
+      return withInline(el(/** @type {'h3' | 'h4' | 'h5' | 'h6'} */ (`h${Math.min(6, block.level + 2)}`), 'md-heading'), block.children, options);
     case 'code': {
       const pre = el('pre', 'md-code');
       const code = el('code', undefined, block.text);
@@ -39,7 +45,7 @@ function renderBlock(block) {
       const row = (tag, cells) => {
         const tr = el('tr');
         cells.forEach((cell, c) => {
-          const td = withInline(el(tag), cell);
+          const td = withInline(el(tag), cell, options);
           const align = block.align[c];
           if (align) td.style.textAlign = align;
           tr.append(td);
@@ -65,7 +71,7 @@ function renderBlock(block) {
       return el('hr');
     case 'quote': {
       const quote = el('blockquote');
-      for (const child of block.children) quote.append(renderBlock(child));
+      for (const child of block.children) quote.append(renderBlock(child, options));
       return quote;
     }
     case 'list': {
@@ -73,7 +79,7 @@ function renderBlock(block) {
       if (block.ordered && block.start !== 1 && list instanceof HTMLOListElement) list.start = block.start;
       for (const item of block.items) {
         const li = el('li');
-        for (const child of item) li.append(renderBlock(child));
+        for (const child of item) li.append(renderBlock(child, options));
         list.append(li);
       }
       return list;
@@ -81,34 +87,34 @@ function renderBlock(block) {
   }
 }
 
-/** @template {HTMLElement} E @param {E} parent @param {Inline[]} children @returns {E} */
-function withInline(parent, children) {
-  for (const child of children) parent.append(renderInline(child));
+/** @template {HTMLElement} E @param {E} parent @param {Inline[]} children @param {RenderOptions} options @returns {E} */
+function withInline(parent, children, options) {
+  for (const child of children) parent.append(renderInline(child, options));
   return parent;
 }
 
-/** @param {Inline} node @returns {Node} */
-function renderInline(node) {
+/** @param {Inline} node @param {RenderOptions} options @returns {Node} */
+function renderInline(node, options) {
   switch (node.type) {
     case 'text':
       return document.createTextNode(node.text);
     case 'code':
       return el('code', 'md-inline-code', node.text);
     case 'strong':
-      return withInline(el('strong'), node.children);
+      return withInline(el('strong'), node.children, options);
     case 'em':
-      return withInline(el('em'), node.children);
+      return withInline(el('em'), node.children, options);
     case 'break':
       return el('br');
     case 'link': {
-      const a = withInline(el('a'), node.children);
+      const a = withInline(el('a'), node.children, options);
       a.href = node.href;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       return a;
     }
     case 'image':
-      return renderImage(node.path, node.alt);
+      return renderImage(node.path, node.alt, options);
     case 'math':
       return renderMath(node.tex, node.display);
   }
@@ -117,10 +123,15 @@ function renderInline(node) {
 /**
  * An image file on this machine, served by the daemon (`/api/file`): a click opens it full
  * size. One that cannot be shown (gone, unreadable) says so, with its path.
- * @param {string} path @param {string} alt @returns {HTMLElement}
+ *
+ * Its address names the reply too: a page shows the image it already loaded from an address
+ * however the response said not to keep it, so an agent's chart redrawn under the same name
+ * would show its old picture in the new reply. Each reply loads its own once, and keeps it as
+ * the reply redraws.
+ * @param {string} path @param {string} alt @param {RenderOptions} options @returns {HTMLElement}
  */
-function renderImage(path, alt) {
-  const src = `/api/file?path=${encodeURIComponent(path)}`;
+function renderImage(path, alt, options) {
+  const src = `/api/file?path=${encodeURIComponent(path)}${options.reply ? `&in=${encodeURIComponent(options.reply)}` : ''}`;
   const a = el('a', 'md-image');
   a.href = src;
   a.target = '_blank';
