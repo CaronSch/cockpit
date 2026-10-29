@@ -1394,6 +1394,26 @@ test('an ask dialog is answered from the pane and omp continues with the answer'
   await expect(dialog.getByText('Which database?')).toHaveCount(0);
 });
 
+test('an ask dialog answer suggests @ paths as the message box does', async ({ page }) => {
+  mkdirSync(join(PROJECT, 'searcher'), { recursive: true });
+  writeFileSync(join(PROJECT, 'searcher', 'stream.rs'), '');
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'ask me');
+  const dialog = pane.locator('.omp-dialogs');
+  const answer = dialog.getByPlaceholder('Or type your own answer');
+  await answer.pressSequentially('see @sea');
+  const rows = dialog.locator('.omp-suggest').getByRole('option');
+  await expect(rows).toHaveText(['searcher/']);
+  await answer.press('Tab');
+  await expect(rows).toHaveText(['stream.rs']);
+  await answer.press('Enter');
+  await expect(answer).toHaveValue('see @searcher/stream.rs ');
+  await expect(dialog.locator('.omp-suggest')).toBeHidden();
+  await dialog.getByRole('button', { name: 'Submit' }).click();
+  await expect(pane.locator('.omp-assistant').last()).toHaveText('You picked see @searcher/stream.rs.');
+});
+
 test('frames the pane does not know and stdout that is not JSON are shown, not dropped', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

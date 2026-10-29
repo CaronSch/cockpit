@@ -886,10 +886,14 @@ function createPane(body, ctx, daemon) {
       draft,
       syntax: MENTIONS,
       list: suggestions,
-      // A path in the message names a file in the conversation's directory, unless it says otherwise.
-      listDir: (dir) => daemon.listFiles(/^[~/]/.test(dir) || !cwd() ? dir : `${cwd().replace(/\/$/, '')}/${dir}`),
+      listDir: listMentioned,
       replace: (start, end, text) => composer.replace(start, end, text),
     });
+
+    /** A path in a message names a file in the conversation's directory, unless it says otherwise. @param {string} dir */
+    function listMentioned(dir) {
+      return daemon.listFiles(/^[~/]/.test(dir) || !cwd() ? dir : `${cwd().replace(/\/$/, '')}/${dir}`);
+    }
 
     function hideSuggestions() {
       files.close();
@@ -1060,7 +1064,7 @@ function createPane(body, ctx, daemon) {
             addNote(state, 'error', 'dialog', errorMessage(err));
             schedule();
           });
-        });
+        }, listMentioned);
         dialogNodes.set(dialog.id, n);
         dialogs.append(n);
       }
