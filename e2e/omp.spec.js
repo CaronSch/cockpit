@@ -156,6 +156,14 @@ test('an image file a reply names is shown in it, a click away from full size; o
   await expect(reply.locator('a.md-image')).toHaveAttribute('target', '_blank');
   await expect(reply.locator('.md-image-missing')).toHaveText(`gone: image not found (${png}.missing.png)`);
   problems = problems.filter((p) => !p.includes('404')); // the browser logs the missing image's 404 itself
+
+  // Redrawn under the same name (2×1 now), the chart a later reply shows is the new one.
+  writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8DwH4QBEfcD/ePF9e8AAAAASUVORK5CYII=', 'base64'));
+  await send(pane, `again ![p90 chart](${png})`);
+  const redrawn = pane.locator('.omp-assistant').last().getByRole('img', { name: 'p90 chart' });
+  await expect.poll(() => redrawn.evaluate((img) => /** @type {HTMLImageElement} */ (img).naturalWidth)).toBe(2);
+  const earlier = pane.locator('.omp-assistant').first().getByRole('img', { name: 'p90 chart' });
+  expect(await earlier.evaluate((img) => /** @type {HTMLImageElement} */ (img).naturalWidth), 'the earlier reply keeps its own').toBe(1);
 });
 
 test('a reply draws its mermaid diagrams and vega-lite charts, reading data only from files on this machine', async ({ page }) => {
