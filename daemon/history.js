@@ -1,11 +1,13 @@
 /**
  * Past omp sessions, read from omp's session files: one summary per conversation, searchable
- * by title, directory and what the user asked.
+ * (search.js, ranked) by title, directory, what the user asked and what the agent answered.
  *
  * omp keeps one journal per session at `<sessions>/<project>/<timestamp>_<id>.jsonl`; folders
  * beside them hold subagent sessions and artifacts, which are not conversations of their own.
  * A journal starts with a `title` line omp rewrites in place, then a `session` header
- * (`id`, `timestamp`, `cwd`); user prompts are `message` lines with role `user`. Summaries are
+ * (`id`, `timestamp`, `cwd`); user prompts are `message` lines with role `user`, and the agent's
+ * replies those with role `assistant` (their text only: thinking and tool calls are left out,
+ * as tool output is, being most of a journal and little of what a conversation was about). Summaries are
  * cached by path, size and mtime, so a refresh only re-reads journals that changed.
  *
  * Archiving moves a journal and its folder out of omp's sessions directory into the archive
@@ -23,14 +25,14 @@ import { link, lstat, mkdir, readdir, rename, stat, unlink } from 'node:fs/promi
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { conversationOf } from './conversation.js';
+import { indexText, rank } from './search.js';
 /** @import { Conversation, PastSession } from './wire.js' */
 
-const SEARCH_CHARS = 17 * 1024; // per session; enough for every prompt of a long session
 const PREVIEW_CHARS = 280;
 /** omp appends to a journal after every message: changes this close together are one. */
 const COALESCE_MS = 300;
 
-/** @typedef {PastSession & { search: string }} Summary */
+/** @typedef {Omit<PastSession, 'match'> & { index: import('./search.js').TextIndex }} Summary */
 
 /** @param {unknown} content @returns {string} */
 function textOf(content) {
@@ -60,12 +62,14 @@ async function summarise(file, info) {
   let header = null;
   /** @type {string[]} */
   const prompts = [];
+  /** @type {string[]} */
+  const replies = [];
 
   const lines = createInterface({ input: createReadStream(file, { encoding: 'utf8' }), crlfDelay: Infinity });
   for await (const line of lines) {
     // Most lines are tool output; only parse the ones that can matter.
     const maybeHeader = header === null && (line.includes('"type":"session"') || line.includes('"type":"title"'));
-    if (!maybeHeader && !line.includes('"role":"user"')) continue;
+    if (!maybeHeader && !line.includes('"role":"user"') && !line.includes('"role":"assistant"')) continue;
     let entry;
     try {
       entry = JSON.parse(line);
@@ -79,15 +83,15 @@ async function summarise(file, info) {
       const text = textOf(entry.message.content).trim();
       if (!text) continue;
       prompts.push(text);
+    } else if (entry?.type === 'message' && entry.message?.role === 'assistant') {
+      const text = textOf(entry.message.content).trim();
+      if (text) replies.push(text);
     }
   }
   if (!header || typeof header.id !== 'string') return null;
 
   const created = Date.parse(header.timestamp);
-  const search = [title ?? '', typeof header.cwd === 'string' ? header.cwd : '', header.id, ...prompts]
-    .join('\n')
-    .slice(0, SEARCH_CHARS)
-    .toLowerCase();
+  const index = indexText({ title: title ?? '', texts: [typeof header.cwd === 'string' ? header.cwd : '', header.id, ...prompts, ...replies] });
   return {
     file,
     id: header.id,
@@ -97,7 +101,7 @@ async function summarise(file, info) {
     modifiedAt: info.mtimeMs,
     prompts: prompts.length,
     firstPrompt: prompts.length ? oneLine(prompts[0]) : null,
-    search,
+    index,
   };
 }
 
@@ -131,7 +135,7 @@ function createShelf(root) {
   }
 
   return {
-    /** @param {string} query @returns {Promise<PastSession[]>} */
+    /** Every conversation; with a query, those it finds, best first. @param {string} query @returns {Promise<PastSession[]>} */
     async list(query) {
       const files = await journals();
       const seen = new Set(files);
@@ -149,13 +153,11 @@ function createShelf(root) {
         }),
       );
 
-      const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-      return summaries
-        .filter((s) => s !== null && s.prompts > 0 && words.every((w) => s.search.includes(w)))
-        .map((s) => {
-          const { search: _search, ...past } = /** @type {Summary} */ (s);
-          return past;
-        });
+      const listed = /** @type {Summary[]} */ (summaries.filter((s) => s !== null && s.prompts > 0));
+      /** @param {Summary} s @returns {Omit<PastSession, 'match'>} */
+      const past = ({ index: _index, ...rest }) => rest;
+      if (!query.trim()) return listed.map(past);
+      return rank(listed, query).map(({ doc, snippet, terms }) => ({ ...past(doc), match: { snippet, terms } }));
     },
   };
 }
@@ -316,8 +318,8 @@ export function createHistory({ root, archive }) {
     },
     /**
      * Every past conversation with at least one prompt (archived ones with `archived`),
-     * matching all words of `query` (case-insensitive) when one is given. Unordered: the
-     * widget sorts.
+     * unordered (the widget sorts); with a `query`, the ones it finds (search.js), best first,
+     * each with its `match`.
      * @param {string} [query] @param {{ archived?: boolean }} [options]
      * @returns {Promise<PastSession[]>}
      */

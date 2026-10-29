@@ -22,7 +22,7 @@ const MINUTE = 60_000;
  * the tests check (by activity, by title either way) is a different sequence.
  */
 const JOURNALS = [
-  { name: 'login', cwd: ALPHA, title: 'Fix the login flow', prompts: ['fix the login bug', 'now add tests'], ageMs: 120 * MINUTE },
+  { name: 'login', cwd: ALPHA, title: 'Fix the login flow', prompts: ['fix the login bug', 'now add tests'], replies: ['The session cookie expired before the redirect, so the sign-in loop restarted.'], ageMs: 120 * MINUTE },
   { name: 'deploy', cwd: BRAVO, title: null, prompts: ['deploy staging'], ageMs: 30 * MINUTE },
   { name: 'zebra', cwd: ALPHA, title: 'Zebra cleanup', prompts: ['remove dead code'], ageMs: 10 * MINUTE },
 ];
@@ -51,6 +51,7 @@ function writeJournal(j) {
     ...(j.title ? [{ type: 'title', v: 1, title: j.title, source: 'auto' }] : []),
     { type: 'session', version: 3, id: j.name, timestamp: '2026-10-01T10:00:00.000Z', cwd: j.cwd },
     ...j.prompts.map((text) => ({ type: 'message', message: { role: 'user', content: [{ type: 'text', text }] } })),
+    ...(j.replies ?? []).map((text) => ({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text }] } })),
   ];
   writeFileSync(fileOf(j.name), `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
   const at = new Date(Date.now() - j.ageMs);
@@ -232,6 +233,22 @@ test('sessions are listed newest first, searchable across prompts and directorie
   await expect(again.getByRole('searchbox', { name: 'Search sessions' })).toHaveValue('zebra');
   await expect(again.getByRole('combobox', { name: 'Sort by' })).toHaveValue('title');
   await expect(titles(again)).toHaveText(['Zebra cleanup']);
+});
+
+test('a question in plain words finds the conversation whose agent answered it, with the passage that did', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  const search = window.getByRole('searchbox', { name: 'Search sessions' });
+  await search.fill('In which session did the sign-in loop restart because of a cookie?');
+  await expect(titles(window)).toHaveText(['Fix the login flow']);
+  const snippet = row(window, 'Fix the login flow').locator('.sessions-snippet');
+  await expect(snippet).toHaveText('The session cookie expired before the redirect, so the sign-in loop restarted.');
+  await expect(snippet.locator('mark')).toHaveText(['cookie', 'sign', 'loop', 'restarted']);
+  // The list is by relevance while searching: the sort rests until the search is cleared.
+  await expect(window.getByRole('combobox', { name: 'Sort by' })).toBeDisabled();
+  await search.fill('');
+  await expect(titles(window)).toHaveCount(3);
+  await expect(window.locator('.sessions-snippet')).toHaveCount(0);
+  await expect(window.getByRole('combobox', { name: 'Sort by' })).toBeEnabled();
 });
 
 test('a session omp writes while the window is open shows up by itself', async ({ page }) => {

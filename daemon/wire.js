@@ -6,8 +6,9 @@
  *
  *   GET    /api/config                 → DaemonConfig
  *   GET    /api/ui                     → { version }: the UI files' version now (see `ui-files.js`)
- *   GET    /api/history?q=words&archived=1 → { sessions: PastSession[] } (unordered; every word must
- *                                      match; `archived=1` lists the archived sessions instead)
+ *   GET    /api/history?q=words&archived=1 → { sessions: PastSession[] } (unordered; with `q`, the
+ *                                      ones it finds, best first, each with its `match`: see
+ *                                      `search.js`; `archived=1` lists the archived sessions instead)
  *   POST   /api/history/archive        { file } → { file }: the journal (with its folder) moved from omp's
  *                                      sessions into the archive; a session writing it goes to sleep
  *                                      first, 409 while its agent works
@@ -100,7 +101,8 @@
 
 /**
  * A past omp conversation, summarised from its journal. `firstPrompt` is a one-line
- * preview; times are epoch milliseconds.
+ * preview; times are epoch milliseconds. Found by a search, `match` holds the passage that
+ * matched best and the conversation's words the query matched.
  * @typedef {{
  *   file: string,
  *   id: string,
@@ -110,6 +112,7 @@
  *   modifiedAt: number,
  *   prompts: number,
  *   firstPrompt: string | null,
+ *   match?: { snippet: string, terms: string[] },
  * }} PastSession
  */
 

@@ -35,6 +35,12 @@
   padding: 0 8px;
 }
 
+/* While searching the list is by relevance: the sort controls rest. */
+:is(.sessions-sort, .sessions-icon-btn):disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .sessions-search {
   flex: 1 1 8em;
   min-width: 8em;
@@ -228,6 +234,23 @@
 }
 
 /* Unread: news the user has not read yet (daemon/unread.js). */
+/* The passage a search matched: two lines at most, its matched words marked. */
+.sessions-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin-top: 2px;
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}
+
+.sessions-snippet mark {
+  background: none;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
 .sessions-item.is-unread .sessions-title {
   font-weight: 600;
 }

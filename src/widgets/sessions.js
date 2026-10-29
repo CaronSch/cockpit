@@ -8,8 +8,10 @@
  * the list's. Showing a conversation needs no omp: its window shows the journal until
  * something is sent.
  *
- * Search runs in the daemon (every word must match the title, directory or a prompt); sorting
- * runs here, and so does narrowing to one directory. The query, directory and sort order are
+ * Search runs in the daemon (daemon/search.js), over titles, directories, prompts and the
+ * agents' replies: a question in plain words finds the conversations that answer it, best
+ * first, each with the passage that matched and its words marked. While searching the list is
+ * in that order; otherwise sorting runs here. Narrowing to one directory runs here too. The query, directory and sort order are
  * this window's own settings, so two Sessions windows can show different slices.
  *
  * Archive moves a conversation out of omp's sessions into the daemon's archive (omp's own
@@ -77,7 +79,7 @@ function createSessionsWindow(body, ctx, daemon) {
   const bar = el('div', 'sessions-bar');
   const search = el('input', 'sessions-search');
   search.type = 'search';
-  search.placeholder = 'Search title, directory, prompts…';
+  search.placeholder = 'Search, or ask: where did we find…';
   search.setAttribute('aria-label', 'Search sessions');
   search.value = query();
   const directories = el('select', 'sessions-sort sessions-directory');
@@ -344,6 +346,20 @@ function createSessionsWindow(body, ctx, daemon) {
     return dot;
   }
 
+  /**
+   * The passage a search matched, with the words it matched marked (a matched word is stemmed,
+   * so it is the start of the words it stands for).
+   * @param {{ snippet: string, terms: string[] }} match
+   */
+  function snippetOf({ snippet, terms }) {
+    const line = el('div', 'sessions-snippet');
+    for (const part of snippet.split(/([\p{L}\p{N}_]+)/u)) {
+      const lower = part.toLowerCase();
+      line.append(terms.some((t) => lower.startsWith(t)) ? el('mark', '', part) : part);
+    }
+    return line;
+  }
+
   /** The row's ⋯ button, which opens its menu. */
   function moreButton() {
     const more = button('sessions-action sessions-more', '⋯');
@@ -381,6 +397,7 @@ function createSessionsWindow(body, ctx, daemon) {
     if (state && SAID.has(state)) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', STATE_LABELS[state]));
     const work = workOf(c);
     if (work) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', `${work} running`));
+    if (c.match?.snippet) main.append(snippetOf(c.match));
     const actions = el('div', 'sessions-actions');
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
     else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
@@ -429,15 +446,20 @@ function createSessionsWindow(body, ctx, daemon) {
     drawDirectories();
 
     const now = Date.now();
-    const sorted = sortSessions(listed(), sortKey(), dir);
-    const conversations = [...sorted.filter(isPinned), ...sorted.filter((c) => !isPinned(c))];
+    // A search lists by relevance, as the daemon ranked it; otherwise pinned ones come first.
+    const searching = query().trim() !== '';
+    const sorted = searching ? listed() : sortSessions(listed(), sortKey(), dir);
+    const conversations = searching ? sorted : [...sorted.filter(isPinned), ...sorted.filter((c) => !isPinned(c))];
+    sort.disabled = direction.disabled = searching;
+    sort.title = searching ? 'Sorted by relevance while searching' : '';
+    if (searching) direction.title = sort.title;
     shown = new Map(conversations.map((c) => [c.key, c]));
     drawStatus(conversations.length);
     // Rows are rebuilt only when what they show changed, so a redraw does not steal focus.
     const live = new Set();
     conversations.forEach((c, i) => {
       live.add(c.key);
-      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), isPinned(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
+      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.match?.snippet, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), isPinned(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
       let entry = rows.get(c.key);
       if (!entry || entry.signature !== signature) {
         const node = renderRow(c, now);
