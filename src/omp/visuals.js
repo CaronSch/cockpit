@@ -113,7 +113,7 @@ const vegaConfig = () => ({
  *   it reports as it runs (Vega logs a failed load and draws on without the data)
  */
 async function vegaView(source) {
-  const spec = JSON.parse(source);
+  const spec = unstackLogScales(JSON.parse(source));
   const { vega, vegaLite } = await vegaLibs();
   const compiled = vegaLite.compile(spec, { config: vegaConfig() }).spec;
   const loader = vega.loader();
@@ -127,6 +127,23 @@ async function vegaView(source) {
   const failed = (...args) => void errors.push(args.find((a) => a instanceof Error) ?? args.join(' '));
   const logger = { level: () => logger, error: failed, warn: (/** @type {unknown[]} */ ...args) => args.some((a) => a instanceof Error) && failed(...args), info() {}, debug() {} };
   return { view: new vega.View(vega.parse(compiled), { loader, logger, renderer: 'svg', hover: true }), errors };
+}
+
+/**
+ * Bars on a log scale, drawn at all: Vega-Lite stacks a bar from zero, which a log scale has
+ * no place for, so every bar is empty (it warns, and draws the axes). A channel on a log
+ * scale that does not say how to stack is not stacked, so its bars run from the axis' start.
+ * @param {any} spec parsed JSON, changed in place @returns {any}
+ */
+export function unstackLogScales(spec) {
+  if (Array.isArray(spec)) spec.forEach(unstackLogScales);
+  else if (spec && typeof spec === 'object') {
+    for (const channel of Object.values(spec.encoding ?? {})) {
+      if (channel?.scale?.type === 'log' && !('stack' in channel)) channel.stack = false;
+    }
+    Object.values(spec).forEach(unstackLogScales);
+  }
+  return spec;
 }
 
 /** @param {string} source @returns {Promise<string>} */

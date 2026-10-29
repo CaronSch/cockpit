@@ -183,6 +183,12 @@ test('a reply draws its mermaid diagrams and vega-lite charts, reading data only
   const [inline, fromFile] = [reply.locator('.md-visual.is-vega-lite').nth(0), reply.locator('.md-visual.is-vega-lite').nth(1)];
   await expect(inline.locator('.mark-rect path')).toHaveCount(2);
   await expect(fromFile.locator('.mark-rect path')).toHaveCount(3);
+
+  // Bars on a log scale are drawn: Vega-Lite would stack them from zero, which a log scale lacks.
+  await send(pane, ['say: Log scale:', chart({ ...bars, encoding: { ...bars.encoding, y: { ...bars.encoding.y, scale: { type: 'log' } } }, data: { values: [{ build: 'a', p90: 15 }, { build: 'b', p90: 1000 }] } })].join('\n'));
+  const logBars = pane.locator('.omp-assistant').last().locator('.mark-rect path');
+  await expect(logBars).toHaveCount(2);
+  expect(await logBars.evaluateAll((paths) => paths.map((p) => p.getBoundingClientRect().height > 0))).toEqual([true, true]);
   await expect(reply.locator('pre')).toHaveCount(0); // drawn, not shown as code
 
   // The pointer resting on a chart turns it live, in place.
