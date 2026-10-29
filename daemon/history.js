@@ -91,7 +91,7 @@ async function summarise(file, info) {
   if (!header || typeof header.id !== 'string') return null;
 
   const created = Date.parse(header.timestamp);
-  const index = indexText({ title: title ?? '', texts: [typeof header.cwd === 'string' ? header.cwd : '', header.id, ...prompts, ...replies] });
+  const index = indexText({ title: title ?? '', names: [typeof header.cwd === 'string' ? header.cwd : '', header.id], texts: [...prompts, ...replies] });
   return {
     file,
     id: header.id,

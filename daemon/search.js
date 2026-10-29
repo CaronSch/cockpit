@@ -58,10 +58,11 @@ export const words = (text) => (text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? 
  */
 
 /**
- * Indexes a conversation's text: its title, and the rest (directory, prompts, replies).
- * @param {{ title: string, texts: string[] }} text @returns {TextIndex}
+ * Indexes a conversation's text: its title, what names it (directory, id: searched, never a
+ * snippet, as its row shows them), and what was said (prompts, replies).
+ * @param {{ title: string, names?: string[], texts: string[] }} text @returns {TextIndex}
  */
-export function indexText({ title, texts }) {
+export function indexText({ title, names = [], texts }) {
   /** @type {Map<string, number>} */
   const terms = new Map();
   let length = 0;
@@ -73,7 +74,7 @@ export function indexText({ title, texts }) {
     }
   };
   add(title, TITLE_WEIGHT);
-  for (const text of texts) add(text, 1);
+  for (const text of [...names, ...texts]) add(text, 1);
   const passages = [
     { text: null, words: new Set(words(title)) },
     ...texts
