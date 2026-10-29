@@ -389,7 +389,10 @@ function createSessionsWindow(body, ctx, daemon) {
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
     else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
     actions.append(moreButton());
-    row.append(rowDot(unread), main, actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
+    // Over the row's right end, not beside its text: hidden, they take none of its width.
+    const tools = el('div', 'sessions-tools');
+    tools.append(actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
+    row.append(rowDot(unread), main, tools);
     return row;
   }
 
