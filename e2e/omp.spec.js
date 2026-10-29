@@ -627,6 +627,16 @@ test('a click in the pane puts the caret in the message box, unless it is on a c
   await expect(draft).not.toBeFocused();
   await page.evaluate(() => getSelection()?.removeAllRanges());
 
+  // The thinking toggle is its arrow and word: a click in the empty width beside them is the pane's.
+  const thinking = reply.locator('.omp-thinking');
+  const row = /** @type {{ x: number, y: number, width: number, height: number }} */ (await thinking.boundingBox());
+  const toggle = /** @type {{ x: number, width: number }} */ (await thinking.locator('summary').boundingBox());
+  expect(toggle.width, 'no wider than its words').toBeLessThan(row.width / 4);
+  await page.mouse.click(toggle.x + toggle.width + 40, row.y + row.height / 2);
+  await expect(thinking).not.toHaveAttribute('open', '');
+  await expect(draft).toBeFocused();
+  await draft.evaluate((d) => d.blur());
+
   // Controls keep their clicks: the thinking toggle, a link, a toolbar button.
   await reply.locator('.omp-thinking summary').click();
   await expect(reply.locator('.omp-thinking')).toHaveAttribute('open', '');
