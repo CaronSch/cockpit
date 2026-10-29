@@ -33,7 +33,7 @@ beforeEach(async () => {
       header('aaa', '/p/alpha'),
       { type: 'custom_message', customType: 'notice', content: 'mounted tools, "role":"user" in passing' },
       user('fix the login bug'),
-      assistant('done'),
+      assistant('done: the session cookie was stale'),
       user('handoff summary', { attribution: 'agent' }),
       user('now add tests'),
     ]),
@@ -56,15 +56,19 @@ describe('session history', () => {
     assert.equal(a?.createdAt, Date.parse('2026-10-01T10:00:00.000Z'));
   });
 
-  test('search needs every word, in any of title, directory or prompts, ignoring case', async () => {
+  test('search ranks title, directory, prompts and replies, best first, each with what matched', async () => {
     const history = createHistory({ root, archive });
     /** @param {string} q */
-    const ids = async (q) => (await history.list(q)).map((s) => s.id).sort();
+    const ids = async (q) => (await history.list(q)).map((s) => s.id);
     assert.deepEqual(await ids('TESTS alpha'), ['aaa']);
     assert.deepEqual(await ids('login'), ['aaa'], 'title and prompt');
     assert.deepEqual(await ids('beta'), ['bbb'], 'directory');
-    assert.deepEqual(await ids('deploy login'), []);
-    assert.deepEqual(await ids('handoff'), [], 'agent-authored text is not searched');
+    assert.deepEqual(await ids('cookie'), ['aaa'], "the agent's reply");
+    assert.deepEqual(await ids('handoff'), [], 'agent-authored prompts are not searched');
+    assert.deepEqual((await ids('deploy login')).sort(), ['aaa', 'bbb'], 'each word counts; neither must');
+    const [hit] = await history.list('where did we deploy staging?');
+    assert.deepEqual(hit.match, { snippet: 'deploy staging', terms: ['deploy', 'stag'] });
+    assert.equal((await history.list('')).every((s) => s.match === undefined), true, 'a listing has no matches');
   });
 
   test('a journal that grew since the last listing is read again', async () => {
