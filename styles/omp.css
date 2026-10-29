@@ -927,6 +927,16 @@
   font-size: var(--text-xs);
 }
 
+.omp-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.omp-dialog-field .omp-suggest {
+  margin: 0;
+}
+
 .omp-question {
   display: flex;
   flex-direction: column;

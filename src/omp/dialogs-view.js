@@ -1,10 +1,17 @@
 /**
  * Inline dialogs for omp's extension UI requests (select, confirm, input, editor, ask);
- * each one answers through a single `respond(payload)` call.
+ * each one answers through a single `respond(payload)` call. Their text fields suggest
+ * paths after `@` as the message box does.
  */
 import { button, el } from '../ui/dom.js';
+import { createFileSuggest } from './file-suggest.js';
+import { MENTIONS } from './file-mention.js';
+import { createSuggestions } from './suggestions.js';
 import { askAnswers } from './transcript.js';
 /** @import { Dialog } from './transcript.js' */
+/** @import { DirListing } from '../../daemon/wire.js' */
+
+/** Lists a folder as typed in a path. @typedef {(dir: string) => Promise<DirListing>} ListDir */
 
 /** The fields of an `extension_ui_response` after `type` and `id`. @typedef {Record<string, unknown>} UiPayload */
 
@@ -12,9 +19,10 @@ let uid = 0;
 
 /**
  * @param {Dialog} dialog @param {(payload: UiPayload) => void} respond
+ * @param {ListDir} [listDir] lists the folders `@` paths name; without it none are suggested
  * @returns {HTMLElement}
  */
-export function renderDialog(dialog, respond) {
+export function renderDialog(dialog, respond, listDir) {
   const node = el('section', `omp-dialog is-${dialog.method}`);
   node.setAttribute('role', 'group');
   const title = typeof dialog.title === 'string' && dialog.title ? dialog.title : dialog.method === 'ask' ? 'Questions' : 'The agent asks';
@@ -54,10 +62,11 @@ export function renderDialog(dialog, respond) {
       input.type = 'text';
       input.placeholder = typeof dialog.placeholder === 'string' ? dialog.placeholder : '';
       const submit = () => respond({ value: input.value });
+      const field = withMentions(input, listDir);
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.isComposing) submit();
+        if (e.key === 'Enter' && !e.isComposing && !e.defaultPrevented) submit(); // not when it took a suggestion
       });
-      node.append(input);
+      node.append(field);
       actions.append(button('btn btn-accent', 'Submit', submit), cancel);
       break;
     }
@@ -65,7 +74,7 @@ export function renderDialog(dialog, respond) {
       const area = el('textarea', 'omp-field');
       area.rows = 6;
       area.value = typeof dialog.prefill === 'string' ? dialog.prefill : '';
-      node.append(area);
+      node.append(withMentions(area, listDir));
       actions.append(button('btn btn-accent', 'Submit', () => respond({ value: area.value })), cancel);
       break;
     }
@@ -73,7 +82,7 @@ export function renderDialog(dialog, respond) {
       const questions = Array.isArray(dialog.questions) ? dialog.questions : [];
       /** @type {Record<string, { selected: string[], custom: string }>} */
       const picks = {};
-      for (const q of questions) node.append(askQuestion(q, (picks[q.id] = { selected: [], custom: '' })));
+      for (const q of questions) node.append(askQuestion(q, (picks[q.id] = { selected: [], custom: '' }), listDir));
       actions.append(button('btn btn-accent', 'Submit', () => respond({ answers: askAnswers(questions, picks) })), cancel);
       break;
     }
@@ -87,8 +96,9 @@ export function renderDialog(dialog, respond) {
  * @param {{ id: string, question: string, header?: string, multi?: boolean, recommended?: number,
  *   options: Array<{ label: string, description?: string, preview?: string }> }} q
  * @param {{ selected: string[], custom: string }} pick
+ * @param {ListDir} [listDir]
  */
-function askQuestion(q, pick) {
+function askQuestion(q, pick, listDir) {
   const box = el('fieldset', 'omp-question');
   const legend = el('legend');
   if (q.header) legend.append(el('span', 'omp-question-header', q.header));
@@ -130,6 +140,40 @@ function askQuestion(q, pick) {
       pick.selected = [];
     }
   });
-  box.append(custom);
+  box.append(withMentions(custom, listDir));
   return box;
+}
+
+/**
+ * `field`, with a list under it suggesting the entries of the folder an `@` path names as it is
+ * typed; the list takes the arrows, Tab, Enter and Esc while open.
+ * @param {HTMLInputElement | HTMLTextAreaElement} field @param {ListDir | undefined} listDir
+ * @returns {HTMLElement}
+ */
+function withMentions(field, listDir) {
+  if (!listDir) return field;
+  const list = createSuggestions();
+  const files = createFileSuggest({
+    draft: field,
+    syntax: MENTIONS,
+    list,
+    listDir,
+    replace(start, end, text) {
+      field.setRangeText(text, start, end, 'end');
+      field.dispatchEvent(new Event('input')); // the answer follows the field
+    },
+  });
+  field.spellcheck = false;
+  field.addEventListener('input', () => files.update());
+  field.addEventListener('blur', () => files.close());
+  /** @type {HTMLElement} */ (field).addEventListener('keydown', (e) => { // typed as one element, so `e` is a KeyboardEvent
+    if (e.isComposing || list.key(e)) return;
+    if (e.key === 'Escape' && list.open) {
+      e.preventDefault();
+      files.close();
+    }
+  });
+  const wrap = el('div', 'omp-dialog-field');
+  wrap.append(field, list.root);
+  return wrap;
 }
