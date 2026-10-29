@@ -39,6 +39,7 @@ import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
 import { STATE_LABELS, follow, followedName, isRunning, listConversations, noteEvent, runningState, showConversation } from '../sessions/running.js';
 import { sessionLinks } from '../sessions/links.js';
+import { snippetLine } from '../sessions/snippet.js';
 import { runningWork } from '../omp/running-work.js';
 import { openContextMenu, opensContextMenu } from '../ui/context-menu.js';
 /** @import { WidgetContext } from './registry.js' */
@@ -346,20 +347,6 @@ function createSessionsWindow(body, ctx, daemon) {
     return dot;
   }
 
-  /**
-   * The passage a search matched, with the words it matched marked (a matched word is stemmed,
-   * so it is the start of the words it stands for).
-   * @param {{ snippet: string, terms: string[] }} match
-   */
-  function snippetOf({ snippet, terms }) {
-    const line = el('div', 'sessions-snippet');
-    for (const part of snippet.split(/([\p{L}\p{N}_]+)/u)) {
-      const lower = part.toLowerCase();
-      line.append(terms.some((t) => lower.startsWith(t)) ? el('mark', '', part) : part);
-    }
-    return line;
-  }
-
   /** The row's ⋯ button, which opens its menu. */
   function moreButton() {
     const more = button('sessions-action sessions-more', '⋯');
@@ -397,7 +384,7 @@ function createSessionsWindow(body, ctx, daemon) {
     if (state && SAID.has(state)) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', STATE_LABELS[state]));
     const work = workOf(c);
     if (work) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', `${work} running`));
-    if (c.match?.snippet) main.append(snippetOf(c.match));
+    if (c.match?.snippet) main.append(snippetLine(c.match, 'sessions-snippet'));
     const actions = el('div', 'sessions-actions');
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
     else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));

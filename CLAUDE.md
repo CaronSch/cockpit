@@ -224,7 +224,10 @@ What runs today:
   you*: it asks a question or an approval), searchable across titles, directories,
   prompts and the agents' replies (`daemon/search.js`: ranked, so a question in plain
   words finds the conversation that answers it, best first, with the passage that
-  matched and its words marked; the list is by relevance while searching), and sortable. A click on a conversation (or Enter) shows it in the
+  matched and its words marked; the list is by relevance while searching), and sortable. The same
+  search floats over the workbench as Spotlight (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
+  the top bar's Search; a modal dialog; Enter shows the conversation as a Sessions click
+  does). A click on a conversation (or Enter) shows it in the
   agent window this screen used last (pressed or focused last), or a new one if
   there is none; dragging it onto the middle of an agent window shows it there, and
   onto the grid elsewhere opens a new agent window where it is dropped. Showing one
@@ -455,6 +458,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/sessions/notify.js` — Desktop notifications when an agent is done or needs its user, so a session can be left running while the user is elsewhere: the moments that mark a conversation unread (omp/activity.js), as they happen.
 - `src/sessions/order.js` — Sorting and labels for the Sessions window, kept free of the DOM so they can be tested.
 - `src/sessions/running.js` — Conversations as the Sessions window lists them, kept free of the DOM so they can be tested: every journal with the session holding it while one is awake, how each is doing, and what an agent window is given to show one.
+- `src/sessions/snippet.js` — The passage a search matched, as a line of DOM, shared by the Sessions window and Spotlight.
 - `src/state/atom.js` — Tiny observable cell: get/set/subscribe.
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
@@ -466,6 +470,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/prefs.js` — Per-browser preferences in localStorage.
 - `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it.
 - `src/ui/settings.js` — App-wide settings, picked in the top bar's Config menu and kept per browser.
+- `src/ui/spotlight.js` — Spotlight: a floating search over every conversation, as macOS's.
 - `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.

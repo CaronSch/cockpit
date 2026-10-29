@@ -251,6 +251,32 @@ test('a question in plain words finds the conversation whose agent answered it, 
   await expect(window.getByRole('combobox', { name: 'Sort by' })).toBeEnabled();
 });
 
+test('⌘K floats a search over the workbench: a question finds the conversation, Enter shows it, Esc closes', async ({ page }) => {
+  const spotlight = page.getByRole('dialog', { name: 'Search conversations' });
+  const input = spotlight.getByRole('combobox', { name: 'Search conversations' });
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(spotlight).toBeVisible();
+  await expect(input).toBeFocused();
+  await expect(spotlight.getByRole('option').first()).toBeVisible(); // the latest, with nothing typed
+
+  await input.fill('In which session did the sign-in loop restart because of a cookie?');
+  const first = spotlight.getByRole('option').first();
+  await expect(first.locator('.spotlight-title')).toHaveText('Fix the login flow');
+  await expect(first.locator('.spotlight-snippet mark')).toHaveText(['cookie', 'sign', 'loop', 'restarted']);
+  await expect(first).toHaveAttribute('aria-selected', 'true');
+  await input.press('Enter');
+  await expect(spotlight).toBeHidden();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  await expect(pane.locator('.omp-user').first()).toContainText('fix the login bug');
+
+  // The top bar's Search opens it too; Esc closes it, leaving the workbench as it was.
+  await page.getByRole('button', { name: /^Search/ }).click();
+  await expect(spotlight).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(spotlight).toBeHidden();
+  await expect(page.locator('.widget[data-widget="omp"]')).toHaveCount(1);
+});
+
 test('a session omp writes while the window is open shows up by itself', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
