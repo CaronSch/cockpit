@@ -666,6 +666,18 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
   await expect(menu).toHaveCount(0);
 });
 
+test('a row’s actions float over its end when pointed at, taking none of its text’s width otherwise', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  const zebra = row(window, 'Zebra cleanup');
+  const width = async (/** @type {Locator} */ at) => /** @type {{ width: number }} */ (await at.boundingBox()).width;
+  await page.mouse.move(0, 0);
+  const text = await width(zebra.locator('.sessions-main'));
+  expect(text, 'the text runs to the row’s end').toBeGreaterThan((await width(zebra)) - 40);
+  await zebra.hover();
+  await expect(zebra.getByRole('button', { name: 'Archive' })).toBeVisible();
+  expect(await width(zebra.locator('.sessions-main')), 'pointing at the row moves nothing').toBe(text);
+});
+
 test('a pinned session is listed first, whatever the sort, in every window and across a reload, until it is unpinned', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);

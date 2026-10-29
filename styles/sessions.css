@@ -132,6 +132,7 @@
 }
 
 .sessions-item {
+  position: relative;
   flex-shrink: 0;
   display: flex;
   gap: var(--space-2);
@@ -142,7 +143,7 @@
   user-select: none;
 }
 
-.sessions-item:is(:hover, .is-pointed) {
+.sessions-item:is(:hover, .is-pointed, :focus-within) {
   background: var(--color-surface-raised);
 }
 
@@ -255,9 +256,28 @@
   font-weight: 600;
 }
 
+/* Row actions and the pin float over the row's right end, so the text runs the row's full
+   width. Shown (on hover or focus), they cover the text beneath, fading into it. */
+.sessions-tools {
+  position: absolute;
+  inset: 0 var(--space-2) 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.sessions-item:is(:hover, :focus-within) .sessions-tools {
+  padding-left: var(--space-4);
+  background: linear-gradient(to right, transparent, var(--color-surface-raised) var(--space-4));
+}
+
+/* A pinned row keeps room for its ★, which stays in view. */
+.sessions-item.is-pinned .sessions-main {
+  padding-right: 1.75em;
+}
+
 /* Row actions: quiet text buttons, shown while the row is hovered or holds focus. */
 .sessions-actions {
-  flex: none;
   display: flex;
   gap: 2px;
   opacity: 0;
@@ -267,6 +287,7 @@
 .sessions-item:is(:hover, :focus-within) .sessions-actions {
   opacity: 1;
 }
+
 
 .sessions-action {
   padding: 2px 6px;
@@ -290,7 +311,6 @@
 
 /* A pinned row's ★ stays in view; another row's ☆ shows with its actions. */
 .sessions-pin {
-  flex: none;
   font-size: var(--text-sm);
   opacity: 0;
   transition: opacity var(--duration-fast);
