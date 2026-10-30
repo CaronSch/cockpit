@@ -1050,6 +1050,18 @@ describe('session archive', () => {
     assert.ok(!(await ids(true)).includes('shelved'));
   });
 
+  test('an archived conversation can be read but not resumed', async () => {
+    const file = await pastSession('readonly');
+    const { json } = await call({ method: 'POST', path: '/api/history/archive', body: { file } });
+    const read = await call({ path: `/api/conversation?file=${encodeURIComponent(json.file)}` });
+    assert.equal(read.status, 200);
+    assert.equal(read.json.archived, true);
+    assert.equal((await call({ path: `/api/conversation?file=${encodeURIComponent((await pastSession('current')))}` })).json.archived, false);
+    const resumed = await call({ method: 'POST', path: '/api/sessions', body: { cwd, resume: json.file } });
+    assert.equal(resumed.status, 409);
+    assert.match(resumed.json.error, /archived/);
+  });
+
   test('restore refuses to replace a journal that is back at the same place', async () => {
     const file = await pastSession('twice');
     const { json } = await call({ method: 'POST', path: '/api/history/archive', body: { file } });

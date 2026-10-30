@@ -378,6 +378,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           if (body?.resume != null && body?.fork != null) throw new HttpError(400, 'resume and fork cannot be combined');
           const resume = body?.resume == null ? null : await existingPath(body.resume, 'file', 'resume');
           const fork = body?.fork == null ? null : await existingPath(body.fork, 'file', 'fork');
+          if (resume && history.isArchived(resume)) throw new HttpError(409, 'the conversation is archived: restore it to carry it on');
           const running = resume && hub.writing(resume);
           if (running) return json({ session: running });
           return json({ session: hub.create({ cwd, resume, fork }) }, 201);

@@ -33,7 +33,8 @@
  *                                      continues a journal, `fork` starts a new session from a
  *                                      copy of one; either must be an existing file). Resuming
  *                                      a journal a running session writes answers 200 with that
- *                                      session instead: two omps never write one journal
+ *                                      session instead: two omps never write one journal; an
+ *                                      archived one is refused (409), as it is only to read
  *   DELETE /api/sessions/:id           → 204: the session goes to sleep now (closes omp's stdin,
  *                                      kills it if it lingers), as it does by itself once idle
  *                                      and unused (see `sleep.js`), or when the daemon exits
@@ -118,7 +119,7 @@
 
 /**
  * A conversation as its journal has it, for a window to show while no omp holds it (see
- * `conversation.js`): `messages` as omp's `get_messages` answers once it is resumed, `model`
+ * `conversation.js`), `archived` when its journal is in the archive: `messages` as omp's `get_messages` answers once it is resumed, `model`
  * (`provider/id`) and `thinkingLevel` as the journal last recorded them, `id` as PastSession's.
  * @typedef {{
  *   file: string,
@@ -128,6 +129,7 @@
  *   model: string | null,
  *   thinkingLevel: string | null,
  *   messages: Record<string, any>[],
+ *   archived?: boolean,
  * }} Conversation
  */
 
