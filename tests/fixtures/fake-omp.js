@@ -106,6 +106,8 @@ let parentSession = forkedFrom ? (sourceHeader?.id ?? null) : null;
 
 /** @type {Record<string, any>[]} */
 const messages = source.filter((entry) => entry.type === 'message').map((entry) => entry.message);
+/** How many of them a compaction in the journal left out of the context, which `get_messages` answers with, as omp's does. */
+const compacted = source.slice(0, source.findLastIndex((entry) => entry.type === 'compaction') + 1).filter((entry) => entry.type === 'message').length;
 let model = { provider: 'fake', id: 'fake-model', name: 'Fake Model' };
 let thinkingLevel = 'off';
 let msgCounter = 0;
@@ -425,7 +427,7 @@ lines.on('line', (line) => {
         todoPhases,
       });
     case 'get_messages':
-      return ok(id, type, { messages });
+      return ok(id, type, { messages: messages.slice(compacted) });
     case 'get_branch_messages':
       return ok(id, type, {
         messages: messages.flatMap((m, i) => {

@@ -312,6 +312,25 @@ describe('sessions', () => {
     assert.ok(history?.kind === 'frame' && history.frame.data.messages.length === 2, 'its answer too');
   });
 
+  test('a session started from a compacted journal shows the whole conversation, not just what omp kept', async () => {
+    const journal = join(cwd, 'compacted.jsonl');
+    const lines = [
+      { type: 'session', version: 3, id: 'compacted', timestamp: '2026-10-01T10:00:00.000Z', cwd },
+      { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'long ago' }] } },
+      { type: 'compaction', summary: 'we talked', shortSummary: 'Compaction', tokensBefore: 9 },
+      { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'lately' }] } },
+    ];
+    await Bun.write(journal, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`);
+    const id = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, resume: journal } })).json.session.id;
+    await waitForStatus(id, 'ready');
+    assert.equal((await rpc(id, { type: 'get_messages' })).data.messages.length, 1, 'omp itself keeps only what came after the compaction');
+    const history = forSession(hub.since(0), id).find((e) => e.kind === 'frame' && e.frame.command === 'get_messages');
+    assert.deepEqual(
+      history?.kind === 'frame' && history.frame.data.messages.map((/** @type {any} */ m) => m.role),
+      ['user', 'compactionSummary', 'user'],
+    );
+  });
+
   test('the daemon asks omp for its state again after anything that changes it, once for every window', async () => {
     const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
     const id = json.session.id;

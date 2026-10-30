@@ -3,6 +3,9 @@
  * the messages omp's `get_messages` would answer with once resumed, so the transcript seeds
  * from either the same way, and what the journal records about the session around them.
  *
+ * Unlike omp's context, it is the whole conversation: a compaction is a summary where it
+ * happened, and what it summarised stays before it.
+ *
  * A journal is a tree: each entry names its parent (`parentId`), a rewind (`branch`) starts a
  * new path from an earlier entry, and the newest entry ends the path the conversation is on.
  * That path's entries become messages as omp's own session context makes them

@@ -9,6 +9,8 @@
  * A fork is named again by its first prompt, though it has its parent's name: it is going
  * somewhere else, and omp's title model reads the latest messages along with the first.
  */
+import { readFileSync } from 'node:fs';
+import { conversationOf } from './conversation.js';
 import { createFrameDecoder } from './frame-decoder.js';
 /** @import { RpcResponse, SessionEvent, SessionMeta } from './wire.js' */
 
@@ -106,6 +108,8 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   const closed = Promise.withResolvers();
   let named = false;
   let titleAsked = false;
+  /** The id of the history asked for at setup, once asked. @type {string | null} */
+  let historyId = null;
 
   /** @param {Partial<SessionMeta>} patch */
   const update = (patch) => {
@@ -145,6 +149,24 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     closed.resolve();
   }
 
+  /**
+   * Puts the whole conversation in omp's answer to the history asked for at setup: omp answers
+   * with its context, which a compaction cut down to a summary and the latest messages, while
+   * the window should show everything said. The journal has it all (`conversation.js`); read
+   * at once, so the answer keeps its place in the log. Unreadable, omp's answer stands.
+   * @param {Record<string, any>} frame
+   */
+  function withWholeHistory(frame) {
+    const file = resume ?? fork;
+    if (!file) return;
+    /** @type {Record<string, any>[] | undefined} */
+    let messages;
+    try {
+      messages = conversationOf(file, readFileSync(file, 'utf8'))?.messages;
+    } catch {}
+    if (messages?.length) frame.data = { ...frame.data, messages };
+  }
+
   /** @param {import('./frame-decoder.js').Decoded} decoded */
   function handle(decoded) {
     if (!decoded.ok) {
@@ -152,6 +174,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
       return;
     }
     const { frame } = decoded;
+    if (frame.type === 'response' && frame.id === historyId && frame.success === true) withWholeHistory(frame);
     emit({ kind: 'frame', frame });
     if (frame.type === 'ready' && meta.status === 'starting') void setup();
     // Every window shows the session's state from the log: the daemon asks for it again
@@ -226,7 +249,11 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     // A refused setup command leaves its failure in the log; the session still works on
     // the protocol omp does support, so it becomes ready either way.
     const commands = resume || fork ? [...SETUP_COMMANDS, HISTORY_COMMAND] : SETUP_COMMANDS;
-    for (const command of commands) await send(command).response.catch(() => {});
+    for (const command of commands) {
+      const sent = send(command);
+      if (command === HISTORY_COMMAND) historyId = sent.id;
+      await sent.response.catch(() => {});
+    }
     if (!finished) update({ status: 'ready' });
   }
 
