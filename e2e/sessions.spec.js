@@ -374,7 +374,7 @@ test('a conversation whose directory is gone shows, and says so once something i
   problems = problems.filter((p) => !p.includes('400'));
 });
 
-test('Archive hides a session from the list (and from omp), Archived lists it, and Restore puts it back', async ({ page }) => {
+test('Archive hides a session from the list (and from omp), Archived lists it to read, and Restore puts it back', async ({ page }) => {
   mkdirSync(fileOf('zebra').replace(/\.jsonl$/, ''));
   writeFileSync(join(fileOf('zebra').replace(/\.jsonl$/, ''), 'Explorer.jsonl'), '');
   const window = await addSessionsWindow(page);
@@ -390,11 +390,17 @@ test('Archive hides a session from the list (and from omp), Archived lists it, a
   await expect(window.locator('.sessions-status')).toHaveText('1 archived session');
   const archived = row(window, 'Zebra cleanup');
   await expect(archived.getByRole('button', { name: 'Archive' })).toHaveCount(0);
-  await archived.dblclick();
-  await settle(page);
-  await expect(page.locator('.widget[data-widget="omp"]'), 'an archived session does not show').toHaveCount(0);
+  // Shown, it is to read: no message box until it is restored.
+  await archived.click();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  await expect(pane.locator('.omp-user').first()).toBeVisible();
+  await expect(pane.locator('.omp-banner')).toContainText('Archived');
+  await expect(pane.locator('textarea')).toBeHidden();
 
-  await archived.getByRole('button', { name: 'Restore' }).click();
+  await pane.locator('.omp-banner').getByRole('button', { name: 'Restore' }).click();
+  await expect(pane.locator('.omp-banner')).toBeHidden();
+  await expect(pane.locator('textarea')).toBeVisible();
+  await expect(pane.locator('.omp-user').first()).toBeVisible();
   await expect(window.locator('.sessions-status')).toHaveText('No archived sessions.');
   await toggle.click();
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
@@ -661,7 +667,7 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
   await expect(titles(window)).toHaveText(['Fix the login flow']);
   await window.getByRole('button', { name: 'Archived' }).click();
   await zebra.click({ button: 'right' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Mark as unread', 'Pin to top', 'Restore']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Pin to top', 'Restore']);
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
 });

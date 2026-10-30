@@ -329,7 +329,22 @@ export function createHistory({ root, archive }) {
      * @param {unknown} file untrusted: refused unless it is a journal in either directory
      * @returns {Promise<Conversation>}
      */
-    conversation: async (file) => readConversation(join(...journalIn([root, archive], file))),
+    conversation: async (file) => {
+      const [base, rel] = journalIn([root, archive], file);
+      return { ...(await readConversation(join(base, rel))), archived: base === archive };
+    },
+    /**
+     * Whether `file` names a journal in the archive: one to read, not to carry on.
+     * @param {string} file
+     */
+    isArchived(file) {
+      try {
+        journalUnder(archive, file);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     /**
      * Moves a journal listed by `list()` into the archive; returns where it is now.
      * @param {unknown} file untrusted: refused unless it is a journal in omp's sessions directory

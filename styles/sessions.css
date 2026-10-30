@@ -157,10 +157,6 @@
   box-shadow: inset 2px 0 var(--color-text-dim);
 }
 
-.sessions-item.is-archived {
-  cursor: default;
-}
-
 /* How a running session is doing, or that a session is unread: a small dot (rows with
    nothing to say keep its space, empty). */
 .sessions-dot {

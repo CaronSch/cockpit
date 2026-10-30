@@ -16,7 +16,7 @@
  *
  * Archive moves a conversation out of omp's sessions into the daemon's archive (omp's own
  * resume no longer offers it); "Archived" switches the window to the archived ones, each with
- * Restore. One whose agent is working is not archived until it is done. A new session
+ * Restore. An archived one shows as any other, to read: carrying it on means restoring it. One whose agent is working is not archived until it is done. A new session
  * nothing was sent to has no journal yet: archiving it ends it, and it is gone, not archived.
  *
  * A conversation with news its user has not read (daemon/unread.js) has a blue dot and a bold
@@ -235,13 +235,13 @@ function createSessionsWindow(body, ctx, daemon) {
   const conversationAt = (row) => shown.get(row.dataset.key ?? '') ?? null;
 
   /**
-   * The agent window settings that show the row's conversation, or null for an archived one (it
-   * must be restored first).
+   * The agent window settings that show the row's conversation (an archived one to read, until
+   * it is restored).
    * @param {HTMLElement} row @returns {import('../layout/grid-model.js').LeafParams | null}
    */
   function paramsFor(row) {
     const c = conversationAt(row);
-    return c && !showArchived() ? showConversation({ file: c.file, meta: c.meta, cwd: c.cwd, name: nameOf(c) }) : null;
+    return c ? showConversation({ file: c.file, meta: c.meta, cwd: c.cwd, name: nameOf(c) }) : null;
   }
 
   /** omp's id for the row's conversation (what its unread mark is kept under), if known. @param {HTMLElement} row */
@@ -377,7 +377,7 @@ function createSessionsWindow(body, ctx, daemon) {
     const row = el('li', `sessions-item${state ? ` is-${state}` : ''}${archived ? ' is-archived' : ''}${unread ? ' is-unread' : ''}${pinned ? ' is-pinned' : ''}`);
     row.tabIndex = 0;
     row.dataset.key = c.key;
-    const hint = archived ? 'Archived: Restore to show it' : 'Click to show it in the last agent window used, or drag it onto one';
+    const hint = `Click to ${archived ? 'read' : 'show'} it in the last agent window used, or drag it onto one`;
     row.title = `${c.title && c.firstPrompt ? `${c.firstPrompt}\n` : ''}${c.file || c.cwd}\nLast active ${new Date(c.modifiedAt).toLocaleString()}\n${hint}`;
     const facts = [shortDir(c.cwd), relativeTime(c.modifiedAt, now), ...(c.prompts ? [`${c.prompts} prompt${c.prompts === 1 ? '' : 's'}`] : [])];
     const main = rowText(nameOf(c) ?? 'New session', facts);

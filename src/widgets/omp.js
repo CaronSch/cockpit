@@ -367,7 +367,7 @@ function createPane(body, ctx, daemon) {
     let session = null;
     /** The conversation's journal, as the window was given it or omp has reported it. */
     let file = started.sessionFile;
-    /** What the journal said of the conversation, while asleep. @type {{ id: string, cwd: string | null } | null} */
+    /** What the journal said of the conversation, while asleep. @type {{ id: string, cwd: string | null, archived: boolean } | null} */
     let asleep = null;
     /** Waking the conversation: resolves with the session once it is ready. @type {Promise<string> | null} */
     let waking = null;
@@ -538,7 +538,7 @@ function createPane(body, ctx, daemon) {
         .conversation(want)
         .then((conversation) => {
           if (closed || session !== null || file !== want) return;
-          asleep = { id: conversation.id, cwd: conversation.cwd };
+          asleep = { id: conversation.id, cwd: conversation.cwd, archived: conversation.archived === true };
           seedConversation(state, conversation);
           schedule();
         })
@@ -1154,7 +1154,8 @@ function createPane(body, ctx, daemon) {
     function drawBanner() {
       const m = meta();
       const connection = daemon.status();
-      const key = JSON.stringify([m?.status, m?.exitCode, m?.error, connection, params().sessionFile]);
+      const archived = asleep?.archived === true;
+      const key = JSON.stringify([m?.status, m?.exitCode, m?.error, connection, params().sessionFile, archived]);
       if (key === bannerKey) return;
       bannerKey = key;
       banner.replaceChildren();
@@ -1166,8 +1167,27 @@ function createPane(body, ctx, daemon) {
         banner.classList.add('is-ended');
         const text = m.status === 'failed' ? `The agent failed${m.error ? `: ${m.error}` : ''}` : `The agent exited${m.exitCode !== null ? ` (code ${m.exitCode})` : ''}${m.error ? `: ${m.error}` : ''}`;
         banner.append(el('span', 'omp-error', text));
+      } else if (archived) {
+        // An archived conversation is only to read here: carrying it on means restoring it.
+        banner.append(el('span', 'omp-muted', 'Archived: restore it to carry it on.'), button('btn', 'Restore', restore));
       }
+      composer.root.hidden = archived;
       banner.hidden = banner.childElementCount === 0;
+    }
+
+    /** Moves the archived conversation back into omp's sessions, and shows it from there. */
+    function restore() {
+      const want = file;
+      if (!want) return;
+      daemon
+        .restorePastSession(want)
+        .then((restored) => {
+          if (!closed && file === want) ctx.setParams({ sessionFile: restored });
+        })
+        .catch((err) => {
+          addNote(state, 'error', 'restore', `Not restored: ${errorMessage(err)}`);
+          schedule();
+        });
     }
 
     function drawToolbar() {
