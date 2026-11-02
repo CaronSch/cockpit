@@ -3,7 +3,7 @@
  *
  * Every event for every session gets the next sequence number. A browser that reconnects
  * asks for events after the last one it saw; a fresh page gets the whole log. The log is
- * kept in memory for the daemon's lifetime (see RISKS.md, telemetry store growth).
+ * kept in memory, without what no window needs any more (omp/event-log.js).
  *
  * A session runs until it goes to sleep (`sleep.js`: idle and unused for a while) or the
  * daemon exits: no window owns one, so closing or switching a window never ends it. Asleep,
@@ -26,6 +26,7 @@ import { launchOmp } from './omp-session.js';
 import { SLEEP_AFTER_MS, sleepsNow } from './sleep.js';
 import { OMP_ID } from './unread.js';
 import { awaitsUser } from '../src/omp/activity.js';
+import { withoutSpent } from '../src/omp/event-log.js';
 import { applyEvent, createTranscript } from '../src/omp/transcript.js';
 /** @import { SessionEvent, SessionMeta } from './wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
@@ -63,7 +64,8 @@ const SWEEP_MS = 30_000;
 export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {} }) {
   const bootId = randomBytes(6).toString('hex');
   /** @type {SessionEvent[]} */
-  const log = [];
+  let log = [];
+  let latest = 0;
   /** @type {Map<string, OmpSession>} */
   const sessions = new Map();
   /**
@@ -78,8 +80,9 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
 
   /** @param {string} session @param {SessionEventBody} body */
   function emit(session, body) {
-    const event = /** @type {SessionEvent} */ ({ ...body, seq: log.length + 1, at: now(), session });
+    const event = /** @type {SessionEvent} */ ({ ...body, seq: ++latest, at: now(), session });
     log.push(event);
+    log = withoutSpent(log, event);
     const seen = activity.get(session);
     if (seen) {
       const file = seen.transcript.meta?.sessionFile ?? null;
@@ -91,7 +94,7 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
         onRewound(seen.rewoundFrom);
         seen.rewoundFrom = null;
       }
-      // A session that ended has nothing left to follow; its log stays for the windows.
+      // A session that ended has nothing left to follow.
       const status = seen.transcript.meta?.status;
       if (status === 'exited' || status === 'failed') activity.delete(session);
     }
@@ -145,9 +148,8 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       const seen = activity.get(id);
       return Boolean(session && seen && idleNow(session, seen.transcript));
     },
-    // Sequence numbers are 1-based log positions, so events after `seq` start at index `seq`.
-    since: (seq) => log.slice(Math.max(0, seq)),
-    latest: () => log.length,
+    since: (seq) => log.filter((event) => event.seq > seq),
+    latest: () => latest,
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);

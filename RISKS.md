@@ -23,11 +23,10 @@ Each entry gives: what goes wrong, and the planned response once the threshold i
   daemon. The daemon itself never runs as root. Read views say when the helper
   is off.
 - **The telemetry store grows without bound.** Prompts, responses and file
-  events add up quickly. The first such store already exists: the daemon keeps
-  every event since it started in memory and each page load replays all of it.
-  *Threshold detail:* the daemon passes 1 GB resident, or a page takes visibly
-  long to load its history. *Response:* retention by age and size, set by the
-  user; replay only what open windows need.
+  events add up quickly. The daemon's event log keeps only what windows still need
+  (`src/omp/event-log.js`): about the size of the awake conversations. A store that
+  keeps every event for telemetry views would not be so bounded. *Response:*
+  retention by age and size, set by the user, and keep it out of the page's replay.
 
 ## When the daemon restarts start costing work
 

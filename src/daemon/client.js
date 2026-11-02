@@ -1,9 +1,9 @@
 /**
  * Browser side of the daemon connection: one event stream per page, shared by every widget.
  *
- * Widgets subscribe per session and first receive everything already seen for it, so a
- * window mounted late (or after a reload) renders the same history as one that was open
- * all along. When the daemon restarts, its sessions are gone: buffers are cleared and
+ * Widgets subscribe per session and first receive everything still needed of it (see
+ * omp/event-log.js), so a window mounted late (or after a reload) renders the same history as
+ * one that was open all along. When the daemon restarts, its sessions are gone: buffers are cleared and
  * `onReset` listeners fire before any event from the new daemon is delivered.
  *
  * It keeps which conversations are unread (daemon/unread.js) and pinned (daemon/pins.js), and the daemon's settings
@@ -18,6 +18,7 @@
  * reports is the code this page loaded, and `onUiChange` hears when the files served stop
  * being, or become again, those.
  */
+import { withoutSpent } from '../omp/event-log.js';
 /** @import { Conversation, DaemonConfig, DirListing, HelloEvent, PastSession, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
@@ -215,6 +216,7 @@ export function createDaemonClient(env = {}) {
     let buffer = buffers.get(event.session);
     if (!buffer) buffers.set(event.session, (buffer = []));
     buffer.push(event);
+    buffers.set(event.session, withoutSpent(buffer, event));
     for (const fn of subscribers.get(event.session) ?? []) fn(event);
   }
 

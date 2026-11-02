@@ -375,8 +375,8 @@ describe('sessions', () => {
   });
 
   test('a reconnect with the current boot id gets only what it missed; a stale boot id gets everything', async () => {
-    const seen = hub.since(0).length;
-    const first = await readStream({ done: (_, ids) => ids.length >= seen });
+    const seen = hub.latest();
+    const first = await readStream({ done: (_, ids) => ids.at(-1) === `${hub.bootId}:${seen}` });
     const last = /** @type {string} */ (first.ids.at(-1));
     assert.equal(last, `${hub.bootId}:${seen}`);
 
@@ -388,7 +388,7 @@ describe('sessions', () => {
     assert.equal(resumed.ids[0], `${hub.bootId}:${seen + 1}`, 'nothing it had seen');
 
     const stale = await readStream({ lastEventId: `other-boot:${seen}`, done: (_, ids) => ids.length > 0 });
-    assert.equal(stale.ids[0], `${hub.bootId}:1`, 'everything');
+    assert.equal(stale.ids[0], `${hub.bootId}:${hub.since(0)[0].seq}`, 'everything');
   });
 
   test('a command is accepted at once, and omp’s answer, however slow, arrives on the stream', async () => {
@@ -431,6 +431,23 @@ describe('sessions', () => {
     const reply = forSession(events, id).findLast((e) => e.kind === 'frame' && e.frame.type === 'message_end');
     assert.ok(reply?.kind === 'frame');
     assert.match(JSON.stringify(reply.frame.message.content), /SQLite/);
+  });
+
+  test('the log keeps what windows still need: no finished stream\'s deltas, and of an ended session only how it ended', async () => {
+    const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
+    const { id } = json.session;
+    await waitForStatus(id, 'ready');
+    await rpc(id, { type: 'prompt', message: 'hello' });
+    await logged((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'session_settled');
+    const log = forSession(hub.since(0), id);
+    assert.ok(log.some((e) => e.kind === 'frame' && e.frame.type === 'message_end' && e.frame.message.role === 'assistant'), 'the reply is there');
+    assert.ok(!log.some((e) => e.kind === 'frame' && e.frame.assistantMessageEvent?.type === 'text_delta'), 'its deltas are not');
+
+    await call({ method: 'DELETE', path: `/api/sessions/${id}` });
+    await waitForStatus(id, 'exited');
+    const after = forSession(hub.since(0), id);
+    assert.equal(after.length, 1);
+    assert.equal(after[0].kind === 'session' && after[0].meta.status, 'exited');
   });
 
   test('closing a session stops omp and reports it exited', async () => {
@@ -539,7 +556,7 @@ describe('sessions', () => {
    * @param {string} id @param {string} message
    */
   async function turn(id, message) {
-    const from = hub.since(0).length;
+    const from = hub.latest();
     await rpc(id, { type: 'prompt', message });
     await logged((e) => e.seq > from && e.session === id && e.kind === 'frame' && e.frame.type === 'session_settled');
     await rpc(id, { type: 'get_state' });
