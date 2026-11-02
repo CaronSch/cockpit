@@ -859,17 +859,23 @@ function ensureTool(state, id, name) {
 }
 
 /**
- * The jobs a tool result tells of: one its call started (it went on in the background), and
- * those it reports ended (a `wait`'s `jobs`).
+ * The jobs a tool result tells of: those its call started (they went on in the background),
+ * and those it reports ended (a `wait`'s `jobs`, or a read or write of `proc://`'s, such as a
+ * job cancelled).
  * @param {Transcript} state @param {ToolRun} run @param {any} details @param {number | null} at
  */
 function noteJobs(state, run, details, at) {
   const job = details?.async;
   if (at !== null && job?.state === 'running' && typeof job.jobId === 'string') {
-    const label = run.intent ?? argsSummaryText(run.args) ?? run.name;
-    state.jobs.set(job.jobId, { id: job.jobId, type: String(job.type ?? run.name), label, toolCallId: run.id, startedAt: run.startedAt ?? at });
+    // A call starting several names only the first here, and all of them in `progress`; its intent is theirs together.
+    const spawned = Array.isArray(details.progress) ? details.progress.map((/** @type {any} */ p) => p?.id).filter((/** @type {unknown} */ id) => typeof id === 'string') : [];
+    const several = spawned.length > 1;
+    for (const id of several ? spawned : [job.jobId]) {
+      const label = several ? id : (run.intent ?? argsSummaryText(run.args) ?? run.name);
+      state.jobs.set(id, { id, type: String(job.type ?? run.name), label, toolCallId: run.id, startedAt: run.startedAt ?? at });
+    }
   }
-  endJobs(state, details?.jobs, true);
+  endJobs(state, details?.jobs ?? details?.proc?.jobs, true);
 }
 
 /**

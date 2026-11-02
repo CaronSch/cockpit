@@ -57,6 +57,28 @@ describe('running work', () => {
     assert.equal(state.jobs.size, 0);
   });
 
+  test('or until a read or write of proc:// reports it ended', () => {
+    const state = run([start(), backgrounded]);
+    const proc = (/** @type {string} */ status) => result({ proc: { op: 'cancel', jobs: [{ id: 'bg_1', type: 'bash', status }] } }, 'call_k', 'write');
+    applyEvent(state, proc('running'));
+    assert.equal(state.jobs.size, 1, 'still running');
+    applyEvent(state, proc('cancelled'));
+    assert.equal(state.jobs.size, 0);
+  });
+
+  test('a call starting several subagents runs them all, each under its own name', () => {
+    const progress = [{ id: 'Timing', status: 'pending' }, { id: 'Gas', status: 'pending' }];
+    const state = run([start('call_t', 'task'), result({ async: { state: 'running', jobId: 'Timing', type: 'task' }, progress }, 'call_t', 'task')]);
+    assert.deepEqual(runningWork(state).map((w) => [w.key, w.kind, w.label, w.background]), [['Timing', 'subagent', 'Timing', true], ['Gas', 'subagent', 'Gas', true]]);
+    applyEvent(state, result({ op: 'wait', jobs: [{ id: 'Timing', status: 'completed' }, { id: 'Gas', status: 'running' }] }, 'call_w', 'wait'));
+    assert.deepEqual([...state.jobs.keys()], ['Gas']);
+  });
+
+  test('one subagent keeps the call\'s intent', () => {
+    const state = run([start('call_t', 'task'), result({ async: { state: 'running', jobId: 'Blind', type: 'task' }, progress: [{ id: 'Blind' }] }, 'call_t', 'task')]);
+    assert.equal(state.jobs.get('Blind')?.label, 'Deploying');
+  });
+
   test('jobs end with their omp, and those in history are long gone', () => {
     const state = run([start(), backgrounded]);
     applyEvent(state, { kind: 'session', meta: /** @type {any} */ ({ id: 's1', status: 'exited' }), seq: ++seq, at: 0, session: 's1' });
