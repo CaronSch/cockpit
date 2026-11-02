@@ -1788,6 +1788,17 @@ test('while the agent works through its todo list, the toolbar shows how far it 
   await expect(progress, 'no turn, no progress').toBeHidden();
 });
 
+test('subagents started together all show as running until cancelled', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  const running = pane.locator('.omp-running');
+  await send(pane, 'spawn'); // Alpha and Beta, in the background
+  await expect(running).toContainText('Alpha');
+  await expect(running).toContainText('Beta');
+  await send(pane, 'kill'); // cancelled through proc://
+  await expect(running).toBeHidden();
+});
+
 test('a shell the agent backgrounds shows as running until its result comes', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

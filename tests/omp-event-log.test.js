@@ -34,10 +34,10 @@ const TURN = [
  */
 function logOf(frames, session = 's1', start = []) {
   let log = start;
-  frames.forEach((frame, i) => {
-    const event = /** @type {SessionEvent} */ ({ kind: 'frame', frame, seq: log.length + i + 1, at: 1000, session });
+  for (const frame of frames) {
+    const event = /** @type {SessionEvent} */ ({ kind: 'frame', frame, seq: 0, at: 1000, session });
     log = withoutSpent([...log, event], event);
-  });
+  }
   return log;
 }
 

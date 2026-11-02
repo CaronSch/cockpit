@@ -175,7 +175,7 @@ What runs today:
   without a list shows none. A Running line above the message box lists the shells
   and subagents running now with how long each has run (`omp/running-work.js`): the
   calls the turn waits on, and the background jobs omp handed them off to (a
-  result's `details.async`, ended by an `async-result` message or a `wait`), which
+  result's `details.async` and `progress`, ended by an `async-result` message, a `wait` or `proc://`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Markdown table in a reply has a Copy button (on
   hover) for Markdown, CSV or a PNG image drawn from its cells. Selected
   reply text can be commented on (the comment goes quoted with the next prompt)

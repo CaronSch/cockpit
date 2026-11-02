@@ -8,6 +8,8 @@
  * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
  * - contains "ask": an `ask` dialog; the reply names the chosen option
+ * - contains "spawn": a `task` call starting subagents Alpha and Beta in the background, which
+ *   run until a prompt containing "kill" cancels them through `proc://` (shapes of omp 18.12.6)
  * - contains "mystery": emits a frame type no client knows
  * - contains "garble": writes a stdout line that is not JSON
  * - contains "table": replies with a markdown table; with "wide" too, a heading, a table wider
@@ -220,6 +222,17 @@ function backgroundCall() {
   }, 2000);
 }
 
+/** A call starting two subagents: its result names the first in `details.async`, both in `progress`. */
+function spawnCall() {
+  const progress = ['Alpha', 'Beta'].map((id, index) => ({ index, id, agent: 'task', status: 'pending' }));
+  runTool('task', { tasks: [] }, 'Spawning two agents', { content: [{ type: 'text', text: 'Spawned 2 background agents using task.' }], details: { results: [], progress, async: { state: 'running', jobId: 'Alpha', type: 'task' } } });
+}
+
+function killCall() {
+  const jobs = ['Alpha', 'Beta'].map((id) => ({ id, type: 'task', status: 'cancelled' }));
+  runTool('write', { path: 'proc://all/kill', content: '' }, 'Cancelling agents', { content: [{ type: 'text', text: 'Cancelled.' }], details: { proc: { op: 'cancel', jobs } } });
+}
+
 function todoCall() {
   const tasks = [
     { content: 'Read the code', status: 'completed' },
@@ -260,6 +273,8 @@ async function runPrompt(id, text) {
   if (/tool/.test(text)) toolCall();
   if (/todo/.test(text)) todoCall();
   if (/background/.test(text)) backgroundCall();
+  if (/spawn/.test(text)) spawnCall();
+  if (/kill/.test(text)) killCall();
   if (/slow/.test(text)) {
     // A turn's middle: an intermediate reply and a tool run, then a pause before the final reply.
     streamAssistant('Let me check first.', null, { stopReason: 'toolUse' }); // it goes on to call a tool, as omp marks it
