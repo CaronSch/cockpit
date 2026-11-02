@@ -18,7 +18,7 @@
  *
  * New, Fork, Accounts and Stop sit in the window's top bar, beside its close button.
  */
-import { button, el } from '../ui/dom.js';
+import { button, el, setText } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
@@ -37,7 +37,8 @@ import { turnProgress } from '../omp/todos.js';
 import { elapsed, runningWork } from '../omp/running-work.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
 import { branchEntry, pointKey, rewindPoint } from '../omp/rewind.js';
-import { isRunning } from '../sessions/running.js';
+import { conversationKey, isRunning } from '../sessions/running.js';
+import { readDraft, writeDraft } from '../omp/drafts.js';
 import { focusOnClick } from '../ui/click-focus.js';
 import { settings } from '../ui/settings.js';
 /** @import { WidgetContext } from './registry.js' */
@@ -60,6 +61,17 @@ const REFUSED = 'The daemon refused this page.';
 const FORK_TITLE = 'Fork: continue a copy of this conversation in a new window';
 const NOTHING_TO_FORK = 'Nothing to fork yet: the conversation is saved once the agent has replied';
 const SEND_TITLE = 'Drag onto the grid to send this in a fork of the conversation instead';
+
+/**
+ * Whether the page is going away: its requests are cut off then, which says nothing of whether
+ * omp got them, so a message cut off this way is not given back to the box (and kept there).
+ * Set from `beforeunload`, which comes before the browser cuts them off (a busy page can hear
+ * of the cut-off request before `pagehide`), and from `pagehide`, for a page left without it.
+ */
+let leaving = false;
+addEventListener('beforeunload', () => (leaving = true));
+addEventListener('pagehide', () => (leaving = true));
+addEventListener('pageshow', () => (leaving = false));
 
 export default {
   type: 'omp',
@@ -101,6 +113,8 @@ function createPane(body, ctx, daemon) {
   let view = null;
   /** Views made so far, so each gets its own id. */
   let views = 0;
+  /** Whether the next view to show takes the focus: the agent just started from the setup form. */
+  let focusNext = false;
   /** @type {string | null} */
   let home = null;
   daemon
@@ -180,6 +194,10 @@ function createPane(body, ctx, daemon) {
     }
     show(`view:${view.id}`, () => [view?.root ?? el('div')]);
     view.update();
+    if (focusNext) {
+      focusNext = false;
+      view.focus();
+    }
   }
 
   /** @param {string} status */
@@ -267,6 +285,8 @@ function createPane(body, ctx, daemon) {
         .createSession({ cwd: dir })
         .then((meta) => {
           ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: null });
+          // The folder picked, the prompt comes next: its box takes the focus from the form.
+          focusNext = true;
           schedule();
         })
         .catch((err) => {
@@ -337,7 +357,7 @@ function createPane(body, ctx, daemon) {
   /**
    * The conversation the window's params name: awake (a session's events) or asleep (its
    * journal), and woken by what needs omp.
-   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, update(): void, markRead(): void, destroy(): void }} SessionView
+   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, update(): void, focus(): void, markRead(): void, destroy(): void }} SessionView
    * @returns {SessionView}
    */
   function createSessionView() {
@@ -347,7 +367,7 @@ function createPane(body, ctx, daemon) {
     let session = null;
     /** The conversation's journal, as the window was given it or omp has reported it. */
     let file = started.sessionFile;
-    /** What the journal said of the conversation, while asleep. @type {{ id: string, cwd: string | null } | null} */
+    /** What the journal said of the conversation, while asleep. @type {{ id: string, cwd: string | null, archived: boolean } | null} */
     let asleep = null;
     /** Waking the conversation: resolves with the session once it is ready. @type {Promise<string> | null} */
     let waking = null;
@@ -439,6 +459,8 @@ function createPane(body, ctx, daemon) {
         schedule();
       },
       shellDir: () => ({ label: tildeHome(cwd(), home), path: cwd() }),
+      // Kept for the conversation; while rewinding, what the box held before (see `rewind`).
+      onChange: () => keepDraft(),
     });
     const { draft, sendBtn } = composer;
     const selectionPopup = attachSelectionPopup({
@@ -516,7 +538,7 @@ function createPane(body, ctx, daemon) {
         .conversation(want)
         .then((conversation) => {
           if (closed || session !== null || file !== want) return;
-          asleep = { id: conversation.id, cwd: conversation.cwd };
+          asleep = { id: conversation.id, cwd: conversation.cwd, archived: conversation.archived === true };
           seedConversation(state, conversation);
           schedule();
         })
@@ -532,17 +554,16 @@ function createPane(body, ctx, daemon) {
     }
 
     /**
-     * The session holding the conversation, once it is ready: this one (still starting, maybe),
-     * the one another window woke, or a new one resuming the journal (or, for a conversation
-     * omp never saved, a new one in its directory). Rejects when omp cannot start.
+     * The session holding the conversation, once it is ready: this one (still starting, perhaps),
+     * the one another window woke, or a new one resuming the journal (or, for a conversation omp
+     * never saved, a new one in its directory). Rejects when omp cannot start.
      * @returns {Promise<string>}
      */
     function wake() {
       if (ready() && session) return Promise.resolve(session);
       waking ??= (async () => {
-        // A new conversation's session names no journal until it is ready: never start a second.
-        const current = meta();
-        const running = current && isRunning(current) ? current.id : holding(file);
+        const own = meta();
+        const running = own && isRunning(own) ? own.id : holding(file);
         const id = running ?? (await daemon.createSession(file && saved() ? { cwd: cwd() || '~', resume: file } : { cwd: cwd() || '~' })).id;
         if (id !== session) follow(id);
         await untilReady(id);
@@ -593,6 +614,17 @@ function createPane(body, ctx, daemon) {
     // path in the journal) and sends the box as the prompt in its place.
     /** The prompt this window is rewinding to (`key` as the transcript has it now), and the box as it was before. @type {{ key: string, point: import('../omp/rewind.js').RewindPoint, draft: string } | null} */
     let rewind = null;
+
+    // ── the unsent message, kept for the conversation (omp/drafts.js) ──
+    const draftKey = () => conversationKey({ sessionFile: file, session: session ?? started.session });
+    /** Keeps what the box holds; while rewinding, what it held before (see `rewind`). */
+    function keepDraft() {
+      const key = draftKey();
+      if (key) writeDraft(key, rewind ? { ...composer.kept, text: rewind.draft } : composer.kept);
+    }
+    const kept = draftKey();
+    if (kept) composer.load(readDraft(kept));
+
     const rewindBar = el('div', 'omp-rewind-bar');
     rewindBar.setAttribute('role', 'status');
     const rewindText = el('span', 'omp-rewind-text');
@@ -674,6 +706,7 @@ function createPane(body, ctx, daemon) {
       const res = await rpc({ type: 'branch', entryId });
       if (!res?.success) return false;
       rewind = null;
+      keepDraft();
       if (state.rewinds === after) await new Promise((resolve) => reseedWaiters.push({ after, resolve: () => resolve(undefined) }));
       return true;
     }
@@ -716,7 +749,7 @@ function createPane(body, ctx, daemon) {
             : { type: 'prompt', message: text };
       void rpc(request).then((res) => {
         // Give it all back if omp refused it and nothing new has been written since.
-        if (!res || !res.success) taken.restore();
+        if ((!res || !res.success) && !leaving) taken.restore();
       });
     }
 
@@ -853,10 +886,14 @@ function createPane(body, ctx, daemon) {
       draft,
       syntax: MENTIONS,
       list: suggestions,
-      // A path in the message names a file in the conversation's directory, unless it says otherwise.
-      listDir: (dir) => daemon.listFiles(/^[~/]/.test(dir) || !cwd() ? dir : `${cwd().replace(/\/$/, '')}/${dir}`),
+      listDir: listMentioned,
       replace: (start, end, text) => composer.replace(start, end, text),
     });
+
+    /** A path in a message names a file in the conversation's directory, unless it says otherwise. @param {string} dir */
+    function listMentioned(dir) {
+      return daemon.listFiles(/^[~/]/.test(dir) || !cwd() ? dir : `${cwd().replace(/\/$/, '')}/${dir}`);
+    }
 
     function hideSuggestions() {
       files.close();
@@ -1027,7 +1064,7 @@ function createPane(body, ctx, daemon) {
             addNote(state, 'error', 'dialog', errorMessage(err));
             schedule();
           });
-        });
+        }, listMentioned);
         dialogNodes.set(dialog.id, n);
         dialogs.append(n);
       }
@@ -1117,7 +1154,8 @@ function createPane(body, ctx, daemon) {
     function drawBanner() {
       const m = meta();
       const connection = daemon.status();
-      const key = JSON.stringify([m?.status, m?.exitCode, m?.error, connection, params().sessionFile]);
+      const archived = asleep?.archived === true;
+      const key = JSON.stringify([m?.status, m?.exitCode, m?.error, connection, params().sessionFile, archived]);
       if (key === bannerKey) return;
       bannerKey = key;
       banner.replaceChildren();
@@ -1129,29 +1167,48 @@ function createPane(body, ctx, daemon) {
         banner.classList.add('is-ended');
         const text = m.status === 'failed' ? `The agent failed${m.error ? `: ${m.error}` : ''}` : `The agent exited${m.exitCode !== null ? ` (code ${m.exitCode})` : ''}${m.error ? `: ${m.error}` : ''}`;
         banner.append(el('span', 'omp-error', text));
+      } else if (archived) {
+        // An archived conversation is only to read here: carrying it on means restoring it.
+        banner.append(el('span', 'omp-muted', 'Archived: restore it to carry it on.'), button('btn', 'Restore', restore));
       }
+      composer.root.hidden = archived;
       banner.hidden = banner.childElementCount === 0;
     }
 
+    /** Moves the archived conversation back into omp's sessions, and shows it from there. */
+    function restore() {
+      const want = file;
+      if (!want) return;
+      daemon
+        .restorePastSession(want)
+        .then((restored) => {
+          if (!closed && file === want) ctx.setParams({ sessionFile: restored });
+        })
+        .catch((err) => {
+          addNote(state, 'error', 'restore', `Not restored: ${errorMessage(err)}`);
+          schedule();
+        });
+    }
+
     function drawToolbar() {
-      cwdEl.textContent = shortCwd(cwd());
+      setText(cwdEl, shortCwd(cwd()));
       cwdEl.title = cwd();
       const s = state.session;
-      modelBtn.textContent = s.model ? s.model.name || s.model.id : 'model…';
+      setText(modelBtn, s.model ? s.model.name || s.model.id : 'model…');
       modelBtn.title = s.model ? `${s.model.provider}/${s.model.id}` : 'Choose model';
-      thinkingBtn.textContent = s.thinkingLevel ? `think: ${s.thinkingLevel}` : 'think…';
-      activity.textContent = state.streaming ? 'working' : waking ? 'waking…' : 'idle';
+      setText(thinkingBtn, s.thinkingLevel ? `think: ${s.thinkingLevel}` : 'think…');
+      setText(activity, state.streaming ? 'working' : waking ? 'waking…' : 'idle');
       activity.classList.toggle('is-streaming', state.streaming);
       const progress = turnProgress(state);
       progressEl.hidden = !progress;
       if (progress) {
         progressBar.max = progress.total;
         progressBar.value = progress.done;
-        progressCount.textContent = `${progress.done}/${progress.total}`;
+        setText(progressCount, `${progress.done}/${progress.total}`);
         progressEl.title = `${progress.done} of ${progress.total} tasks done${progress.current ? `\nNow: ${progress.current}` : ''}`;
       }
-      contextEl.textContent = s.contextPercent !== null ? `ctx ${s.contextPercent.toFixed(1)}%` : '';
-      costEl.textContent = state.cost > 0 ? `$${state.cost < 1 ? state.cost.toFixed(3) : state.cost.toFixed(2)}` : '';
+      setText(contextEl, s.contextPercent !== null ? `ctx ${s.contextPercent.toFixed(1)}%` : '');
+      setText(costEl, state.cost > 0 ? `$${state.cost < 1 ? state.cost.toFixed(3) : state.cost.toFixed(2)}` : '');
       errorBadge.hidden = !state.lastError;
       errorBadge.title = state.lastError ?? '';
       const live = ready();
@@ -1203,7 +1260,11 @@ function createPane(body, ctx, daemon) {
       // with it. omp reports a new conversation's journal as it starts (and another on /new).
       const reported = meta()?.sessionFile;
       if (reported && reported !== file) {
+        // The conversation's key may change with it (a new one's session named it so far).
+        const before = draftKey();
         file = reported;
+        if (before && before !== draftKey()) writeDraft(before, { text: '', cards: [] });
+        keepDraft();
         ctx.setParams({ sessionFile: reported });
       }
       const name = conversationName(state);
@@ -1252,6 +1313,7 @@ function createPane(body, ctx, daemon) {
       root: node,
       shows: (p) => (p.sessionFile !== null && p.sessionFile === file) || (p.session !== null && (p.session === session || p.session === started.session)),
       update,
+      focus: () => draft.focus(),
       markRead: used,
       destroy() {
         closed = true;

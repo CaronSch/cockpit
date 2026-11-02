@@ -126,12 +126,41 @@ describe('link safety', () => {
     assert.equal(safeHref('java\tscript:alert(1)'), null);
   });
 
+  test('an image file on this machine is an image; a remote or relative one is never fetched', () => {
+    assert.deepEqual(parseInline('see ![p90 [hourly]](/Users/me/chart.png) here'), [
+      { type: 'text', text: 'see ' },
+      { type: 'image', path: '/Users/me/chart.png', alt: 'p90 [hourly]' },
+      { type: 'text', text: ' here' },
+    ]);
+    assert.deepEqual(parseInline('![x](~/out/a.JPEG)'), [{ type: 'image', path: '~/out/a.JPEG', alt: 'x' }]);
+    assert.deepEqual(parseInline('![x](https://evil.example/?q=secret.png)'), [
+      { type: 'text', text: '!' },
+      { type: 'link', href: 'https://evil.example/?q=secret.png', children: [{ type: 'text', text: 'x' }] },
+    ]);
+    /** @param {string} source */
+    const text = (source) => parseInline(source).map((n) => (n.type === 'text' ? n.text : n.type)).join('');
+    assert.equal(text('![x](chart.png)'), '!x');
+    assert.equal(text('![x](/etc/passwd)'), '!x', 'only image files');
+  });
+
   test('bare URLs are linked without trailing punctuation', () => {
     assert.deepEqual(parseInline('see https://example.com/x.'), [
       { type: 'text', text: 'see ' },
       { type: 'link', href: 'https://example.com/x', children: [{ type: 'text', text: 'https://example.com/x' }] },
       { type: 'text', text: '.' },
     ]);
+  });
+});
+
+describe('visuals', () => {
+  test('a closed mermaid or vega-lite fence is a visual; one still streaming, or any other language, is code', () => {
+    assert.deepEqual(parseMarkdown('```mermaid\nflowchart LR\n  A --> B\n```'), [{ type: 'visual', lang: 'mermaid', source: 'flowchart LR\n  A --> B' }]);
+    assert.deepEqual(parseMarkdown('```vega-lite\n{"mark": "bar"}\n```\nafter'), [
+      { type: 'visual', lang: 'vega-lite', source: '{"mark": "bar"}' },
+      { type: 'paragraph', children: [{ type: 'text', text: 'after' }] },
+    ]);
+    assert.deepEqual(parseMarkdown('```mermaid\nflowchart LR'), [{ type: 'code', lang: 'mermaid', text: 'flowchart LR' }]);
+    assert.deepEqual(parseMarkdown('```vega\n{}\n```'), [{ type: 'code', lang: 'vega', text: '{}' }]);
   });
 });
 

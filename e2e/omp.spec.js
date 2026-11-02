@@ -142,6 +142,70 @@ test('a streamed reply renders once, as markdown, even though omp pre-fills mess
   await expect(pane.getByText('idle')).toBeVisible();
 });
 
+test('an image file a reply names is shown in it, a click away from full size; one that is gone says so', async ({ page }) => {
+  // A 1×1 PNG, as an agent's chart would be written.
+  const png = join(mkdtempSync(join(tmpdir(), 'ac-e2e-image-')), 'chart.png');
+  writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==', 'base64'));
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, `see ![p90 chart](${png}) and ![gone](${png}.missing.png)`);
+  const reply = pane.locator('.omp-assistant').last();
+  const image = reply.getByRole('img', { name: 'p90 chart' });
+  await expect(image).toBeVisible();
+  expect(await image.evaluate((img) => /** @type {HTMLImageElement} */ (img).naturalWidth)).toBe(1);
+  await expect(reply.locator('a.md-image')).toHaveAttribute('target', '_blank');
+  await expect(reply.locator('.md-image-missing')).toHaveText(`gone: image not found (${png}.missing.png)`);
+  problems = problems.filter((p) => !p.includes('404')); // the browser logs the missing image's 404 itself
+
+  // Redrawn under the same name (2×1 now), the chart a later reply shows is the new one.
+  writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8DwH4QBEfcD/ePF9e8AAAAASUVORK5CYII=', 'base64'));
+  await send(pane, `again ![p90 chart](${png})`);
+  const redrawn = pane.locator('.omp-assistant').last().getByRole('img', { name: 'p90 chart' });
+  await expect.poll(() => redrawn.evaluate((img) => /** @type {HTMLImageElement} */ (img).naturalWidth)).toBe(2);
+  const earlier = pane.locator('.omp-assistant').first().getByRole('img', { name: 'p90 chart' });
+  expect(await earlier.evaluate((img) => /** @type {HTMLImageElement} */ (img).naturalWidth), 'the earlier reply keeps its own').toBe(1);
+});
+
+test('a reply draws its mermaid diagrams and vega-lite charts, reading data only from files on this machine', async ({ page }) => {
+  const data = join(mkdtempSync(join(tmpdir(), 'ac-e2e-chart-')), 'series.json');
+  writeFileSync(data, JSON.stringify([{ build: 'old', p90: 21 }, { build: 'mid', p90: 15 }, { build: 'new', p90: 10 }]));
+  /** @param {object} spec */
+  const chart = (spec) => ['```vega-lite', JSON.stringify(spec), '```'].join('\n');
+  const bars = { mark: 'bar', encoding: { x: { field: 'build', type: 'nominal' }, y: { field: 'p90', type: 'quantitative' } } };
+  /** @type {string[]} */
+  const offsite = [];
+  page.on('request', (r) => void (new URL(r.url()).hostname !== '127.0.0.1' && !r.url().startsWith('data:') && offsite.push(r.url())));
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, ['say: Before and after:', '```mermaid', 'flowchart LR', '  A[Searcher] --> B[Nova]', '```', chart({ ...bars, data: { values: [{ build: 'a', p90: 1 }, { build: 'b', p90: 2 }] } }), chart({ ...bars, data: { url: data } })].join('\n'));
+  const reply = pane.locator('.omp-assistant').last();
+  await expect(reply.locator('.md-visual.is-mermaid svg')).toContainText('Nova');
+  const [inline, fromFile] = [reply.locator('.md-visual.is-vega-lite').nth(0), reply.locator('.md-visual.is-vega-lite').nth(1)];
+  await expect(inline.locator('.mark-rect path')).toHaveCount(2);
+  await expect(fromFile.locator('.mark-rect path')).toHaveCount(3);
+
+  // Bars on a log scale are drawn: Vega-Lite would stack them from zero, which a log scale lacks.
+  await send(pane, ['say: Log scale:', chart({ ...bars, encoding: { ...bars.encoding, y: { ...bars.encoding.y, scale: { type: 'log' } } }, data: { values: [{ build: 'a', p90: 15 }, { build: 'b', p90: 1000 }] } })].join('\n'));
+  const logBars = pane.locator('.omp-assistant').last().locator('.mark-rect path');
+  await expect(logBars).toHaveCount(2);
+  expect(await logBars.evaluateAll((paths) => paths.map((p) => p.getBoundingClientRect().height > 0))).toEqual([true, true]);
+  await expect(reply.locator('pre')).toHaveCount(0); // drawn, not shown as code
+
+  // The pointer resting on a chart turns it live, in place.
+  await inline.hover();
+  await expect(inline.locator('.vega-embed, svg.marks, canvas, svg').first()).toBeVisible();
+  await expect(inline.locator('.mark-rect path')).toHaveCount(2);
+
+  // A spec that would fetch from the web is not drawn: it shows as code, with why.
+  await send(pane, ['say: Remote:', chart({ ...bars, data: { url: 'https://example.com/leak?secret=1' } }), '```mermaid', 'flowchart LR', '  A[ -->', '```'].join('\n'));
+  const failed = pane.locator('.omp-assistant').last();
+  await expect(failed.locator('.md-visual-error').first()).toContainText('only files on this machine');
+  await expect(failed.locator('.md-visual-error')).toHaveCount(2);
+  await expect(failed.locator('pre[data-lang="mermaid"]')).toContainText('flowchart LR');
+  expect(offsite.filter((url) => !url.includes('fonts.')), 'nothing left this machine').toEqual([]);
+  problems = problems.filter((p) => !/mermaid|Parse error|Syntax error/i.test(p)); // Mermaid logs what it could not parse
+});
+
 test('the conversation reads like a terminal: no "you" label, one font for the whole app', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
@@ -291,6 +355,7 @@ test('a focused message box lifts its border instead of drawing the accent outli
       const s = getComputedStyle(el);
       return { outline: s.outlineStyle, border: s.borderTopColor };
     });
+  await draft.blur(); // a new agent's box starts focused
   const idle = await look();
   await draft.focus();
   const focused = await look();
@@ -567,6 +632,16 @@ test('a click in the pane puts the caret in the message box, unless it is on a c
   await expect(pane.getByRole('button', { name: 'Comment' })).toBeVisible();
   await expect(draft).not.toBeFocused();
   await page.evaluate(() => getSelection()?.removeAllRanges());
+
+  // The thinking toggle is its arrow and word: a click in the empty width beside them is the pane's.
+  const thinking = reply.locator('.omp-thinking');
+  const row = /** @type {{ x: number, y: number, width: number, height: number }} */ (await thinking.boundingBox());
+  const toggle = /** @type {{ x: number, width: number }} */ (await thinking.locator('summary').boundingBox());
+  expect(toggle.width, 'no wider than its words').toBeLessThan(row.width / 4);
+  await page.mouse.click(toggle.x + toggle.width + 40, row.y + row.height / 2);
+  await expect(thinking).not.toHaveAttribute('open', '');
+  await expect(draft).toBeFocused();
+  await draft.evaluate((d) => d.blur());
 
   // Controls keep their clicks: the thinking toggle, a link, a toolbar button.
   await reply.locator('.omp-thinking summary').click();
@@ -1235,6 +1310,19 @@ test('a tool call is one card whose output appears when expanded', async ({ page
   await expect(card.locator('pre').last()).toHaveText('hi');
 });
 
+test('starting an agent puts the cursor in its message box, and starts it once', async ({ page }) => {
+  await openWorkbench(page);
+  let created = 0;
+  page.on('request', (r) => void (r.method() === 'POST' && r.url().endsWith('/api/sessions') && created++));
+  const pane = await addOmpPane(page);
+  await pane.locator('input').fill(PROJECT);
+  await pane.locator('input').press('Enter');
+  await expect(pane.locator('textarea')).toBeFocused();
+  await send(pane, 'hello');
+  await expect(pane.locator('.omp-assistant', { hasText: 'You said: hello' })).toBeVisible();
+  expect(created).toBe(1);
+});
+
 test('the top bar’s Config opens on hover or a click and shows only prompts and final replies in every agent window, across a reload', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
@@ -1271,11 +1359,11 @@ test('the top bar’s Config opens on hover or a click and shows only prompts an
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
-  // A running turn is one indicator: its intermediate reply and tool run stay hidden.
+  // A running turn is one indicator: its tool run stays hidden, its narration shows.
   await send(pane, 'slow');
   await expect(pane.locator('.omp-working')).toHaveText('Working… 2 steps');
   await expect(pane.locator('.omp-tool')).toHaveCount(0);
-  await expect(pane.getByText('Let me check first.')).toHaveCount(0);
+  await expect(pane.getByText('Let me check first.')).toBeVisible();
   await expect(pane.locator('.omp-assistant').last()).toContainText('You said: slow');
   await expect(pane.locator('.omp-working')).toHaveCount(0);
 
@@ -1291,7 +1379,6 @@ test('the top bar’s Config opens on hover or a click and shows only prompts an
   await only.uncheck();
   await expect(pane.locator('.omp-tool')).toHaveCount(2);
   await expect(pane.locator('.omp-thinking')).toHaveCount(1);
-  await expect(pane.getByText('Let me check first.')).toBeVisible();
   await expect(other.locator('.omp-tool')).toHaveCount(1);
 });
 
@@ -1305,6 +1392,26 @@ test('an ask dialog is answered from the pane and omp continues with the answer'
   await dialog.getByRole('button', { name: 'Submit' }).click();
   await expect(pane.locator('.omp-assistant').last()).toHaveText('You picked SQLite.');
   await expect(dialog.getByText('Which database?')).toHaveCount(0);
+});
+
+test('an ask dialog answer suggests @ paths as the message box does', async ({ page }) => {
+  mkdirSync(join(PROJECT, 'searcher'), { recursive: true });
+  writeFileSync(join(PROJECT, 'searcher', 'stream.rs'), '');
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'ask me');
+  const dialog = pane.locator('.omp-dialogs');
+  const answer = dialog.getByPlaceholder('Or type your own answer');
+  await answer.pressSequentially('see @sea');
+  const rows = dialog.locator('.omp-suggest').getByRole('option');
+  await expect(rows).toHaveText(['searcher/']);
+  await answer.press('Tab');
+  await expect(rows).toHaveText(['stream.rs']);
+  await answer.press('Enter');
+  await expect(answer).toHaveValue('see @searcher/stream.rs ');
+  await expect(dialog.locator('.omp-suggest')).toBeHidden();
+  await dialog.getByRole('button', { name: 'Submit' }).click();
+  await expect(pane.locator('.omp-assistant').last()).toHaveText('You picked see @searcher/stream.rs.');
 });
 
 test('frames the pane does not know and stdout that is not JSON are shown, not dropped', async ({ page }) => {
@@ -1369,6 +1476,18 @@ test('Fork continues a copy of the conversation in a new pane, as a session of i
   expect(theirs.sessionFile).toMatch(/\.jsonl$/);
   expect(mine.sessionFile).not.toBe(theirs.sessionFile);
   expect(mine.fork).toBeNull();
+});
+
+test('a fork reached for while its omp is still starting goes on once it is up', async ({ page }) => {
+  await openWorkbench(page);
+  const source = await startedPane(page, mkdtempSync(join(tmpdir(), 'ac-e2e-slow-start-')));
+  await send(source, 'shared start');
+  await expect(source.locator('.omp-assistant').last()).toContainText('You said: shared start');
+  const forked = await paneAddedBy(page, () => source.getByRole('button', { name: 'Fork', exact: true }).click());
+  await forked.locator('textarea').click();
+  await expect(forked.getByText('idle')).toBeVisible({ timeout: 5000 });
+  await send(forked, 'fork only');
+  await expect(forked.locator('.omp-assistant').last()).toContainText('You said: fork only');
 });
 
 test('windows only render: the daemon asks omp for the state and a fork’s history, never the page', async ({ page }) => {
@@ -1682,6 +1801,40 @@ test('a shell the agent backgrounds shows as running until its result comes', as
   await expect(running.locator('.omp-chip-text')).toHaveText('Deploying');
   await expect(running.locator('.omp-chip-time')).toHaveText(/^\d+s$/);
   await expect(running).toBeHidden();
+});
+
+test('a comment and a file waiting for the next prompt are kept with it across a reload', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'hello');
+  await pane.locator('.omp-assistant').last().locator('strong').dblclick();
+  await pane.getByRole('button', { name: 'Comment' }).click();
+  const box = pane.getByRole('textbox', { name: 'Comment on the selected text' });
+  await box.fill('why this word?');
+  await box.press('Enter');
+  const draft = pane.locator('textarea');
+  await draft.evaluate((node) => {
+    const data = new DataTransfer();
+    data.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }));
+    node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(pane.locator('.omp-card.is-file')).not.toHaveClass(/is-uploading/);
+  await draft.fill('and the next step?');
+
+  await page.reload();
+  await expect(draft).toHaveValue('and the next step?');
+  await expect(pane.locator('.omp-card.is-comment')).toContainText('why this word?');
+  await expect(pane.locator('.omp-card.is-file')).toContainText('notes.txt');
+
+  const sent = page.waitForRequest((r) => r.url().endsWith('/rpc') && r.postDataJSON()?.type === 'prompt');
+  await draft.press('Enter');
+  const message = (await sent).postDataJSON().message;
+  expect(message).toContain('> hello\n\nwhy this word?');
+  expect(message).toContain('notes.txt');
+  await expect(pane.locator('.omp-card')).toHaveCount(0);
+  await page.reload();
+  await expect(pane.locator('.omp-user').last()).toContainText('and the next step?');
+  await expect(pane.locator('.omp-card'), 'sent: nothing comes back').toHaveCount(0);
 });
 
 /** The daemon's view of session `id`. @param {Page} page @param {string} id */

@@ -16,6 +16,10 @@ export const INDEX_FILE = 'index.html';
  */
 export const VENDOR_FILES = /** @type {Record<string, string>} */ ({
   'vendor/temml.mjs': 'node_modules/temml/dist/temml.mjs',
+  // Loaded only when a reply holds a diagram or chart (src/omp/visuals.js): classic scripts.
+  'vendor/mermaid.min.js': 'node_modules/mermaid/dist/mermaid.min.js',
+  'vendor/vega.min.js': 'node_modules/vega/build/vega.min.js',
+  'vendor/vega-lite.min.js': 'node_modules/vega-lite/build/vega-lite.min.js',
 });
 /** The file types served, and so the only ones a version counts. */
 export const CONTENT_TYPES = /** @type {Record<string, string>} */ ({

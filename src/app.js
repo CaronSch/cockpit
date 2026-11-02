@@ -19,6 +19,7 @@ import { createNotifier } from './sessions/notify.js';
 import { sessionLinks } from './sessions/links.js';
 import { createZoomControl } from './ui/zoom.js';
 import { createConfigMenu } from './ui/settings.js';
+import { createSpotlight } from './ui/spotlight.js';
 import { button, el } from './ui/dom.js';
 import { getDaemon } from './daemon/client.js';
 import { openScreen } from './workspace/screen.js';
@@ -379,6 +380,7 @@ export async function createApp(root) {
     createScreenSwitcher({ opened, describe: (tree) => describeWindows(tree, titleOf) }).root,
   );
   query(root, '.topbar-actions').prepend(createZoomControl().root);
+  query(root, '.topbar-actions').prepend(createSpotlight({ daemon, show: (params) => showWidget('omp', params) }).root);
   query(root, '.topbar-actions').prepend(createConfigMenu({ daemon }).root);
   query(root, '.topbar-actions').prepend(
     createNotifier({

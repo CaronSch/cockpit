@@ -10,6 +10,7 @@ import { SessionNotRunning } from './omp-session.js';
 import { OMP_ID } from './unread.js';
 import { isSettingsPatch } from './settings.js';
 import { listDirectory, resolvePath } from './files.js';
+import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
 import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
 import { isValidTree } from '../src/layout/grid-model.js';
@@ -22,6 +23,7 @@ import { CONTENT_TYPES, INDEX_FILE, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @typedef {ReturnType<typeof import('./attachments.js').createAttachments>} Attachments */
 /** @typedef {ReturnType<typeof import('./workspace.js').createWorkspaces>} Workspaces */
 /** @import { Unread, UnreadStore } from './unread.js' */
+/** @import { Pinned, PinsStore } from './pins.js' */
 /** @import { DaemonSettings, SettingsStore } from './settings.js' */
 /** @typedef {(req: BunRequest, server: Server<undefined>) => Response | Promise<Response>} Handler */
 
@@ -45,6 +47,17 @@ const ASSET_HEADERS = {
   'cache-control': 'private, max-age=31536000, immutable',
   'content-security-policy': "sandbox; default-src 'none'; img-src 'self'; frame-ancestors 'none'",
 };
+
+/** What a reply may show from this machine: images, and the data files a chart reads. */
+const LOCAL_FILE_TYPES = /** @type {Record<string, string>} */ ({
+  ...IMAGE_TYPES,
+  '.json': 'application/json',
+  '.csv': 'text/csv; charset=utf-8',
+  '.tsv': 'text/tab-separated-values; charset=utf-8',
+});
+
+/** A file an agent's reply showed: never run as a page, and read fresh (it may be redrawn). */
+const FILE_HEADERS = { ...BASE_HEADERS, 'content-security-policy': ASSET_HEADERS['content-security-policy'] };
 
 class HttpError extends Error {
   /** @param {number} status @param {string} message */
@@ -122,9 +135,9 @@ function errorResponse(err) {
 
 /**
  * Starts serving on `127.0.0.1:port` (0 picks a free port); throws if the port is taken.
- * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, settings: SettingsStore, token: string, root: string, config: DaemonConfig, port: number }} options
+ * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, settings: SettingsStore, token: string, root: string, config: DaemonConfig, port: number }} options
  */
-export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, settings, token, root, config, port }) {
+export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, settings, token, root, config, port }) {
   const rootDir = resolve(root);
   const indexFile = resolve(rootDir, INDEX_FILE);
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -156,16 +169,17 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
       start(controller) {
         const write = (/** @type {string} */ chunk) => controller.enqueue(chunk);
         write('retry: 1000\n\n');
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), settings: settings.all(), ui })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), settings: settings.all(), ui })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of hub.since(lastSeenSeq(req.headers.get('last-event-id'), hub.bootId))) send(event);
         const unsubscribe = hub.subscribe(send);
-        // No id: scratchpad, history, unread and settings events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins and settings events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
         const offHistory = history.watch(() => write(`data: ${JSON.stringify({ kind: 'history' })}\n\n`));
         const offUnread = unread.subscribe((/** @type {Unread} */ marks) => write(`data: ${JSON.stringify({ kind: 'unread', unread: marks })}\n\n`));
+        const offPins = pins.subscribe((/** @type {Pinned} */ pinned) => write(`data: ${JSON.stringify({ kind: 'pins', pinned })}\n\n`));
         const offSettings = settings.subscribe((/** @type {DaemonSettings} */ all) => write(`data: ${JSON.stringify({ kind: 'settings', settings: all })}\n\n`));
         const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
         stop = () => {
@@ -174,6 +188,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           offScratchpad();
           offHistory();
           offUnread();
+          offPins();
           offSettings();
         };
       },
@@ -289,6 +304,16 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           return noContent();
         },
       }),
+      '/api/pins/:id': api({
+        PUT: async (req) => {
+          await pins.set(ompIdOf(req), true);
+          return noContent();
+        },
+        DELETE: async (req) => {
+          await pins.set(ompIdOf(req), false);
+          return noContent();
+        },
+      }),
       '/api/settings': api({
         PUT: async (req) => {
           const patch = await readJson(req);
@@ -353,6 +378,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           if (body?.resume != null && body?.fork != null) throw new HttpError(400, 'resume and fork cannot be combined');
           const resume = body?.resume == null ? null : await existingPath(body.resume, 'file', 'resume');
           const fork = body?.fork == null ? null : await existingPath(body.fork, 'file', 'fork');
+          if (resume && history.isArchived(resume)) throw new HttpError(409, 'the conversation is archived: restore it to carry it on');
           const running = resume && hub.writing(resume);
           if (running) return json({ session: running });
           return json({ session: hub.create({ cwd, resume, fork }) }, 201);
@@ -385,6 +411,15 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
         },
       }),
       '/api/files': api({ GET: (req) => listing(req, homedir()) }),
+      '/api/file': api({
+        GET: async (req) => {
+          const path = resolvePath(new URL(req.url).searchParams.get('path') ?? '', homedir());
+          const type = LOCAL_FILE_TYPES[extname(path).toLowerCase()];
+          const file = Bun.file(path);
+          if (!type || !(await file.exists())) throw new HttpError(404, 'no such image or data file');
+          return new Response(file, { headers: { ...FILE_HEADERS, 'content-type': type } });
+        },
+      }),
       '/api/sessions/:id/ui': api({
         POST: async (req) => {
           const session = sessionOf(req);

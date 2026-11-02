@@ -6,8 +6,9 @@
  *
  *   GET    /api/config                 → DaemonConfig
  *   GET    /api/ui                     → { version }: the UI files' version now (see `ui-files.js`)
- *   GET    /api/history?q=words&archived=1 → { sessions: PastSession[] } (unordered; every word must
- *                                      match; `archived=1` lists the archived sessions instead)
+ *   GET    /api/history?q=words&archived=1 → { sessions: PastSession[] } (unordered; with `q`, the
+ *                                      ones it finds, best first, each with its `match`: see
+ *                                      `search.js`; `archived=1` lists the archived sessions instead)
  *   POST   /api/history/archive        { file } → { file }: the journal (with its folder) moved from omp's
  *                                      sessions into the archive; a session writing it goes to sleep
  *                                      first, 409 while its agent works
@@ -21,6 +22,8 @@
  *   POST   /api/unread/:ompId/read     { at } → 204: the user read it as it was at `at` (daemon
  *                                      time: the `since` they were shown); a mark made after
  *                                      `at` stays. Both are 404 for an id that is not one
+ *   PUT    /api/pins/:ompId            → 204: the conversation is pinned to the top of the Sessions list
+ *   DELETE /api/pins/:ompId            → 204: it is not (see `pins.js`); both 404 for an id that is not one
  *   PUT    /api/settings               Partial<DaemonSettings> → DaemonSettings: the daemon's settings
  *                                      changed (see `settings.js`); 400 for anything but known keys
  *                                      with values of their type
@@ -30,7 +33,8 @@
  *                                      continues a journal, `fork` starts a new session from a
  *                                      copy of one; either must be an existing file). Resuming
  *                                      a journal a running session writes answers 200 with that
- *                                      session instead: two omps never write one journal
+ *                                      session instead: two omps never write one journal; an
+ *                                      archived one is refused (409), as it is only to read
  *   DELETE /api/sessions/:id           → 204: the session goes to sleep now (closes omp's stdin,
  *                                      kills it if it lingers), as it does by itself once idle
  *                                      and unused (see `sleep.js`), or when the daemon exits
@@ -41,6 +45,9 @@
  *   POST   /api/sessions/:id/ui        omp `extension_ui_response` → 204
  *   GET    /api/files?dir=path         → DirListing: the folder `dir` names (relative to home,
  *                                      `~/…` or absolute, as `cwd` above), or 404
+ *   GET    /api/file?path=path         → a file an agent's reply shows: an image (png, jpeg, gif, webp,
+ *                                      avif) or a chart's data (json, csv, tsv), by extension; path
+ *                                      as `dir` above; else 404
  *   GET    /api/scratchpads            → { pads: ScratchpadSummary[] } (most recently changed first)
  *   GET    /api/scratchpads/:id        → Scratchpad (empty text for a pad never written)
  *   PUT    /api/scratchpads/:id        { text, base } → { rev }, or 409 { error, current: Scratchpad }
@@ -66,6 +73,7 @@
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
 /** @import { Unread } from './unread.js' */
+/** @import { Pinned } from './pins.js' */
 /** @import { DaemonSettings } from './settings.js' */
 
 /** @typedef {'starting' | 'ready' | 'exited' | 'failed'} SessionStatus */
@@ -94,7 +102,8 @@
 
 /**
  * A past omp conversation, summarised from its journal. `firstPrompt` is a one-line
- * preview; times are epoch milliseconds.
+ * preview; times are epoch milliseconds. Found by a search, `match` holds the passage that
+ * matched best and the conversation's words the query matched.
  * @typedef {{
  *   file: string,
  *   id: string,
@@ -104,12 +113,13 @@
  *   modifiedAt: number,
  *   prompts: number,
  *   firstPrompt: string | null,
+ *   match?: { snippet: string, terms: string[] },
  * }} PastSession
  */
 
 /**
  * A conversation as its journal has it, for a window to show while no omp holds it (see
- * `conversation.js`): `messages` as omp's `get_messages` answers once it is resumed, `model`
+ * `conversation.js`), `archived` when its journal is in the archive: `messages` as omp's `get_messages` answers once it is resumed, `model`
  * (`provider/id`) and `thinkingLevel` as the journal last recorded them, `id` as PastSession's.
  * @typedef {{
  *   file: string,
@@ -119,6 +129,7 @@
  *   model: string | null,
  *   thinkingLevel: string | null,
  *   messages: Record<string, any>[],
+ *   archived?: boolean,
  * }} Conversation
  */
 
@@ -141,8 +152,8 @@
  * `ui` is the version of the UI files being served (see `ui-files.js`): a page that loaded
  * other files is running older code than the daemon now serves. `unread` holds the
  * conversations with news their user has not read: when each became unread, by omp id.
- * `settings` are the daemon's (see `settings.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, settings: DaemonSettings, ui: string }} HelloEvent
+ * `pinned` holds the pinned conversations' omp ids. `settings` are the daemon's (see `settings.js`).
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, settings: DaemonSettings, ui: string }} HelloEvent
  */
 
 /** A scratchpad's text; `rev` names this exact text (a hash of it). @typedef {{ text: string, rev: string }} Scratchpad */
@@ -153,9 +164,11 @@
 
 /** Sent to every page after a conversation was marked read or unread, with all the marks. @typedef {{ kind: 'unread', unread: Unread }} UnreadEvent */
 
+/** Sent to every page after a conversation was pinned or unpinned, with all the pins. @typedef {{ kind: 'pins', pinned: Pinned }} PinsEvent */
+
 /** Sent to every page after the daemon's settings changed, with all of them. @typedef {{ kind: 'settings', settings: DaemonSettings }} SettingsEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | SettingsEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | SettingsEvent | SessionEvent} StreamEvent */
 
 /** @typedef {{ defaultCwd: string, home: string, scratchpadDir: string }} DaemonConfig */
 

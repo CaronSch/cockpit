@@ -4,6 +4,8 @@
  * JSONL protocol with frame shapes recorded from omp 18.12.3, and answers prompts by keyword.
  *
  * - default: streams "You said: <prompt>" (assistant message_start arrives pre-filled, as omp's does)
+ * - run in a folder whose name has "slow-start": takes 1.5 s to come up
+ * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
  * - contains "ask": an `ask` dialog; the reply names the chosen option
  * - contains "mystery": emits a frame type no client knows
@@ -38,8 +40,6 @@
  *   without the windows hearing of it.
  * - logins: the default model's provider, `fake`, is not logged in (a `login` to it stays
  *   under way); `keyed` is, and its `keyed-model` can be picked from the models
- * Started in a directory whose name contains "slow-start", it takes 1.5 s to say it is ready,
- * as a real omp can in a project it has not seen before.
  * With `--resume <file>`, the session continues the journal's conversation: its messages (what
  * `get_messages` returns), title and id (its `session` header's, as omp's `SessionManager`
  * does), and it writes the journal from then on, after every message.
@@ -52,7 +52,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 /** Shaped like a real omp reply: a heading, a table too wide for a narrow pane, then long list lines. */
@@ -79,6 +79,7 @@ if (args.includes('--version')) {
 const option = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : null);
 const resumed = option('--resume');
 const forkedFrom = option('--fork');
+const appendedPrompt = option('--append-system-prompt');
 
 /** A journal's lines; a missing one ends the process, as omp's `--resume` and `--fork` do. @param {string} file */
 function readJournal(file) {
@@ -105,6 +106,8 @@ let parentSession = forkedFrom ? (sourceHeader?.id ?? null) : null;
 
 /** @type {Record<string, any>[]} */
 const messages = source.filter((entry) => entry.type === 'message').map((entry) => entry.message);
+/** How many of them a compaction in the journal left out of the context, which `get_messages` answers with, as omp's does. */
+const compacted = source.slice(0, source.findLastIndex((entry) => entry.type === 'compaction') + 1).filter((entry) => entry.type === 'message').length;
 let model = { provider: 'fake', id: 'fake-model', name: 'Fake Model' };
 let thinkingLevel = 'off';
 let msgCounter = 0;
@@ -263,7 +266,9 @@ async function runPrompt(id, text) {
     toolCall();
     await Bun.sleep(1500);
   }
-  if (/ask/.test(text)) {
+  if (text.startsWith('say:')) {
+    streamAssistant(text.slice('say:'.length).trim());
+  } else if (/ask/.test(text)) {
     const answer = await askDialog();
     const picked = answer.cancelled ? 'nothing (cancelled)' : (answer.answers?.[0]?.selectedOptions?.[0] ?? answer.answers?.[0]?.customInput);
     streamAssistant(`You picked **${picked}**.`);
@@ -361,7 +366,8 @@ function finishSideQuestion(patch) {
   sideQuestion = null;
 }
 
-if (basename(cwd).includes('slow-start')) await Bun.sleep(1500);
+// omp in a folder named for it is slow to come up, as a real one with a long history can be.
+if (/slow-start/.test(process.cwd())) await Bun.sleep(1500);
 out({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 out({ type: 'extension_ui_request', id: 'ui-start-w', method: 'setWidget', widgetKey: 'autoresearch' });
 out({ type: 'advisor_cost_changed' });
@@ -409,6 +415,7 @@ lines.on('line', (line) => {
         sessionFile,
         sessionId,
         ...(sessionName ? { sessionName } : {}),
+        ...(appendedPrompt ? { appendedPrompt } : {}), // the fake's own: what the daemon appended
         autoCompactionEnabled: true,
         queuedMessageCount: 0,
         hasPendingAsyncWork: false,
@@ -420,7 +427,7 @@ lines.on('line', (line) => {
         todoPhases,
       });
     case 'get_messages':
-      return ok(id, type, { messages });
+      return ok(id, type, { messages: messages.slice(compacted) });
     case 'get_branch_messages':
       return ok(id, type, {
         messages: messages.flatMap((m, i) => {

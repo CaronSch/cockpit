@@ -72,7 +72,7 @@ function line(item) {
 }
 
 describe('only prompts and responses', () => {
-  test('a turn that used tools shows the prompt and the final reply, without thinking or tool work', () => {
+  test('a turn that used tools shows the prompt, the narration and the final reply, without thinking or tool work', () => {
     const state = run([
       agentStart,
       ...prompt('list files'),
@@ -81,7 +81,7 @@ describe('only prompts and responses', () => {
       ...assistant([thinking('One file.'), text('There is a.txt.')], 'stop'),
       agentEnd,
     ]);
-    assert.deepEqual(view(state), { shown: ['user: list files', 'assistant: There is a.txt.'], working: null });
+    assert.deepEqual(view(state), { shown: ['user: list files', 'assistant: Let me look.', 'assistant: There is a.txt.'], working: null });
   });
 
   test('a turn with no tool calls shows its one reply', () => {
@@ -115,7 +115,7 @@ describe('only prompts and responses', () => {
     assert.deepEqual(view(state).shown, ['user: go', 'assistant: Done.']);
   });
 
-  test('while a turn runs, its work stays hidden behind one indicator, and a finished reply shows at once', () => {
+  test('while a turn runs, its work stays behind one indicator, and what the agent says shows as it says it', () => {
     const running = [
       ...prompt('first'),
       ...assistant([text('Answer one.')], 'stop'),
@@ -127,11 +127,11 @@ describe('only prompts and responses', () => {
       ...assistant([text('Looks like')], 'stop'),
     ];
     assert.deepEqual(view(run(running)), {
-      shown: ['user: first', 'assistant: Answer one.', 'user: second', 'assistant: Looks like'],
+      shown: ['user: first', 'assistant: Answer one.', 'user: second', 'assistant: Checking.', 'assistant: Looks like'],
       working: { steps: 2 },
     });
     assert.deepEqual(view(run([...running, agentEnd])), {
-      shown: ['user: first', 'assistant: Answer one.', 'user: second', 'assistant: Looks like'],
+      shown: ['user: first', 'assistant: Answer one.', 'user: second', 'assistant: Checking.', 'assistant: Looks like'],
       working: null,
     });
   });
@@ -182,6 +182,15 @@ describe('only prompts and responses', () => {
       frame({ type: 'prompt_result', id: 'p1', status: 'aborted' }),
     ]);
     assert.deepEqual(view(state).shown, ['user: long job', 'note prompt: Aborted']);
+  });
+
+  test('a reply streams in as it is written', () => {
+    const streamed = [
+      agentStart,
+      ...prompt('hi'),
+      frame({ type: 'message_start', message: { role: 'assistant', content: [text('Hel')], timestamp: 1 }, messageId: 'live' }),
+    ];
+    assert.deepEqual(view(run(streamed)), { shown: ['user: hi', 'assistant: Hel'], working: { steps: 1 } });
   });
 
   test('a reply that never ended (omp exited mid-stream) is not a completed response', () => {

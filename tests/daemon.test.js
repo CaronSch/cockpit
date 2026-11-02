@@ -13,7 +13,8 @@ import { listDirectory } from '../daemon/files.js';
 import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
 import { loadSettings } from '../daemon/settings.js';
-import { HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
+import { loadPins } from '../daemon/pins.js';
+import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -28,6 +29,8 @@ let hub;
 let unread;
 /** @type {import('../daemon/settings.js').SettingsStore} */
 let settings;
+/** @type {import('../daemon/pins.js').PinsStore} */
+let pins;
 let port = 0;
 let cwd = '';
 
@@ -140,16 +143,18 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'settings' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'settings' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
   unread = await loadUnread({ file: join(cwd, 'state', 'unread.json') });
   settings = await loadSettings({ file: join(cwd, 'state', 'settings.json') });
+  pins = await loadPins({ file: join(cwd, 'state', 'pins.json') });
   hub = createHub({ ompPath: FAKE_OMP, unread });
   server = createDaemonServer({
     hub,
     unread,
+    pins,
     settings,
     history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
@@ -277,6 +282,13 @@ describe('sessions', () => {
     assert.deepEqual(sent, SETUP_COMMANDS.map((c) => c.type));
   });
 
+  test('every session is asked to say what it is doing as it works', async () => {
+    const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
+    await waitForStatus(json.session.id, 'ready');
+    const state = await rpc(json.session.id, { type: 'get_state' });
+    assert.equal(state.data.appendedPrompt, APPEND_SYSTEM_PROMPT);
+  });
+
   test('a session started from a journal has its earlier history in the log before it is ready', async () => {
     const journal = join(cwd, 'history-first.jsonl');
     const lines = [
@@ -298,6 +310,25 @@ describe('sessions', () => {
     );
     const history = before.find((e) => e.kind === 'frame' && e.frame.command === 'get_messages');
     assert.ok(history?.kind === 'frame' && history.frame.data.messages.length === 2, 'its answer too');
+  });
+
+  test('a session started from a compacted journal shows the whole conversation, not just what omp kept', async () => {
+    const journal = join(cwd, 'compacted.jsonl');
+    const lines = [
+      { type: 'session', version: 3, id: 'compacted', timestamp: '2026-10-01T10:00:00.000Z', cwd },
+      { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'long ago' }] } },
+      { type: 'compaction', summary: 'we talked', shortSummary: 'Compaction', tokensBefore: 9 },
+      { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'lately' }] } },
+    ];
+    await Bun.write(journal, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`);
+    const id = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, resume: journal } })).json.session.id;
+    await waitForStatus(id, 'ready');
+    assert.equal((await rpc(id, { type: 'get_messages' })).data.messages.length, 1, 'omp itself keeps only what came after the compaction');
+    const history = forSession(hub.since(0), id).find((e) => e.kind === 'frame' && e.frame.command === 'get_messages');
+    assert.deepEqual(
+      history?.kind === 'frame' && history.frame.data.messages.map((/** @type {any} */ m) => m.role),
+      ['user', 'compactionSummary', 'user'],
+    );
   });
 
   test('the daemon asks omp for its state again after anything that changes it, once for every window', async () => {
@@ -559,6 +590,15 @@ describe('sessions', () => {
     assert.deepEqual(sentAfterPrompt(await turn(id, 'fix the login bug')), ['fix the login bug', 'get_state', 'get_state']);
   });
 
+  test('a fork is named again by its first prompt, though it has its parent’s name; once', async () => {
+    const journal = join(cwd, 'titled-parent.jsonl');
+    await Bun.write(journal, `${JSON.stringify({ type: 'title', v: 1, title: 'Earlier work' })}\n`);
+    const id = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, fork: journal } })).json.session.id;
+    await waitForStatus(id, 'ready');
+    assert.deepEqual(sentAfterPrompt(await turn(id, 'try the other approach')), ['try the other approach', '/rename', 'get_state', 'get_state']);
+    assert.equal(sentAfterPrompt(await turn(id, 'and test it')).filter((m) => m === '/rename').length, 1, 'asked once');
+  });
+
   test('a missing omp binary fails the session with the reason instead of hanging', async () => {
     const missing = createHub({ ompPath: join(cwd, 'no-such-omp'), unread });
     /** @type {Promise<void>} */
@@ -635,6 +675,7 @@ describe('unread conversations', () => {
     const next = createDaemonServer({
       hub: nextHub,
       unread: marks,
+      pins,
       settings,
       history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
       scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
@@ -664,6 +705,39 @@ describe('unread conversations', () => {
     assert.equal('conv-guard' in unread.all(), false, 'nothing was marked');
     assert.equal((await call({ method: 'PUT', path: '/api/unread/a%20b' })).status, 404);
     assert.equal((await call({ method: 'POST', path: '/api/unread/conv-guard/read', body: { at: 'later' } })).status, 400);
+  });
+});
+
+describe('pins', () => {
+  test('every page hears them first thing and after each change, which the next daemon starts with', async () => {
+    const stream = await openStream();
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-a' })).status, 204);
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-b' })).status, 204);
+    assert.equal((await call({ method: 'DELETE', path: '/api/pins/conv-a' })).status, 204);
+    const { events } = await stream.until((events) => events.filter((e) => e.kind === 'pins').length === 3);
+    assert.deepEqual(events[0].kind === 'hello' && events[0].pinned, []);
+    assert.deepEqual(events.filter((e) => e.kind === 'pins'), [
+      { kind: 'pins', pinned: ['conv-a'] },
+      { kind: 'pins', pinned: ['conv-a', 'conv-b'] },
+      { kind: 'pins', pinned: ['conv-b'] },
+    ]);
+    assert.deepEqual((await loadPins({ file: join(cwd, 'state', 'pins.json') })).all(), ['conv-b']);
+    assert.equal((await call({ method: 'DELETE', path: '/api/pins/conv-b' })).status, 204);
+  });
+
+  test('like every API route, pins need the token and the page’s Origin; an id that is not one is a 404', async () => {
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-guard', auth: false })).status, 401);
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/conv-guard', origin: false })).status, 403);
+    assert.equal((await call({ method: 'PUT', path: '/api/pins/a%20b' })).status, 404);
+    assert.deepEqual(pins.all(), []);
+  });
+
+  test('a pins file the daemon cannot read stops it rather than being replaced', async () => {
+    const file = join(cwd, 'bad-pins.json');
+    for (const text of ['not json', '{"version":1,"pinned":["../x"]}', '{"version":2,"pinned":[]}']) {
+      await writeFile(file, text);
+      await assert.rejects(loadPins({ file }), /not a pins file/);
+    }
   });
 });
 
@@ -995,6 +1069,18 @@ describe('session archive', () => {
     assert.ok(!(await ids(true)).includes('shelved'));
   });
 
+  test('an archived conversation can be read but not resumed', async () => {
+    const file = await pastSession('readonly');
+    const { json } = await call({ method: 'POST', path: '/api/history/archive', body: { file } });
+    const read = await call({ path: `/api/conversation?file=${encodeURIComponent(json.file)}` });
+    assert.equal(read.status, 200);
+    assert.equal(read.json.archived, true);
+    assert.equal((await call({ path: `/api/conversation?file=${encodeURIComponent((await pastSession('current')))}` })).json.archived, false);
+    const resumed = await call({ method: 'POST', path: '/api/sessions', body: { cwd, resume: json.file } });
+    assert.equal(resumed.status, 409);
+    assert.match(resumed.json.error, /archived/);
+  });
+
   test('restore refuses to replace a journal that is back at the same place', async () => {
     const file = await pastSession('twice');
     const { json } = await call({ method: 'POST', path: '/api/history/archive', body: { file } });
@@ -1115,6 +1201,24 @@ describe('file listings for @ mentions', () => {
       { name: 'sibling.txt', isDir: false },
     ]);
     assert.equal((await call({ path: `${files}?dir=${encodeURIComponent('~/')}` })).json.dir, homedir());
+  });
+
+  test('an image or data file is served for a reply to show, never run as a page; anything else is a 404', async () => {
+    const png = join(cwd, 'images', 'chart.png');
+    await Bun.write(png, new Uint8Array([0x89, 0x50, 0x4e, 0x47]));
+    const served = (/** @type {string} */ path) => call({ path: `/api/file?path=${encodeURIComponent(path)}` });
+    const shown = await served(png);
+    assert.equal(shown.status, 200);
+    assert.equal(shown.headers.get('content-type'), 'image/png');
+    assert.match(shown.headers.get('content-security-policy') ?? '', /sandbox/);
+    assert.equal(shown.headers.get('cache-control'), 'no-store', 'redrawn under the same name, it shows anew');
+    const series = join(cwd, 'images', 'series.json');
+    await Bun.write(series, '[{"p90": 10}]');
+    assert.equal((await served(series)).headers.get('content-type'), 'application/json', 'a chart reads its data the same way');
+    assert.equal((await served(join(project, 'notes with space.md'))).status, 404);
+    assert.equal((await served(join(project, 'missing.png'))).status, 404);
+    assert.equal((await call({ path: `/api/file?path=${encodeURIComponent(png)}`, auth: false })).status, 401);
+    assert.equal((await call({ path: `/api/file?path=${encodeURIComponent(png)}`, headers: { 'sec-fetch-site': 'cross-site' } })).status, 403);
   });
 
   test('a relative folder is listed from home, as a new session’s directory is found', async () => {

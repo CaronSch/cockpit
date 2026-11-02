@@ -8,7 +8,7 @@
  * omp defaults to the `omp` on PATH (install it from https://omp.sh). `--cwd` is the
  * directory a new agent window suggests, the home directory unless given.
  * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_CWD, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
- * access token, unread.json (which conversations have news not read yet), settings.json, scratchpads/,
+ * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), settings.json, scratchpads/,
  * attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
@@ -29,6 +29,7 @@ import { createDaemonServer } from './server.js';
 import { createWorkspaces } from './workspace.js';
 import { loadToken } from './token.js';
 import { loadUnread } from './unread.js';
+import { loadPins } from './pins.js';
 import { loadSettings } from './settings.js';
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -61,6 +62,7 @@ const unreadable = (err) => {
   process.exit(1);
 };
 const unread = await loadUnread({ file: join(stateDir, 'unread.json') }).catch(unreadable);
+const pins = await loadPins({ file: join(stateDir, 'pins.json') }).catch(unreadable);
 const settings = await loadSettings({ file: join(stateDir, 'settings.json') }).catch(unreadable);
 const history = createHistory({ root: ompSessions, archive: join(stateDir, 'archive', 'sessions') });
 const sleepAfter = Number(process.env.COCKPIT_SLEEP_AFTER_MS);
@@ -93,6 +95,7 @@ try {
     attachments: createAttachments({ dir: join(stateDir, 'attachments') }),
     workspaces: createWorkspaces({ dir: join(stateDir, 'workspaces') }),
     unread,
+    pins,
     settings,
     token,
     root: ROOT,

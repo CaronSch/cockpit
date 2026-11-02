@@ -3,7 +3,7 @@
  *
  * Supported: paragraphs (newlines kept as line breaks), ATX headings, fenced code with a
  * language, inline code, bold/italic, bullet and numbered lists, block quotes, horizontal
- * rules, links and autolinks, and GFM tables (column alignment, inline formatting in cells;
+ * rules, links and autolinks, `mermaid` diagrams and `vega-lite` charts (a closed fence), images on this machine (`![alt](/abs/or/~/path.png)`), and GFM tables (column alignment, inline formatting in cells;
  * a table may start right under a paragraph line), and TeX math: `$$…$$` and `\[…\]` on their
  * own as display math, `$…$` and `\(…\)` inline (markdown-dom.js renders it). Raw HTML is
  * plain text. Only
@@ -18,6 +18,7 @@
  *   | { type: 'strong', children: Inline[] }
  *   | { type: 'em', children: Inline[] }
  *   | { type: 'link', href: string, children: Inline[] }
+ *   | { type: 'image', path: string, alt: string }
  *   | { type: 'break' }
  *   | { type: 'math', tex: string, display: boolean }
  * )} Inline
@@ -28,6 +29,7 @@
  *   | { type: 'paragraph', children: Inline[] }
  *   | { type: 'heading', level: number, children: Inline[] }
  *   | { type: 'code', lang: string, text: string }
+ *   | { type: 'visual', lang: VisualLang, source: string }
  *   | { type: 'list', ordered: boolean, start: number, items: Block[][] }
  *   | { type: 'quote', children: Block[] }
  *   | { type: 'table', align: Align[], head: Inline[][], rows: Inline[][][], source: string }
@@ -46,6 +48,11 @@ const QUOTE = /^ {0,3}> ?(.*)$/;
 const LIST_ITEM = /^( {0,3})([-*+]|\d{1,9}[.)])(?:[ \t]+(.*))?$/;
 const TABLE_DIVIDER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const SAFE_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
+/** Fenced languages drawn rather than shown as code (visuals.js). @typedef {'mermaid' | 'vega-lite'} VisualLang */
+/** @param {string} lang @returns {lang is VisualLang} */
+const isVisualLang = (lang) => lang === 'mermaid' || lang === 'vega-lite';
+/** An image file named by an absolute or `~/` path (the daemon serves these: `/api/file`). */
+export const LOCAL_IMAGE = /^~?\/[^\s]*\.(png|jpe?g|gif|webp|avif)$/i;
 
 /**
  * Returns the href if it is an absolute http(s) or mailto URL, else null.
@@ -120,17 +127,22 @@ function parseBlocks(lines) {
       const indent = line.length - line.trimStart().length;
       /** @type {string[]} */
       const body = [];
+      let closed = false;
       i++;
       while (i < lines.length) {
         const close = lines[i].trim();
         if (close[0] === marker[0] && close.length >= marker.length && /^(`+|~+)$/.test(close)) {
+          closed = true;
           i++;
           break;
         }
         body.push(stripIndent(lines[i], indent));
         i++;
       }
-      blocks.push({ type: 'code', lang: fence[2] ?? '', text: body.join('\n') });
+      const lang = fence[2] ?? '';
+      // A diagram or chart is drawn once its fence closes; while it streams in, it is code.
+      if (closed && isVisualLang(lang)) blocks.push({ type: 'visual', lang, source: body.join('\n') });
+      else blocks.push({ type: 'code', lang, text: body.join('\n') });
       continue;
     }
 
@@ -334,6 +346,16 @@ export function parseInline(text) {
       continue;
     }
 
+    if (ch === '!' && text[i + 1] === '[') {
+      const image = parseImage(text, i);
+      if (image) {
+        flush();
+        out.push(image.node);
+        i = image.next;
+        continue;
+      }
+    }
+
     if (ch === '[') {
       const link = parseLink(text, i);
       if (link) {
@@ -441,11 +463,37 @@ function parseEmphasis(text, start) {
 }
 
 /**
+ * `![alt](path)` for an image file on this machine (an absolute or `~/` path); null for any
+ * other target, which is then read as a link: a remote image is never fetched, since the URL
+ * an agent picks could carry what it read.
+ * @param {string} text @param {number} start at the `!`
+ * @returns {{ node: Inline, next: number } | null}
+ */
+function parseImage(text, start) {
+  const parts = linkParts(text, start + 1);
+  if (!parts || !LOCAL_IMAGE.test(parts.target)) return null;
+  return { node: { type: 'image', path: parts.target, alt: parts.label }, next: parts.next };
+}
+
+/**
  * `[label](target)`. Unsafe targets keep their label as plain text.
  * @param {string} text @param {number} start
  * @returns {{ nodes: Inline[], next: number } | null}
  */
 function parseLink(text, start) {
+  const parts = linkParts(text, start);
+  if (!parts) return null;
+  const children = parseInline(parts.label);
+  const href = safeHref(parts.target);
+  return { nodes: href ? [{ type: 'link', href, children }] : children, next: parts.next };
+}
+
+/**
+ * The label and target of `[label](target)` at `start`, and where it ends.
+ * @param {string} text @param {number} start
+ * @returns {{ label: string, target: string, next: number } | null}
+ */
+function linkParts(text, start) {
   let depth = 0;
   let end = -1;
   for (let j = start; j < text.length; j++) {
@@ -470,8 +518,6 @@ function parseLink(text, start) {
     }
   }
   if (close === -1) return null;
-  const target = text.slice(end + 2, close).trim().split(/\s+/)[0] ?? '';
-  const children = parseInline(text.slice(start + 1, end));
-  const href = safeHref(target.replace(/^<|>$/g, ''));
-  return { nodes: href ? [{ type: 'link', href, children }] : children, next: close + 1 };
+  const target = (text.slice(end + 2, close).trim().split(/\s+/)[0] ?? '').replace(/^<|>$/g, '');
+  return { label: text.slice(start + 1, end), target, next: close + 1 };
 }

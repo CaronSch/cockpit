@@ -87,7 +87,7 @@ function renderBlock(block, id, ctx) {
   switch (block.kind) {
     case 'text': {
       const node = el('div', 'omp-md');
-      node.append(renderMarkdown(block.text));
+      node.append(renderMarkdown(block.text, { reply: id }));
       return node;
     }
     case 'thinking':

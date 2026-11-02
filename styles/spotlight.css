@@ -1,0 +1,100 @@
+/* Spotlight (src/ui/spotlight.js): a translucent panel floating over the workbench, as macOS's. */
+.spotlight {
+  inset: 14vh 0 auto;
+  width: min(680px, calc(100vw - 32px));
+  max-height: 70vh;
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--color-line-strong) 70%, transparent);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--color-surface) 60%, transparent);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: var(--shadow-lift);
+  color: var(--color-text);
+}
+
+.spotlight[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.spotlight::backdrop {
+  background: oklch(0% 0 0 / 0.25);
+  backdrop-filter: blur(2px);
+}
+
+.spotlight-input {
+  flex: none;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid color-mix(in oklch, var(--color-line) 80%, transparent);
+  background: transparent;
+  color: var(--color-text);
+  font: var(--text-lg) / 1.4 var(--font-mono);
+  outline: none;
+}
+
+.spotlight-input::placeholder {
+  color: var(--color-text-faint);
+}
+
+.spotlight-results {
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+}
+
+.spotlight-results:empty {
+  display: none;
+}
+
+.spotlight-item {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+}
+
+.spotlight-item[aria-selected='true'] {
+  background: color-mix(in oklch, var(--color-accent) 16%, transparent);
+}
+
+.spotlight-title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spotlight-facts {
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  white-space: pre;
+}
+
+.spotlight-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin-top: 2px;
+  color: var(--color-text-dim);
+  font-size: var(--text-sm);
+}
+
+.spotlight-snippet mark {
+  background: none;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.spotlight-status {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-dim);
+}
+
+.spotlight-status:empty {
+  display: none;
+}

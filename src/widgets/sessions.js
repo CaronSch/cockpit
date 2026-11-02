@@ -8,18 +8,24 @@
  * the list's. Showing a conversation needs no omp: its window shows the journal until
  * something is sent.
  *
- * Search runs in the daemon (every word must match the title, directory or a prompt); sorting
- * runs here, and so does narrowing to one directory. The query, directory and sort order are
+ * Search runs in the daemon (daemon/search.js), over titles, directories, prompts and the
+ * agents' replies: a question in plain words finds the conversations that answer it, best
+ * first, each with the passage that matched and its words marked. While searching the list is
+ * in that order; otherwise sorting runs here. Narrowing to one directory runs here too. The query, directory and sort order are
  * this window's own settings, so two Sessions windows can show different slices.
  *
  * Archive moves a conversation out of omp's sessions into the daemon's archive (omp's own
  * resume no longer offers it); "Archived" switches the window to the archived ones, each with
- * Restore. One whose agent is working is not archived until it is done.
+ * Restore. An archived one shows as any other, to read: carrying it on means restoring it. One whose agent is working is not archived until it is done. A new session
+ * nothing was sent to has no journal yet: archiving it ends it, and it is gone, not archived.
  *
  * A conversation with news its user has not read (daemon/unread.js) has a blue dot and a bold
  * title, archived or not, and the window's top bar counts those it lists. Showing one from
  * here reads it. Each row's menu (a right-click, the ContextMenu key, Shift+F10, or its ⋯
  * button) marks it read or unread, beside the row's other actions.
+ *
+ * Pinned conversations (daemon/pins.js) come first, in the window's order, each with a ★; the
+ * ☆ on a row pointed at, or its menu, pins it.
  *
  * Rows show where their conversations are on this screen (sessions/links.js): a bar at the
  * left edge for one shown in an agent window, brighter for the one in the agent window used last
@@ -33,6 +39,7 @@ import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
 import { STATE_LABELS, follow, followedName, isRunning, listConversations, noteEvent, runningState, showConversation } from '../sessions/running.js';
 import { sessionLinks } from '../sessions/links.js';
+import { snippetLine } from '../sessions/snippet.js';
 import { runningWork } from '../omp/running-work.js';
 import { openContextMenu, opensContextMenu } from '../ui/context-menu.js';
 /** @import { WidgetContext } from './registry.js' */
@@ -73,7 +80,7 @@ function createSessionsWindow(body, ctx, daemon) {
   const bar = el('div', 'sessions-bar');
   const search = el('input', 'sessions-search');
   search.type = 'search';
-  search.placeholder = 'Search title, directory, prompts…';
+  search.placeholder = 'Search, or ask: where did we find…';
   search.setAttribute('aria-label', 'Search sessions');
   search.value = query();
   const directories = el('select', 'sessions-sort sessions-directory');
@@ -198,6 +205,9 @@ function createSessionsWindow(body, ctx, daemon) {
   /** @param {Listed} c */
   const isUnread = (c) => daemon.unreadSince(c.meta?.ompId ?? (c.id || null)) !== null;
 
+  /** @param {Listed} c */
+  const isPinned = (c) => daemon.isPinned(c.meta?.ompId ?? (c.id || null));
+
   /** How an awake conversation is doing, or null for one asleep. @param {Listed} c @returns {RunningState | null} */
   function stateOf(c) {
     if (!c.meta) return null;
@@ -211,17 +221,27 @@ function createSessionsWindow(body, ctx, daemon) {
     return f ? runningWork(f.transcript).length : 0;
   }
 
+  /**
+   * Whether Archive is offered for `c`: a listed journal, or a new session omp has not written
+   * one for (nothing sent yet, nothing to keep), unless it is still starting or working.
+   * @param {Listed} c
+   */
+  const archivable = (c) => (isEmpty(c) ? stateOf(c) === 'idle' : sessions.some((s) => s.file === c.file));
+
+  /** An awake session with no listed journal: a new one nothing was sent to. @param {Listed} c */
+  const isEmpty = (c) => c.meta !== null && !sessions.some((s) => s.file === c.file);
+
   /** The row's conversation, as last drawn. @param {HTMLElement} row */
   const conversationAt = (row) => shown.get(row.dataset.key ?? '') ?? null;
 
   /**
-   * The agent window settings that show the row's conversation, or null for an archived one (it
-   * must be restored first).
+   * The agent window settings that show the row's conversation (an archived one to read, until
+   * it is restored).
    * @param {HTMLElement} row @returns {import('../layout/grid-model.js').LeafParams | null}
    */
   function paramsFor(row) {
     const c = conversationAt(row);
-    return c && !showArchived() ? showConversation({ file: c.file, meta: c.meta, cwd: c.cwd, name: nameOf(c) }) : null;
+    return c ? showConversation({ file: c.file, meta: c.meta, cwd: c.cwd, name: nameOf(c) }) : null;
   }
 
   /** omp's id for the row's conversation (what its unread mark is kept under), if known. @param {HTMLElement} row */
@@ -237,6 +257,16 @@ function createSessionsWindow(body, ctx, daemon) {
     if (id === null || unread === (since !== null)) return;
     (since === null ? daemon.markUnread(id) : daemon.markRead(id, since)).catch((err) => {
       moveError = `Could not mark it ${unread ? 'unread' : 'read'}: ${errorMessage(err)}`;
+      draw();
+    });
+  }
+
+  /** Pins the row's conversation to the top, or unpins it. @param {HTMLElement} row @param {boolean} pinned */
+  function pin(row, pinned) {
+    const id = ompIdOf(row);
+    if (id === null) return;
+    daemon.pin(id, pinned).catch((err) => {
+      moveError = `Could not ${pinned ? 'pin' : 'unpin'} it: ${errorMessage(err)}`;
       draw();
     });
   }
@@ -262,11 +292,13 @@ function createSessionsWindow(body, ctx, daemon) {
     if (id !== null) {
       const unread = daemon.unreadSince(id) !== null;
       items.push({ label: unread ? 'Mark as read' : 'Mark as unread', run: () => mark(row, !unread) });
+      const pinned = daemon.isPinned(id);
+      items.push({ label: pinned ? 'Unpin' : 'Pin to top', run: () => pin(row, !pinned) });
     }
     /** The row's own button for an action, which shows that the action is under way. @param {string} kind */
     const control = (kind) => /** @type {HTMLButtonElement} */ (row.querySelector(`.sessions-${kind}`));
     if (c?.file && showArchived()) items.push({ label: 'Restore', run: () => void move(c, control('restore')) });
-    else if (c?.file && sessions.some((s) => s.file === c.file)) items.push({ label: 'Archive', run: () => void move(c, control('archive')) });
+    else if (c && archivable(c)) items.push({ label: 'Archive', run: () => void move(c, control('archive')) });
     openContextMenu(anchor, items, at);
   }
 
@@ -278,7 +310,9 @@ function createSessionsWindow(body, ctx, daemon) {
     control.disabled = true;
     moveError = null;
     try {
-      await (showArchived() ? daemon.restorePastSession(c.file) : daemon.archivePastSession(c.file));
+      if (showArchived()) await daemon.restorePastSession(c.file);
+      else if (c.meta && isEmpty(c)) await daemon.end(c.meta.id);
+      else await daemon.archivePastSession(c.file);
     } catch (err) {
       moveError = `Could not ${showArchived() ? 'restore' : 'archive'} “${nameOf(c) ?? c.file}”: ${errorMessage(err)}`;
       control.disabled = false;
@@ -322,6 +356,15 @@ function createSessionsWindow(body, ctx, daemon) {
     return more;
   }
 
+  /** The row's ★ (pinned) or ☆, which pins or unpins it. @param {boolean} pinned */
+  function pinButton(pinned) {
+    const star = button('sessions-action sessions-pin', pinned ? '★' : '☆');
+    star.title = pinned ? 'Unpin' : 'Pin to the top';
+    star.setAttribute('aria-label', 'Pin to top');
+    star.setAttribute('aria-pressed', String(pinned));
+    return star;
+  }
+
   /** States worth a word in the row: the rest read from the dot (done) or need none (idle). */
   const SAID = new Set(['starting', 'working', 'asking']);
 
@@ -329,22 +372,27 @@ function createSessionsWindow(body, ctx, daemon) {
   function renderRow(c, now) {
     const archived = showArchived();
     const unread = isUnread(c);
+    const pinned = isPinned(c);
     const state = stateOf(c);
-    const row = el('li', `sessions-item${state ? ` is-${state}` : ''}${archived ? ' is-archived' : ''}${unread ? ' is-unread' : ''}`);
+    const row = el('li', `sessions-item${state ? ` is-${state}` : ''}${archived ? ' is-archived' : ''}${unread ? ' is-unread' : ''}${pinned ? ' is-pinned' : ''}`);
     row.tabIndex = 0;
     row.dataset.key = c.key;
-    const hint = archived ? 'Archived: Restore to show it' : 'Click to show it in the last agent window used, or drag it onto one';
+    const hint = `Click to ${archived ? 'read' : 'show'} it in the last agent window used, or drag it onto one`;
     row.title = `${c.title && c.firstPrompt ? `${c.firstPrompt}\n` : ''}${c.file || c.cwd}\nLast active ${new Date(c.modifiedAt).toLocaleString()}\n${hint}`;
     const facts = [shortDir(c.cwd), relativeTime(c.modifiedAt, now), ...(c.prompts ? [`${c.prompts} prompt${c.prompts === 1 ? '' : 's'}`] : [])];
     const main = rowText(nameOf(c) ?? 'New session', facts);
     if (state && SAID.has(state)) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', STATE_LABELS[state]));
     const work = workOf(c);
     if (work) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', `${work} running`));
+    if (c.match?.snippet) main.append(snippetLine(c.match, 'sessions-snippet'));
     const actions = el('div', 'sessions-actions');
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
-    else if (c.file && sessions.some((s) => s.file === c.file)) actions.append(button('sessions-action sessions-archive', 'Archive'));
+    else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
     actions.append(moreButton());
-    row.append(rowDot(unread), main, actions);
+    // Over the row's right end, not beside its text: hidden, they take none of its width.
+    const tools = el('div', 'sessions-tools');
+    tools.append(actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
+    row.append(rowDot(unread), main, tools);
     return row;
   }
 
@@ -388,14 +436,20 @@ function createSessionsWindow(body, ctx, daemon) {
     drawDirectories();
 
     const now = Date.now();
-    const conversations = sortSessions(listed(), sortKey(), dir);
+    // A search lists by relevance, as the daemon ranked it; otherwise pinned ones come first.
+    const searching = query().trim() !== '';
+    const sorted = searching ? listed() : sortSessions(listed(), sortKey(), dir);
+    const conversations = searching ? sorted : [...sorted.filter(isPinned), ...sorted.filter((c) => !isPinned(c))];
+    sort.disabled = direction.disabled = searching;
+    sort.title = searching ? 'Sorted by relevance while searching' : '';
+    if (searching) direction.title = sort.title;
     shown = new Map(conversations.map((c) => [c.key, c]));
     drawStatus(conversations.length);
     // Rows are rebuilt only when what they show changed, so a redraw does not steal focus.
     const live = new Set();
     conversations.forEach((c, i) => {
       live.add(c.key);
-      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
+      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.match?.snippet, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), isPinned(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
       let entry = rows.get(c.key);
       if (!entry || entry.signature !== signature) {
         const node = renderRow(c, now);
@@ -448,6 +502,7 @@ function createSessionsWindow(body, ctx, daemon) {
     const control = /** @type {Element} */ (event.target).closest('button');
     const c = conversationAt(row);
     if (!control) show(row);
+    else if (c && control.classList.contains('sessions-pin')) pin(row, !isPinned(c));
     else if (control.classList.contains('sessions-more')) openRowMenu(row, /** @type {HTMLElement} */ (control));
     else if (c && (control.classList.contains('sessions-archive') || control.classList.contains('sessions-restore'))) void move(c, /** @type {HTMLButtonElement} */ (control));
   });
@@ -502,6 +557,7 @@ function createSessionsWindow(body, ctx, daemon) {
   });
 
   const offUnread = daemon.onUnread(scheduleDraw);
+  const offPins = daemon.onPins(scheduleDraw);
   const offSessions = daemon.onSessions(() => {
     syncFollowed();
     scheduleDraw();
@@ -567,6 +623,7 @@ function createSessionsWindow(body, ctx, daemon) {
       requestSeq++; // drop any answer still on its way
       offSessions();
       offUnread();
+      offPins();
       offStatus();
       for (const entry of followed.values()) entry.off();
       cancelAnimationFrame(frame);

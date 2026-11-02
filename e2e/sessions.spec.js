@@ -22,7 +22,7 @@ const MINUTE = 60_000;
  * the tests check (by activity, by title either way) is a different sequence.
  */
 const JOURNALS = [
-  { name: 'login', cwd: ALPHA, title: 'Fix the login flow', prompts: ['fix the login bug', 'now add tests'], ageMs: 120 * MINUTE },
+  { name: 'login', cwd: ALPHA, title: 'Fix the login flow', prompts: ['fix the login bug', 'now add tests'], replies: ['The session cookie expired before the redirect, so the sign-in loop restarted.'], ageMs: 120 * MINUTE },
   { name: 'deploy', cwd: BRAVO, title: null, prompts: ['deploy staging'], ageMs: 30 * MINUTE },
   { name: 'zebra', cwd: ALPHA, title: 'Zebra cleanup', prompts: ['remove dead code'], ageMs: 10 * MINUTE },
 ];
@@ -51,6 +51,7 @@ function writeJournal(j) {
     ...(j.title ? [{ type: 'title', v: 1, title: j.title, source: 'auto' }] : []),
     { type: 'session', version: 3, id: j.name, timestamp: '2026-10-01T10:00:00.000Z', cwd: j.cwd },
     ...j.prompts.map((text) => ({ type: 'message', message: { role: 'user', content: [{ type: 'text', text }] } })),
+    ...(j.replies ?? []).map((text) => ({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text }] } })),
   ];
   writeFileSync(fileOf(j.name), `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
   const at = new Date(Date.now() - j.ageMs);
@@ -74,10 +75,11 @@ test.beforeEach(async ({ page }) => {
   workspace = newWorkspace();
   await page.goto(workbenchPath(workspace));
   await expect(page.locator('.screen-switch')).toBeVisible(); // the app has started
-  // Unread marks outlive sessions: an earlier test's must not show in this one.
+  // Unread marks and pins outlive sessions: an earlier test's must not show in this one.
   await page.evaluate(async (ids) => {
     for (const id of ids) {
       await fetch(`/api/unread/${id}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ at: Number.MAX_SAFE_INTEGER }) });
+      await fetch(`/api/pins/${id}`, { method: 'DELETE' });
     }
   }, JOURNALS.map((j) => j.name));
 });
@@ -233,6 +235,48 @@ test('sessions are listed newest first, searchable across prompts and directorie
   await expect(titles(again)).toHaveText(['Zebra cleanup']);
 });
 
+test('a question in plain words finds the conversation whose agent answered it, with the passage that did', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  const search = window.getByRole('searchbox', { name: 'Search sessions' });
+  await search.fill('In which session did the sign-in loop restart because of a cookie?');
+  await expect(titles(window)).toHaveText(['Fix the login flow']);
+  const snippet = row(window, 'Fix the login flow').locator('.sessions-snippet');
+  await expect(snippet).toHaveText('The session cookie expired before the redirect, so the sign-in loop restarted.');
+  await expect(snippet.locator('mark')).toHaveText(['cookie', 'sign', 'loop', 'restarted']);
+  // The list is by relevance while searching: the sort rests until the search is cleared.
+  await expect(window.getByRole('combobox', { name: 'Sort by' })).toBeDisabled();
+  await search.fill('');
+  await expect(titles(window)).toHaveCount(3);
+  await expect(window.locator('.sessions-snippet')).toHaveCount(0);
+  await expect(window.getByRole('combobox', { name: 'Sort by' })).toBeEnabled();
+});
+
+test('⌘K floats a search over the workbench: a question finds the conversation, Enter shows it, Esc closes', async ({ page }) => {
+  const spotlight = page.getByRole('dialog', { name: 'Search conversations' });
+  const input = spotlight.getByRole('combobox', { name: 'Search conversations' });
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(spotlight).toBeVisible();
+  await expect(input).toBeFocused();
+  await expect(spotlight.getByRole('option').first()).toBeVisible(); // the latest, with nothing typed
+
+  await input.fill('In which session did the sign-in loop restart because of a cookie?');
+  const first = spotlight.getByRole('option').first();
+  await expect(first.locator('.spotlight-title')).toHaveText('Fix the login flow');
+  await expect(first.locator('.spotlight-snippet mark')).toHaveText(['cookie', 'sign', 'loop', 'restarted']);
+  await expect(first).toHaveAttribute('aria-selected', 'true');
+  await input.press('Enter');
+  await expect(spotlight).toBeHidden();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  await expect(pane.locator('.omp-user').first()).toContainText('fix the login bug');
+
+  // The top bar's Search opens it too; Esc closes it, leaving the workbench as it was.
+  await page.getByRole('button', { name: /^Search/ }).click();
+  await expect(spotlight).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(spotlight).toBeHidden();
+  await expect(page.locator('.widget[data-widget="omp"]')).toHaveCount(1);
+});
+
 test('a session omp writes while the window is open shows up by itself', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
@@ -284,6 +328,34 @@ test('a click shows a conversation in a new agent window when there is none, the
   await expect(page.locator('.widget[data-widget="sessions"]'), 'the list stays').toHaveCount(1);
 });
 
+test('what is typed in a conversation waits there while the window shows another, and across a reload', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  await row(window, 'Fix the login flow').click();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  const box = pane.locator('textarea');
+  await box.fill('half a thought');
+  await row(window, 'Zebra cleanup').click();
+  await expect.poll(() => shownConversation(page, pane)).toBe(fileOf('zebra'));
+  await expect(box, 'each conversation its own').toHaveValue('');
+  await box.fill('another');
+
+  await row(window, 'Fix the login flow').click();
+  await expect.poll(() => shownConversation(page, pane)).toBe(fileOf('login'));
+  await expect(box).toHaveValue('half a thought');
+  await page.reload();
+  await expect(box).toHaveValue('half a thought');
+
+  // Sent, it is gone: nothing comes back after another reload.
+  await box.press('Enter');
+  await expect(pane.locator('.omp-user').last()).toContainText('half a thought');
+  await expect(box).toHaveValue('');
+  await page.reload();
+  await expect(pane.locator('.omp-user').last()).toContainText('half a thought');
+  await expect(box).toHaveValue('');
+  await row(window, 'Zebra cleanup').click();
+  await expect(box).toHaveValue('another');
+});
+
 test('a conversation whose directory is gone shows, and says so once something is sent', async ({ page }) => {
   const gone = join(tmpdir(), 'ac-e2e-gone-dir-that-does-not-exist');
   writeFileSync(
@@ -302,7 +374,7 @@ test('a conversation whose directory is gone shows, and says so once something i
   problems = problems.filter((p) => !p.includes('400'));
 });
 
-test('Archive hides a session from the list (and from omp), Archived lists it, and Restore puts it back', async ({ page }) => {
+test('Archive hides a session from the list (and from omp), Archived lists it to read, and Restore puts it back', async ({ page }) => {
   mkdirSync(fileOf('zebra').replace(/\.jsonl$/, ''));
   writeFileSync(join(fileOf('zebra').replace(/\.jsonl$/, ''), 'Explorer.jsonl'), '');
   const window = await addSessionsWindow(page);
@@ -318,11 +390,17 @@ test('Archive hides a session from the list (and from omp), Archived lists it, a
   await expect(window.locator('.sessions-status')).toHaveText('1 archived session');
   const archived = row(window, 'Zebra cleanup');
   await expect(archived.getByRole('button', { name: 'Archive' })).toHaveCount(0);
-  await archived.dblclick();
-  await settle(page);
-  await expect(page.locator('.widget[data-widget="omp"]'), 'an archived session does not show').toHaveCount(0);
+  // Shown, it is to read: no message box until it is restored.
+  await archived.click();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  await expect(pane.locator('.omp-user').first()).toBeVisible();
+  await expect(pane.locator('.omp-banner')).toContainText('Archived');
+  await expect(pane.locator('textarea')).toBeHidden();
 
-  await archived.getByRole('button', { name: 'Restore' }).click();
+  await pane.locator('.omp-banner').getByRole('button', { name: 'Restore' }).click();
+  await expect(pane.locator('.omp-banner')).toBeHidden();
+  await expect(pane.locator('textarea')).toBeVisible();
+  await expect(pane.locator('.omp-user').first()).toBeVisible();
   await expect(window.locator('.sessions-status')).toHaveText('No archived sessions.');
   await toggle.click();
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
@@ -376,6 +454,18 @@ test('a conversation running a background job says so while it runs', async ({ p
   await pane.locator('textarea').press('Enter');
   await expect(fresh.locator('.sessions-state')).toHaveText('1 running');
   await expect(fresh.locator('.sessions-state')).toHaveCount(0);
+});
+
+test('a new session nothing was sent to is archived by ending it: gone from the list, and not among the archived', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  await window.getByRole('combobox', { name: 'Directory' }).selectOption(ALPHA); // only this test's sessions
+  const pane = await startedPane(page, ALPHA);
+  const fresh = keyRow(window, await shownConversation(page, pane));
+  await expect(fresh.locator('.sessions-title')).toHaveText('New session');
+  await fresh.getByRole('button', { name: 'Archive' }).click();
+  await expect(fresh).toHaveCount(0);
+  await window.getByRole('button', { name: 'Archived' }).click();
+  await expect(window.locator('.sessions-title', { hasText: 'New session' })).toHaveCount(0);
 });
 
 test('awake conversations are listed with how each is doing; a click shows one in the agent window used last', async ({ page }) => {
@@ -558,7 +648,7 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
   const menu = page.getByRole('menu');
   const zebra = row(window, 'Zebra cleanup');
   await zebra.click({ button: 'right' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Archive']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Pin to top', 'Archive']);
   await expect(menu.getByRole('menuitem').first()).toBeFocused();
   await menu.getByRole('menuitem', { name: 'Mark as unread' }).click();
   await expect(menu).toHaveCount(0);
@@ -567,7 +657,7 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
 
   await zebra.hover();
   await zebra.getByRole('button', { name: 'More actions' }).click();
-  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as read', 'Archive']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as read', 'Pin to top', 'Archive']);
   await menu.getByRole('menuitem', { name: 'Mark as read' }).click();
   await expect(zebra).not.toHaveClass(/is-unread/);
 
@@ -577,9 +667,49 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
   await expect(titles(window)).toHaveText(['Fix the login flow']);
   await window.getByRole('button', { name: 'Archived' }).click();
   await zebra.click({ button: 'right' });
-  await expect(menu.getByRole('menuitem')).toHaveText(['Mark as unread', 'Restore']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Pin to top', 'Restore']);
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
+});
+
+test('a row’s actions float over its end when pointed at, taking none of its text’s width otherwise', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  const zebra = row(window, 'Zebra cleanup');
+  const width = async (/** @type {Locator} */ at) => /** @type {{ width: number }} */ (await at.boundingBox()).width;
+  await page.mouse.move(0, 0);
+  const text = await width(zebra.locator('.sessions-main'));
+  expect(text, 'the text runs to the row’s end').toBeGreaterThan((await width(zebra)) - 40);
+  await zebra.hover();
+  await expect(zebra.getByRole('button', { name: 'Archive' })).toBeVisible();
+  expect(await width(zebra.locator('.sessions-main')), 'pointing at the row moves nothing').toBe(text);
+});
+
+test('a pinned session is listed first, whatever the sort, in every window and across a reload, until it is unpinned', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
+  const fix = row(window, 'Fix the login flow');
+  await expect(fix.getByRole('button', { name: 'Pin to top' })).toHaveCSS('opacity', '0');
+  await fix.hover();
+  await fix.getByRole('button', { name: 'Pin to top' }).click();
+  await expect(titles(window)).toHaveText(['Fix the login flow', 'Zebra cleanup', 'deploy staging']);
+  await expect(fix).toHaveClass(/is-pinned/);
+  await expect(fix.getByRole('button', { name: 'Pin to top' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Pinned ones keep the window's order among themselves, before the rest.
+  await row(window, 'deploy staging').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Pin to top' }).click();
+  await expect(titles(window)).toHaveText(['deploy staging', 'Fix the login flow', 'Zebra cleanup']);
+  await window.getByRole('combobox', { name: 'Sort by' }).selectOption('title');
+  await expect(titles(window)).toHaveText(['deploy staging', 'Fix the login flow', 'Zebra cleanup']);
+  await window.getByRole('button', { name: 'Reverse sort order' }).click();
+  await expect(titles(window)).toHaveText(['Fix the login flow', 'deploy staging', 'Zebra cleanup']);
+
+  await page.reload();
+  const again = page.locator('.widget[data-widget="sessions"]');
+  await expect(titles(again)).toHaveText(['Fix the login flow', 'deploy staging', 'Zebra cleanup']);
+  await row(again, 'Fix the login flow').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Unpin' }).click();
+  await expect(titles(again)).toHaveText(['deploy staging', 'Zebra cleanup', 'Fix the login flow']);
 });
 
 test('from the keyboard, Shift+F10 opens a row’s menu; Mark as unread lights its window, which the pointer resting there does not clear', async ({ page }) => {
@@ -594,7 +724,7 @@ test('from the keyboard, Shift+F10 opens a row’s menu; Mark as unread lights i
   const menu = page.getByRole('menu');
   await zebra.focus();
   await page.keyboard.press('Shift+F10');
-  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Archive']);
+  await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Pin to top', 'Archive']);
   await page.keyboard.press('Escape');
   await expect(menu).toHaveCount(0);
   await expect(zebra, 'Esc gives focus back to the row').toBeFocused();

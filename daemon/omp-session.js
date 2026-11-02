@@ -6,7 +6,11 @@
  * first prompt of a session with no name is in its conversation, the daemon sends `/rename`
  * with no title, as a user would: omp's title model names the conversation in the
  * background while the agent works on the turn. (Sent any earlier, omp has nothing to name.)
+ * A fork is named again by its first prompt, though it has its parent's name: it is going
+ * somewhere else, and omp's title model reads the latest messages along with the first.
  */
+import { readFileSync } from 'node:fs';
+import { conversationOf } from './conversation.js';
 import { createFrameDecoder } from './frame-decoder.js';
 /** @import { RpcResponse, SessionEvent, SessionMeta } from './wire.js' */
 
@@ -25,6 +29,21 @@ export const SETUP_COMMANDS = Object.freeze([
   { type: 'get_login_providers' },
   { type: 'get_state' },
 ]);
+
+/**
+ * Appended to every session's system prompt (`--append-system-prompt`): an agent window shows
+ * the agent's text, while its thinking and tool calls sit in collapsed cards or are hidden, so
+ * the agent is asked to say what it is doing as it goes (Claude Code's own wording), and told
+ * what the window can show (diagrams, charts, images). It takes the place of any APPEND_SYSTEM.md the
+ * user has: omp reads one or the other.
+ */
+export const APPEND_SYSTEM_PROMPT =
+  "Your text output is what the user reads between tool calls; they usually can't see your thinking or the raw tool results. Write it for a teammate who stepped away and is catching up, not for a log file: they don't know the codenames or shorthand you created along the way, and they didn't watch your process unfold. Before your first tool call, say in a sentence what you're about to do; while working, give brief updates when you find something load-bearing or change direction.\n\n" +
+  "The user reads your replies in a rich view, not a terminal: markdown tables, TeX math ($…$, $$…$$), diagrams, charts and images all render. Visuals are very welcome, and cheap: add one whenever it would make something clearer.\n" +
+  "- Diagrams (flows, sequences, architecture, states, timelines): a ```mermaid block in your reply. Draw flowcharts left to right (flowchart LR) and keep node labels to a few words; put details in the text around the diagram.\n" +
+  '- Charts of numbers: a ```vega-lite block holding a Vega-Lite JSON spec, its data inline ("data": {"values": [...]}); for many points, write them to a JSON or CSV file and use "data": {"url": "/absolute/path.json"}.\n' +
+  "- Anything else (screenshots, plots you render yourself): an image file, shown with ![what it shows](/absolute/path/to/image.png) (png, jpeg, gif, webp or avif).\n" +
+  "Everything shown must be on this machine: remote URLs are not loaded.";
 
 /** Successful responses after which omp is logged in to other providers. */
 const LOGIN_CHANGING_COMMANDS = new Set(['login', 'logout']);
@@ -89,6 +108,8 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   const closed = Promise.withResolvers();
   let named = false;
   let titleAsked = false;
+  /** The id of the history asked for at setup, once asked. @type {string | null} */
+  let historyId = null;
 
   /** @param {Partial<SessionMeta>} patch */
   const update = (patch) => {
@@ -101,7 +122,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   let child = null;
   try {
     const from = resume ? ['--resume', resume] : fork ? ['--fork', fork] : [];
-    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', ...from], {
+    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--append-system-prompt', APPEND_SYSTEM_PROMPT, ...from], {
       cwd,
       stdin: 'pipe',
       stdout: 'pipe',
@@ -128,6 +149,24 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     closed.resolve();
   }
 
+  /**
+   * Puts the whole conversation in omp's answer to the history asked for at setup: omp answers
+   * with its context, which a compaction cut down to a summary and the latest messages, while
+   * the window should show everything said. The journal has it all (`conversation.js`); read
+   * at once, so the answer keeps its place in the log. Unreadable, omp's answer stands.
+   * @param {Record<string, any>} frame
+   */
+  function withWholeHistory(frame) {
+    const file = resume ?? fork;
+    if (!file) return;
+    /** @type {Record<string, any>[] | undefined} */
+    let messages;
+    try {
+      messages = conversationOf(file, readFileSync(file, 'utf8'))?.messages;
+    } catch {}
+    if (messages?.length) frame.data = { ...frame.data, messages };
+  }
+
   /** @param {import('./frame-decoder.js').Decoded} decoded */
   function handle(decoded) {
     if (!decoded.ok) {
@@ -135,6 +174,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
       return;
     }
     const { frame } = decoded;
+    if (frame.type === 'response' && frame.id === historyId && frame.success === true) withWholeHistory(frame);
     emit({ kind: 'frame', frame });
     if (frame.type === 'ready' && meta.status === 'starting') void setup();
     // Every window shows the session's state from the log: the daemon asks for it again
@@ -156,7 +196,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     if (frame.type === 'session_info_update' && frame.title) named = true;
     if (frame.type === 'message_end' && frame.message?.role === 'user' && !titleAsked) {
       titleAsked = true;
-      if (!named) send(RENAME).response.catch(() => {});
+      if (!named || fork) send(RENAME).response.catch(() => {});
     }
     if (frame.type === 'response' && typeof frame.id === 'string') {
       const waiter = pending.get(frame.id);
@@ -209,7 +249,11 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     // A refused setup command leaves its failure in the log; the session still works on
     // the protocol omp does support, so it becomes ready either way.
     const commands = resume || fork ? [...SETUP_COMMANDS, HISTORY_COMMAND] : SETUP_COMMANDS;
-    for (const command of commands) await send(command).response.catch(() => {});
+    for (const command of commands) {
+      const sent = send(command);
+      if (command === HISTORY_COMMAND) historyId = sent.id;
+      await sent.response.catch(() => {});
+    }
     if (!finished) update({ status: 'ready' });
   }
 
