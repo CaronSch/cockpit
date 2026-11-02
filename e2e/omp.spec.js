@@ -652,7 +652,7 @@ test('a click in the pane puts the caret in the message box, unless it is on a c
   await (await popup).close();
   await expect(draft).not.toBeFocused();
   await pane.getByRole('button', { name: 'Accounts', exact: true }).click();
-  await expect(pane.locator('.omp-head-menu')).toBeVisible();
+  await expect(pane.locator('.omp-head-menu:popover-open')).toBeVisible();
   await expect(draft).not.toBeFocused();
   await page.keyboard.press('Escape');
 
@@ -846,7 +846,8 @@ test('New, Fork, Accounts and Stop sit in the window’s top bar; pressing them 
   const pane = await startedPane(page);
   const head = pane.locator('.widget-head');
   const toolbar = pane.locator('.omp-toolbar');
-  await expect(head.locator('.widget-actions button')).toHaveText(['New', 'Fork', 'Accounts', 'Stop']);
+  // PRs shows only in a GitHub repository, which the test project is not.
+  await expect(head.locator('.widget-actions button:visible')).toHaveText(['New', 'Fork', 'Accounts', 'Stop']);
   for (const name of ['New', 'Fork', 'Accounts', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
   await expect(head.getByRole('button', { name: 'More actions' }), 'no menu of the rest: there is no rest').toHaveCount(0);
 

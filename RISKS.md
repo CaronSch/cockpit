@@ -177,6 +177,32 @@ is newer. The daemon prints its version at start.
   `src/omp/transcript.js`, `src/omp/todos.js`,
   `src/omp/visibility.js`, `src/widgets/omp.js` and the fake.
 
+- **Messages from outside an agent window lean on `prompt`'s `streamingBehavior`.** The pull
+  request window's review and Bugbot's findings reach a conversation through the daemon
+  (`daemon/deliver.js`) as a `prompt` with `streamingBehavior: 'followUp'`, which omp 18.10.3
+  runs at once when idle and queues after the turn while the agent works. A change shows up as
+  a review refused mid-turn ("Agent is already processing") or one that interrupts the turn.
+  *Response:* re-read `session/agent-session.ts` (`prompt`) and update `deliver.js`.
+
+## When `gh` is upgraded past 2.92, or Cursor changes Bugbot
+
+- **Pull requests lean on `gh`'s output.** `daemon/github.js` reads `gh pr list`/`pr view
+  --json` fields, `gh pr diff`, the comment URL `gh pr comment` prints as its last line, and
+  `gh api --paginate --slurp` (gh 2.48 and later), as gh 2.92 gives them;
+  `tests/fixtures/fake-gh.js` copies those shapes. A change shows up as a directory whose pull
+  requests are not offered (the reason is a parse error), or Bugbot not asked ("gh did not say
+  where the comment is"). *Response:* compare `gh`'s output with the fake's and update both.
+- **The Bugbot watcher reads Bugbot's own review format.** `src/github/bugbot.js` takes
+  Bugbot's review as a `cursor[bot]` review marked `<!-- BUGBOT_REVIEW -->` (not
+  `BUGBOT_REVIEW_STALE`) submitted after the request, and each finding from its line comment's
+  `### title`, `**… Severity**` and `DESCRIPTION`/`LOCATIONS` markers, as Bugbot wrote them on
+  2026-11-02. The request is `bugbot go`, which worked that day though Cursor documents only
+  `cursor review` and `bugbot run`. A change shows up as requests that time out after an hour
+  with a review on GitHub, or findings sent without their description or places. *Response:*
+  read a fresh Bugbot review with `gh api repos/<repo>/pulls/<n>/reviews` and its comments,
+  update `bugbot.js` (and `BUGBOT_COMMAND`, to `bugbot run`, if `bugbot go` stops working) and
+  its tests.
+
 ## When running sessions start to pile up
 
 - **Forgotten sessions keep running.** Sessions outlive their windows: one shown

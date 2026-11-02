@@ -16,7 +16,11 @@
  * was dragged off another pane's Send with. What the pane shows follows the app's settings
  * (ui/settings.js), the same in every agent window.
  *
- * New, Fork, Accounts and Stop sit in the window's top bar, beside its close button.
+ * New, Fork, PRs (shown while the conversation's directory is in a GitHub repository), Accounts
+ * and Stop sit in the window's top bar, beside its close button. PRs lists the repository's pull
+ * requests: a click opens one beside this window, to review for this conversation
+ * (widgets/github.js); dragging one places it where it is dropped. Typing `#` in the message box
+ * suggests them too (omp/pr-suggest.js).
  */
 import { button, el, setText } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
@@ -31,6 +35,8 @@ import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
 import { createFileSuggest } from '../omp/file-suggest.js';
 import { MENTIONS, PLAIN_PATH } from '../omp/file-mention.js';
+import { createPullSuggest } from '../omp/pr-suggest.js';
+import { pullParams } from './github.js';
 import { awaitedAfter } from '../omp/activity.js';
 import { promptsAndResponses } from '../omp/visibility.js';
 import { turnProgress } from '../omp/todos.js';
@@ -52,7 +58,7 @@ import { settings } from '../ui/settings.js';
  * is cleared as it is sent.
  * @typedef {{ session: string | null, cwd: string | null, sessionFile: string | null, name: string | null, fork: string | null, prompt: string | null }} OmpParams
  */
-/** @typedef {{ label: string, detail?: string, current?: boolean, pick: () => void }} MenuEntry */
+/** @typedef {{ label: string, detail?: string, current?: boolean, pick: () => void, drag?: (event: PointerEvent, close: () => void) => void }} MenuEntry */
 /** How often, at most, a window being used tells the daemon so (it keeps the session awake). */
 const SEEN_EVERY_MS = 60_000;
 const MAX_SUGGESTIONS = 8;
@@ -419,6 +425,8 @@ function createPane(body, ctx, daemon) {
     const spacer = el('span', 'omp-spacer');
     const newBtn = toolButton('New', 'Start a new conversation in this window (Sessions keeps this one)');
     const forkBtn = toolButton('Fork', FORK_TITLE);
+    const prsBtn = toolButton('PRs', 'Pull requests of this repository: click one to review it beside this conversation, or drag it where you want it');
+    prsBtn.hidden = true; // until GitHub says the directory is in a repository
     // Model providers and accounts omp can use: connect another, or switch.
     const accountsBtn = toolButton('Accounts', 'Connect a model provider or another account');
     const stopBtn = toolButton('Stop', 'Stop the agent and restore queued messages (Esc)');
@@ -426,7 +434,7 @@ function createPane(body, ctx, daemon) {
     const signInBtn = toolButton('Sign in', 'Sign in to a model provider: this conversation’s model needs it');
     toolbar.append(cwdEl, modelBtn, thinkingBtn, activity, progressEl, contextEl, costEl, errorBadge, spacer, signInBtn);
     // The conversation's own controls go in the window's top bar, for as long as it is shown.
-    ctx.headActions.replaceChildren(newBtn, forkBtn, accountsBtn, stopBtn);
+    ctx.headActions.replaceChildren(newBtn, forkBtn, prsBtn, accountsBtn, stopBtn);
 
     const strip = el('div', 'omp-strip');
     const loginStrip = el('div', 'omp-login');
@@ -798,6 +806,12 @@ function createPane(body, ctx, daemon) {
                       menu.hidePopover();
                       entry.pick();
                     });
+                    if (entry.drag) {
+                      const drag = entry.drag;
+                      item.addEventListener('pointerdown', (e) => {
+                        if (e.button === 0) drag(e, () => menu.hidePopover());
+                      });
+                    }
                     return item;
                   }),
               );
@@ -866,6 +880,52 @@ function createPane(body, ctx, daemon) {
     attachMenu(signInBtn, loginProviders, { filter: true });
     attachMenu(accountsBtn, loginProviders, { filter: true, className: 'omp-head-menu' });
 
+    // ── pull requests of the conversation's repository (widgets/github.js) ──
+    /** The conversation, for a pull request window reviewing for it. */
+    const asTarget = () => ({ sessionFile: file, session, cwd: cwd() });
+    /** @param {import('../../daemon/wire.js').PullSummary} pull */
+    function openPull(pull) {
+      const open = ctx.screen.get().windows.find((w) => w.widget === 'github' && w.params?.number === pull.number && w.params?.cwd === cwd());
+      if (open) {
+        // Already beside it: point at it rather than open it twice.
+        ctx.outline([open.id]);
+        setTimeout(() => ctx.outline([]), 1500);
+        return;
+      }
+      ctx.openBeside('github', pullParams(cwd(), pull, asTarget()));
+    }
+    attachMenu(
+      prsBtn,
+      async () => {
+        const found = await daemon.pulls(cwd() || '~');
+        if (!found.connected) throw new Error(found.reason);
+        return found.pulls.map((pull) => ({
+          label: `#${pull.number} ${pull.title}`,
+          detail: `${pull.isDraft ? 'draft' : pull.state.toLowerCase()} · ${pull.author}`,
+          pick: () => openPull(pull),
+          drag: (e, close) =>
+            ctx.dragWidget('github', pullParams(cwd(), pull, asTarget()), e, {
+              label: `#${pull.number} ${pull.title}`,
+              onEnd: ({ dropped }) => dropped && close(),
+            }),
+        }));
+      },
+      { filter: true, className: 'omp-head-menu' },
+    );
+    /** The directory GitHub was last asked about, so it is asked once per directory. */
+    let githubCwd = '';
+    function checkGithub() {
+      const dir = cwd();
+      if (!dir || dir === githubCwd) return;
+      githubCwd = dir;
+      daemon
+        .pulls(dir)
+        .then((found) => {
+          if (!closed && githubCwd === dir) prsBtn.hidden = !found.connected;
+        })
+        .catch(() => {});
+    }
+
     stopBtn.addEventListener('click', () => void stop());
     // The copy is omp's own (`--fork`): a new conversation in a new window; this one carries on.
     forkBtn.addEventListener('click', () => {
@@ -889,6 +949,12 @@ function createPane(body, ctx, daemon) {
       listDir: listMentioned,
       replace: (start, end, text) => composer.replace(start, end, text),
     });
+    const pulls = createPullSuggest({
+      draft,
+      list: suggestions,
+      pulls: () => (cwd() ? daemon.pulls(cwd()) : Promise.resolve({ connected: false, reason: 'the conversation has no directory yet' })),
+      replace: (start, end, text) => composer.replace(start, end, text),
+    });
 
     /** A path in a message names a file in the conversation's directory, unless it says otherwise. @param {string} dir */
     function listMentioned(dir) {
@@ -897,17 +963,19 @@ function createPane(body, ctx, daemon) {
 
     function hideSuggestions() {
       files.close();
+      pulls.close();
       suggestions.hide();
     }
 
-    /** Suggests what the draft is starting to name: a slash command, or a file after `@`. */
+    /** Suggests what the draft is starting to name: a slash command, a file after `@`, or a pull request after `#`. */
     function updateSuggestions() {
       const match = /^\/(\S*)$/.exec(draft.value);
       if (!match) {
-        if (!files.update()) suggestions.hide();
+        if (!files.update() && !pulls.update()) suggestions.hide();
         return;
       }
       files.close();
+      pulls.close();
       const q = match[1].toLowerCase();
       const starts = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().startsWith(q));
       const contains = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().includes(q));
@@ -1223,7 +1291,7 @@ function createPane(body, ctx, daemon) {
       sendBtn.title = forkable() ? SEND_TITLE : '';
       // The message waits in the box while the conversation wakes; it goes once omp is up.
       composer.root.classList.toggle('is-waking', waking !== null);
-      draft.placeholder = state.streaming ? 'Steer the agent… (Esc stops)' : 'Message the agent… (@ files, / commands, ! shell)';
+      draft.placeholder = state.streaming ? 'Steer the agent… (Esc stops)' : 'Message the agent… (@ files, # pull requests, / commands, ! shell)';
       if (state.editorText && state.editorText.seq > editorSeen) {
         editorSeen = state.editorText.seq;
         composer.setText(state.editorText.text);
@@ -1273,6 +1341,7 @@ function createPane(body, ctx, daemon) {
         schedule(); // the next draw labels the window with it
       }
       drawToolbar();
+      checkGithub();
       drawStrips();
       drawBanner();
       drawTranscript();

@@ -189,7 +189,11 @@ What runs today:
   Tab completes (a folder opens on its contents), arrows, Enter or a click pick, and
   a file goes in as an omp file mention (quoted when its path needs it), which omp
   reads with the prompt; punctuation typed right after a finished path (`@benches/.`,
-  `@app.js,`) closes the list, unless a name in that folder starts with it. **Rewind** on one of the user's own prompts puts it back
+  `@app.js,`) closes the list, unless a name in that folder starts with it. Typing `#`
+  suggests the pull requests of the GitHub repository the session's directory is in, by
+  number or by words of the title, each shown with its title; a pick goes in as GitHub's `#123`
+  (`src/omp/pr-suggest.js`); without GitHub (no `gh`, signed out, no repository) `#` is plain
+  text. **Rewind** on one of the user's own prompts puts it back
   in the box and dims what sending would set aside; nothing reaches omp until the
   box is sent (Undo or Esc puts the box back), when omp is rewound to just before
   the prompt (`branch`, matched to omp's entry by its place among the user
@@ -263,6 +267,22 @@ What runs today:
   screenshots and files are stored beside them and shown inline. Tab indents pad text
   as in the message box. An edit made
   elsewhere (the file itself, another tab) is never overwritten without asking.
+- Pull request windows (the `github` widget): the agent window's **PRs** (in its title bar,
+  shown while its directory is in a GitHub repository) lists the repository's pull requests; a
+  click opens one on the agent window's right, dragging one places it where it is dropped. It
+  shows the pull request's description and conversation, and its changes (`gh pr diff`,
+  parsed in `src/github/diff.js`) with the comments on their lines. Highlighted text takes a
+  **Comment** or a question (**Ask**, queued here instead of answered by `btw`), each cited by
+  file and lines (or the comment it is in) and kept per pull request and browser until sent;
+  **Send to agent** sends them, with a note of the reviewer's own, to the conversation the
+  window was opened from (else the agent window used last) as one prompt. The daemon delivers
+  it (`POST /api/deliver`, `daemon/deliver.js`): woken from its journal if asleep, queued after
+  the turn (omp's `followUp`) if the agent works. **Bugbot** comments `bugbot go` on the pull
+  request as the user and has the daemon watch for Cursor Bugbot's review
+  (`daemon/bugbot.js`, polled every 30 s, given up after an hour, kept in
+  `~/.cockpit/bugbot.json` across restarts); once posted, its findings with their places go to
+  the conversation the same way, and every page shows how each request is doing. GitHub is
+  reached only through the user's own `gh` (`daemon/github.js`).
 
 Not built yet: saved-context pins, terminal panes, process view,
 telemetry views, cmux-parity features beyond the above.
@@ -318,7 +338,9 @@ telemetry views, cmux-parity features beyond the above.
     loaded as classic scripts only when a reply first holds one.
 - omp is not a dependency: the user installs it on its own (https://omp.sh) and
   the daemon runs the `omp` on PATH. The version the fake omp in `tests/` was
-  recorded from is in `RISKS.md`; a newer installed omp means re-recording frames.
+  recorded from is in `RISKS.md`; a newer installed omp means re-recording frames. GitHub's
+  CLI `gh` (https://cli.github.com) is not one either: the daemon runs the `gh` on PATH, signed
+  in as the user, and the tests drive `tests/fixtures/fake-gh.js` instead.
 - Types are JSDoc in the `.js` files, checked by `tsc` in strict mode. No `.ts`
   files, no `@ts-ignore`/`@ts-expect-error`; `any` only for untrusted input
   (parsed JSON, storage). A type lives in the module that owns the value and is
@@ -340,10 +362,10 @@ telemetry views, cmux-parity features beyond the above.
   `http://cockpit.localhost:4777/?token=…` (it carries the token; the browser
   keeps a cookie afterwards). Cookies and browser storage are per address, so a
   new address (`127.0.0.1` still works) needs the printed URL once. `--port`,
-  `--omp <path>` (or `COCKPIT_OMP`), `--cwd <dir>` (or `COCKPIT_CWD`: the
+  `--omp <path>` (or `COCKPIT_OMP`), `--gh <path>` (or `COCKPIT_GH`), `--cwd <dir>` (or `COCKPIT_CWD`: the
   directory a new agent window suggests, home by default) and `COCKPIT_STATE_DIR`
   override the defaults; `COCKPIT_IDLE_COMPACT_MIN_TOKENS` sets idle compaction's
-  threshold (at least 100K).
+  threshold (at least 100K), `COCKPIT_BUGBOT_POLL_MS` how often a Bugbot review is looked for.
 - Before committing, all of these must pass (CI in `.github/workflows/ci.yml`
   runs the same on every push to `main` and every PR):
   - `bun run typecheck`
@@ -421,6 +443,11 @@ particular, move a capability into "Current state" when it ships.
 
 - `src/app.js` — Cockpit controller: owns the layout atom and wires rendering, interaction and widgets together.
 - `src/daemon/client.js` — Browser side of the daemon connection: one event stream per page, shared by every widget.
+- `src/github/bugbot.js` — Cursor Bugbot's reviews, read from GitHub as the daemon's watcher (daemon/bugbot.js) finds them, and told to the agent: which review answers a `bugbot go` comment, and its findings as one message, kept free of I/O so they can be tested.
+- `src/github/diff.js` — A pull request's changes as the pull request window shows them: `gh pr diff`'s unified diff parsed into files, their hunks and each line with its numbers in the old and the new file, kept free of the DOM so it can be tested.
+- `src/github/pr-mention.js` — `#` pull request mentions typed in the agent pane's message box, as GitHub writes them (`#123`): the one the caret ends, the repository's pull requests that match what is typed (by number, or by words of the title), and the text that completes it, kept free of the DOM so they can be tested.
+- `src/github/review.js` — A review written in the pull request window, for its agent: comments and questions on highlighted parts of the pull request, and a note of the reviewer's own, sent to the agent's conversation as one message.
+- `src/github/text.js` — GitHub comment bodies as text to read: GitHub Markdown may hold HTML (bots write comments, tags and buttons into theirs), which the workbench never renders, so it is taken out and its words kept.
 - `src/interaction/drag-controller.js` — Pointer-driven drag & drop for moving widgets and adding new ones.
 - `src/interaction/sash-controller.js` — Sash (divider) resizing with magnetic detents.
 - `src/layout/compute-layout.js` — Turns a split tree into absolute pixel rects for leaves and sashes.
@@ -441,6 +468,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/markdown-dom.js` — Renders the safe markdown tree from `markdown.js` as DOM nodes (text nodes only, never HTML).
 - `src/omp/markdown.js` — Safe markdown subset for agent text: parses into a small block/inline tree, never HTML.
 - `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, and side questions about a quote.
+- `src/omp/pr-suggest.js` — Pull request suggestions in the agent pane's message box: while the caret ends a `#` mention and the conversation's directory is in a GitHub repository, the suggestion list shows the repository's pull requests that match it, each with its title, and Tab, Enter or a click completes it as GitHub's `#123` (see `github/pr-mention.js`).
 - `src/omp/prompt-history.js` — Up and Down in the agent pane's message box step through what was sent in its conversation, as omp's own editor and a shell do: the user's prompts and `!` commands, newest first.
 - `src/omp/rewind.js` — Rewinding an omp conversation to one of the user's prompts, as omp's `/branch` does: what the rewind sets aside, and which of omp's entries the prompt is.
 - `src/omp/running-work.js` — What an agent has running now, for the agent window's Running line and the Sessions list: the shells and subagents its turn is waiting on, and its background jobs (omp/transcript.js `jobs`), which go on after their tool call has returned, even once the turn has ended.
@@ -476,6 +504,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.
+- `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
 - `src/widgets/pane.js` — An empty window: the frame every real widget is mounted into, with nothing inside.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
@@ -484,10 +513,13 @@ particular, move a capability into "Current state" when it ships.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/attachments.js` — Files attached to omp prompts: stored where omp can read them, one folder per day, so a prompt can mention them as `@"<path>"` and omp attaches them itself (images to the model, text inlined; see omp's file mentions).
+- `daemon/bugbot.js` — Bugbot reviews asked for from the pull request window: `bugbot go` is commented on the pull request as the user, and the daemon watches it until Cursor Bugbot's review answers (src/github/bugbot.js), then sends the review, every finding with where it is, to the conversation the window reviews for (deliver.js).
 - `daemon/clock.js` — The daemon's clock for the times it stamps on events and unread marks: Date.now, but never the same value twice and never earlier than the last, so any two stamps are ordered, even within one millisecond.
 - `daemon/conversation.js` — A conversation read from its journal, for a window to show while no omp process holds it: the messages omp's `get_messages` would answer with once resumed, so the transcript seeds from either the same way, and what the journal records about the session around them.
+- `daemon/deliver.js` — Sends a message to a conversation from outside its agent window (the pull request window's review, a Bugbot review): as a prompt to the session holding it, woken from its journal first if it is asleep, as the agent window itself would (`omp --resume`).
 - `daemon/files.js` — Folder listings for path suggestions (the agent pane's `@` file mentions, its Directory field): each entry's name and whether it is a folder (a link to one counts), capped so a huge folder cannot flood the page; and how a typed path is read.
 - `daemon/frame-decoder.js` — Decodes omp's stdout: newline-delimited JSON frames, with protocol-v2 `rpc_chunk` sequences reassembled into the one frame they carry.
+- `daemon/github.js` — GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the pull requests of a directory's repository, one pull request to review (its conversation, line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
 - `daemon/guard.js` — Loopback guard: decides which requests may reach the daemon (CLAUDE.md, Invariants).
 - `daemon/history.js` — Past omp sessions, read from omp's session files: one summary per conversation, searchable (search.js, ranked) by title, directory, what the user asked and what the agent answered.
 - `daemon/hub.js` — The daemon's omp sessions and the single ordered event log the browser replays.
@@ -513,6 +545,7 @@ particular, move a capability into "Current state" when it ships.
 - `omp` — Agent: Chat with a coding agent in a directory
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
+- `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
 
 ### Scripts
 
@@ -527,6 +560,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

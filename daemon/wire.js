@@ -62,6 +62,18 @@
  *   PUT    /api/workspaces/:name/screens/:id { tree, base } → { rev }, or 409 { error, current: Screen | null }
  *                                      when the screen is no longer at rev `base` (null: not stored);
  *                                      a null `tree` deletes the screen (`rev` comes back null)
+ *   POST   /api/deliver                { target: ConversationTarget, message } → 202 { session }: the
+ *                                      message sent to the conversation as a prompt, woken first if
+ *                                      it is asleep, queued after the turn if its agent works (see
+ *                                      `deliver.js`); 404 when no session holds it and it has no
+ *                                      journal, 409 when it is archived
+ *   GET    /api/github/pulls?cwd=dir   → PullList: the pull requests of the GitHub repository `dir`
+ *                                      (as `cwd` above) is in, newest first, or why there are none
+ *                                      to list (`gh` missing or signed out, not a GitHub repository)
+ *   GET    /api/github/pull?cwd=dir&number=n → Pull; 502 with `gh`'s reason when it cannot be read
+ *   POST   /api/github/bugbot          { cwd, number, target: ConversationTarget } → 201 BugbotWatch:
+ *                                      `bugbot go` commented on the pull request, and its review,
+ *                                      once Bugbot posts it, sent to the conversation (see `bugbot.js`)
  *   GET    /api/stream                 Server-Sent Events, one StreamEvent per message
  *
  * Errors are `{ error: string }` with a 4xx/5xx status. The stream's SSE ids are
@@ -153,7 +165,8 @@
  * other files is running older code than the daemon now serves. `unread` holds the
  * conversations with news their user has not read: when each became unread, by omp id.
  * `pinned` holds the pinned conversations' omp ids. `settings` are the daemon's (see `settings.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, settings: DaemonSettings, ui: string }} HelloEvent
+ * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`).
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, settings: DaemonSettings, bugbot: BugbotWatch[], ui: string }} HelloEvent
  */
 
 /** A scratchpad's text; `rev` names this exact text (a hash of it). @typedef {{ text: string, rev: string }} Scratchpad */
@@ -168,7 +181,9 @@
 
 /** Sent to every page after the daemon's settings changed, with all of them. @typedef {{ kind: 'settings', settings: DaemonSettings }} SettingsEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | SettingsEvent | SessionEvent} StreamEvent */
+/** Sent to every page after a Bugbot watch started or changed, with all of them. @typedef {{ kind: 'bugbot', watches: BugbotWatch[] }} BugbotEvent */
+
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
 
 /** @typedef {{ defaultCwd: string, home: string, scratchpadDir: string }} DaemonConfig */
 
@@ -189,6 +204,43 @@
  * omp's reply to one command (see omp's rpc docs). `success: false` is a normal answer,
  * not a transport failure.
  * @typedef {{ type: 'response', command: string, success: boolean, data?: any, error?: string, code?: string, id?: string }} RpcResponse
+ */
+
+/**
+ * A conversation to send a message to: the journal that names it (null for a new one omp has
+ * not named yet), the session last seen holding it, and the directory it runs in.
+ * @typedef {{ sessionFile: string | null, session: string | null, cwd: string }} ConversationTarget
+ */
+
+/**
+ * A pull request as GitHub lists it. `state` is GitHub's: `OPEN`, `CLOSED` or `MERGED`.
+ * @typedef {{ number: number, title: string, state: string, isDraft: boolean, author: string, headRefName: string, url: string, updatedAt: string }} PullSummary
+ */
+/**
+ * The pull requests of a directory's repository, or why there are none to list: `reason` is
+ * `gh`'s own.
+ * @typedef {{ connected: true, pulls: PullSummary[] } | { connected: false, reason: string }} PullList
+ */
+/** @typedef {{ author: string, body: string, createdAt: string, url: string }} PullComment */
+/** `id` is GitHub's node id. @typedef {{ id: string, author: string, state: string, body: string, submittedAt: string }} PullReview */
+/**
+ * A comment on a line of the diff: on `side` (`RIGHT`, the new file, or `LEFT`) at `line`;
+ * null when the line is no longer in the diff (outdated).
+ * @typedef {{ id: number, author: string, body: string, path: string, line: number | null, startLine: number | null, side: 'LEFT' | 'RIGHT', inReplyTo: number | null, createdAt: string, url: string }} ReviewComment
+ */
+/**
+ * One pull request to review: what it is, its conversation (`comments`, `reviews`), the
+ * comments on its lines, and its unified diff (`diffTruncated` when cut short: see `github.js`).
+ * @typedef {PullSummary & { repo: string, body: string, baseRefName: string, additions: number, deletions: number, createdAt: string, comments: PullComment[], reviews: PullReview[], reviewComments: ReviewComment[], diff: string, diffTruncated: boolean }} Pull
+ */
+
+/**
+ * A Bugbot review asked for (`bugbot go` commented at `since`, GitHub's time) on pull request
+ * `number` of `repo` (checked out in `cwd`, where `gh` runs for it), for the conversation
+ * `target`: `watching` until Bugbot reviews, then `delivered` (its review sent to the
+ * conversation), `timed-out` when it never did, or `failed` (`error` says why). `error` while
+ * watching is the last poll's failure, retried. `at`: when it last changed, epoch milliseconds.
+ * @typedef {{ id: string, repo: string, cwd: string, number: number, url: string, since: string, target: ConversationTarget, status: 'watching' | 'delivered' | 'timed-out' | 'failed', error: string | null, at: number }} BugbotWatch
  */
 
 export {};

@@ -3,6 +3,7 @@ import pane from './pane.js';
 import omp from './omp.js';
 import sessions from './sessions.js';
 import scratchpad from './scratchpad.js';
+import github from './github.js';
 
 /**
  * Widgets the palette can add, keyed by type.
@@ -16,6 +17,7 @@ import scratchpad from './scratchpad.js';
  * `paramsChanged()` is called after they changed, whoever changed them (this window, or
  * another one showing something in it).
  * `ctx.addWidget(type, params)` opens another window beside the largest one;
+ * `ctx.openBeside(type, params)` opens one on this window's right, splitting it;
  * `ctx.showWidget(type, params)` shows `params` in the window of `type` this screen used last
  * (merging them into its settings), or opens one if there is none;
  * `ctx.dragWidget(type, params, pointerdown)` lets the user drop it where they want, exactly
@@ -45,6 +47,7 @@ import scratchpad from './scratchpad.js';
  *   setParams(patch: LeafParams): void,
  *   addWidget(type: string, params: LeafParams): void,
  *   showWidget(type: string, params: LeafParams): void,
+ *   openBeside(type: string, params: LeafParams): void,
  *   dragWidget(type: string, params: LeafParams, event: PointerEvent, options?: { label?: string, into?: boolean, onEnd?: (result: DragEndResult) => void }): void,
  *   setUnread(unread: boolean): void,
  *   setLabel(text: string | null): void,
@@ -60,7 +63,7 @@ import scratchpad from './scratchpad.js';
  */
 
 /** @type {readonly WidgetDef[]} */
-const DEFS = [pane, omp, sessions, scratchpad];
+const DEFS = [pane, omp, sessions, scratchpad, github];
 
 /** @type {Readonly<Record<string, WidgetDef>>} */
 export const WIDGETS = Object.freeze(Object.fromEntries(DEFS.map((def) => [def.type, def])));

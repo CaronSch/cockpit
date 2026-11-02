@@ -14,11 +14,15 @@ import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
 import { loadSettings } from '../daemon/settings.js';
 import { loadPins } from '../daemon/pins.js';
+import { createGithub } from '../daemon/github.js';
+import { createDelivery } from '../daemon/deliver.js';
+import { loadBugbot } from '../daemon/bugbot.js';
 import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
 const ROOT = resolve(import.meta.dir, '..');
 const FAKE_OMP = join(ROOT, 'tests/fixtures/fake-omp.js');
+const FAKE_GH = join(ROOT, 'tests/fixtures/fake-gh.js');
 const TOKEN = 'a'.repeat(64);
 
 /** @type {ReturnType<typeof createDaemonServer>} */
@@ -31,6 +35,12 @@ let unread;
 let settings;
 /** @type {import('../daemon/pins.js').PinsStore} */
 let pins;
+/** @type {import('../daemon/github.js').Github} */
+let github;
+/** @type {import('../daemon/deliver.js').Delivery} */
+let delivery;
+/** @type {import('../daemon/bugbot.js').BugbotStore} */
+let bugbot;
 let port = 0;
 let cwd = '';
 
@@ -143,7 +153,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'settings' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -151,12 +161,19 @@ beforeAll(async () => {
   settings = await loadSettings({ file: join(cwd, 'state', 'settings.json') });
   pins = await loadPins({ file: join(cwd, 'state', 'pins.json') });
   hub = createHub({ ompPath: FAKE_OMP, unread });
+  const history = createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') });
+  github = createGithub({ ghPath: FAKE_GH });
+  delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
+  bugbot = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 100 });
   server = createDaemonServer({
     hub,
     unread,
     pins,
     settings,
-    history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
+    history,
+    github,
+    delivery,
+    bugbot,
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
@@ -169,6 +186,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  bugbot.stop();
   await hub.closeAll();
   await server.stop(true);
 });
@@ -698,6 +716,9 @@ describe('unread conversations', () => {
       scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
       attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
       workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
+      github,
+      delivery,
+      bugbot,
       token: TOKEN,
       root: ROOT,
       config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads') },
@@ -1266,5 +1287,143 @@ describe('file listings for @ mentions', () => {
       ],
       truncated: true,
     });
+  });
+});
+
+describe('GitHub', () => {
+  /** A checkout of acme/widgets, as the fake gh finds it (tests/fixtures/fake-gh.js). */
+  let repo = '';
+  const finding = '### Off by one\n\n**Low Severity**\n\n<!-- DESCRIPTION START -->\nThe loop stops a line early.\n<!-- DESCRIPTION END -->\n\n<!-- LOCATIONS START\nsrc/app.js#L3-L7\nLOCATIONS END -->';
+
+  beforeAll(async () => {
+    repo = join(cwd, 'widgets');
+    await mkdir(join(repo, 'src'), { recursive: true });
+    await Bun.write(
+      join(repo, '.fake-gh.json'),
+      JSON.stringify({
+        repo: 'acme/widgets',
+        pulls: [
+          {
+            number: 12,
+            title: 'feat: pull request window',
+            state: 'OPEN',
+            isDraft: false,
+            author: 'octo',
+            headRefName: 'feat/pr',
+            baseRefName: 'main',
+            body: 'Adds a window.',
+            createdAt: '2026-11-01T09:00:00Z',
+            updatedAt: '2026-11-02T09:00:00Z',
+            additions: 1,
+            deletions: 1,
+            comments: [{ author: 'hubot', body: 'Nice', createdAt: '2026-11-01T10:00:00Z', url: 'https://github.com/acme/widgets/pull/12#issuecomment-1' }],
+            reviews: [],
+            diff: 'diff --git a/src/app.js b/src/app.js\n--- a/src/app.js\n+++ b/src/app.js\n@@ -1,1 +1,1 @@\n-old\n+new\n',
+            reviewComments: [{ id: 9, user: { login: 'octo' }, body: 'Why?', path: 'src/app.js', line: 1, start_line: null, side: 'RIGHT', in_reply_to_id: null, created_at: '2026-11-01T11:00:00Z', html_url: 'u' }],
+          },
+          { number: 7, title: 'docs: readme', state: 'MERGED', isDraft: false, author: 'octo', headRefName: 'docs', url: '', updatedAt: '' },
+        ],
+        bugbot: { afterMs: 300, body: '<!-- BUGBOT_REVIEW -->\nCursor Bugbot has reviewed your changes and found 1 potential issue.', comments: [{ body: finding, path: 'src/app.js', line: 7, start_line: 3 }] },
+      }),
+    );
+  });
+
+  /** The prompts the daemon sent session `id`. @param {string} id */
+  const prompts = (id) => forSession(hub.since(0), id).flatMap((e) => (e.kind === 'sent' && e.command.type === 'prompt' && e.command.message !== '/rename' ? [e.command] : []));
+
+  test('a directory in a GitHub repository lists its pull requests, from any folder of the checkout', async () => {
+    const listed = await call({ path: `/api/github/pulls?cwd=${encodeURIComponent(join(repo, 'src'))}` });
+    assert.equal(listed.status, 200);
+    assert.equal(listed.json.connected, true);
+    assert.deepEqual(
+      listed.json.pulls.map((/** @type {any} */ p) => [p.number, p.title, p.state, p.author, p.url]),
+      [
+        [12, 'feat: pull request window', 'OPEN', 'octo', 'https://github.com/acme/widgets/pull/12'],
+        [7, 'docs: readme', 'MERGED', 'octo', 'https://github.com/acme/widgets/pull/7'],
+      ],
+    );
+  });
+
+  test('a directory in no repository lists none, and says why in gh’s words', async () => {
+    const elsewhere = join(cwd, 'not-a-repo');
+    await mkdir(elsewhere, { recursive: true });
+    const listed = await call({ path: `/api/github/pulls?cwd=${encodeURIComponent(elsewhere)}` });
+    assert.equal(listed.status, 200);
+    assert.equal(listed.json.connected, false);
+    assert.match(listed.json.reason, /not a git repository/);
+  });
+
+  test('a missing gh lists none, saying where to get it', async () => {
+    const missing = createGithub({ ghPath: join(cwd, 'no-such-gh') });
+    const listed = await missing.pulls(repo);
+    assert.equal(listed.connected, false);
+    assert.match(listed.connected ? '' : listed.reason, /cli\.github\.com/);
+  });
+
+  test('one pull request reads with its conversation, its line comments and its diff', async () => {
+    const read = await call({ path: `/api/github/pull?cwd=${encodeURIComponent(repo)}&number=12` });
+    assert.equal(read.status, 200);
+    assert.equal(read.json.repo, 'acme/widgets');
+    assert.equal(read.json.baseRefName, 'main');
+    assert.deepEqual(read.json.comments.map((/** @type {any} */ c) => [c.author, c.body]), [['hubot', 'Nice']]);
+    assert.deepEqual(read.json.reviewComments.map((/** @type {any} */ c) => [c.author, c.path, c.side, c.line, c.inReplyTo]), [['octo', 'src/app.js', 'RIGHT', 1, null]]);
+    assert.match(read.json.diff, /^diff --git a\/src\/app.js/);
+    assert.equal(read.json.diffTruncated, false);
+    assert.equal((await call({ path: `/api/github/pull?cwd=${encodeURIComponent(repo)}&number=99` })).status, 502);
+    assert.equal((await call({ path: `/api/github/pull?cwd=${encodeURIComponent(repo)}&number=x` })).status, 400);
+  });
+
+  test('a message delivered to an asleep conversation wakes it from its journal and reaches the agent, after its turn', async () => {
+    const journal = join(cwd, 'deliver-asleep.jsonl');
+    await Bun.write(journal, `${JSON.stringify({ type: 'session', version: 3, id: 'deliver-asleep', timestamp: '2026-10-01T10:00:00.000Z', cwd })}\n`);
+    const sent = await call({ method: 'POST', path: '/api/deliver', body: { target: { sessionFile: journal, session: null, cwd }, message: 'My review of PR #12' } });
+    assert.equal(sent.status, 202);
+    const meta = hub.get(sent.json.session)?.meta();
+    assert.equal(meta?.resume, journal);
+    assert.deepEqual(prompts(sent.json.session), [{ type: 'prompt', message: 'My review of PR #12', streamingBehavior: 'followUp', id: prompts(sent.json.session)[0]?.id }]);
+    await call({ method: 'DELETE', path: `/api/sessions/${sent.json.session}` });
+  });
+
+  test('a message delivered to an awake conversation goes to the session holding it; one that is gone is a 404', async () => {
+    const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
+    const ready = await waitForStatus(json.session.id, 'ready');
+    const sent = await call({ method: 'POST', path: '/api/deliver', body: { target: { sessionFile: ready.sessionFile, session: ready.id, cwd }, message: 'hello there' } });
+    assert.equal(sent.status, 202);
+    assert.equal(sent.json.session, ready.id);
+    assert.deepEqual(prompts(ready.id).map((p) => p.message), ['hello there']);
+    await call({ method: 'DELETE', path: `/api/sessions/${ready.id}` });
+
+    const gone = await call({ method: 'POST', path: '/api/deliver', body: { target: { sessionFile: join(cwd, 'missing.jsonl'), session: null, cwd }, message: 'x' } });
+    assert.equal(gone.status, 404);
+    assert.equal((await call({ method: 'POST', path: '/api/deliver', body: { target: { cwd }, message: 'x' } })).status, 400);
+    assert.equal((await call({ method: 'POST', path: '/api/deliver', body: { target: { session: ready.id, cwd }, message: ' ' } })).status, 400);
+  });
+
+  test('Bugbot is asked with `bugbot go`, and its review, findings and places, reaches the conversation; every page hears how it went', async () => {
+    const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
+    const ready = await waitForStatus(json.session.id, 'ready');
+    const stream = await openStream();
+    const asked = await call({ method: 'POST', path: '/api/github/bugbot', body: { cwd: repo, number: 12, target: { sessionFile: ready.sessionFile, session: ready.id, cwd } } });
+    assert.equal(asked.status, 201);
+    assert.equal(asked.json.status, 'watching');
+    assert.equal(asked.json.url, 'https://github.com/acme/widgets/pull/12');
+    const commented = JSON.parse(await Bun.file(join(repo, '.fake-gh.json')).text()).issueComments;
+    assert.deepEqual(commented.map((/** @type {any} */ c) => [c.number, c.body]), [[12, 'bugbot go']]);
+
+    const { events } = await stream.until((events) => events.some((e) => e.kind === 'bugbot' && e.watches.some((w) => w.id === asked.json.id && w.status === 'delivered')));
+    assert.ok(events.some((e) => e.kind === 'bugbot' && e.watches.some((w) => w.id === asked.json.id && w.status === 'watching')));
+    const [prompt] = prompts(ready.id);
+    assert.equal(prompt.streamingBehavior, 'followUp');
+    assert.match(prompt.message, /^Cursor Bugbot reviewed PR #12 \(https:\/\/github.com\/acme\/widgets\/pull\/12\): Cursor Bugbot has reviewed your changes and found 1 potential issue\./);
+    assert.match(prompt.message, /1\. \*\*Off by one\*\* \(Low Severity\), `src\/app.js#L3-L7`\n\nThe loop stops a line early\./);
+    await Bun.sleep(350); // three more polls (every 100 ms here)
+    assert.equal(prompts(ready.id).length, 1, 'sent once, however many polls follow');
+    await call({ method: 'DELETE', path: `/api/sessions/${ready.id}` });
+  });
+
+  test('watches outlive the daemon: the next one reads them from its file', async () => {
+    const next = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 60_000 });
+    assert.deepEqual(next.all(), bugbot.all());
+    next.stop();
   });
 });

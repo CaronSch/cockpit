@@ -10,13 +10,15 @@ import { SessionNotRunning } from './omp-session.js';
 import { OMP_ID } from './unread.js';
 import { isSettingsPatch } from './settings.js';
 import { listDirectory, resolvePath } from './files.js';
+import { DeliveryRefused } from './deliver.js';
+import { GithubError } from './github.js';
 import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
 import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
 import { isValidTree } from '../src/layout/grid-model.js';
 import { CONTENT_TYPES, INDEX_FILE, STATIC_DIRS, VENDOR_FILES, createUiVersion } from './ui-files.js';
 /** @import { BunRequest, Server } from 'bun' */
-/** @import { DaemonConfig, Scratchpad, SessionEvent } from './wire.js' */
+/** @import { BugbotWatch, ConversationTarget, DaemonConfig, Scratchpad, SessionEvent } from './wire.js' */
 /** @import { Hub } from './hub.js' */
 /** @typedef {ReturnType<typeof import('./history.js').createHistory>} History */
 /** @typedef {ReturnType<typeof import('./scratchpad.js').createScratchpads>} Scratchpads */
@@ -25,6 +27,9 @@ import { CONTENT_TYPES, INDEX_FILE, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Unread, UnreadStore } from './unread.js' */
 /** @import { Pinned, PinsStore } from './pins.js' */
 /** @import { DaemonSettings, SettingsStore } from './settings.js' */
+/** @import { Github } from './github.js' */
+/** @import { Delivery } from './deliver.js' */
+/** @import { BugbotStore } from './bugbot.js' */
 /** @typedef {(req: BunRequest, server: Server<undefined>) => Response | Promise<Response>} Handler */
 
 /** Bun refuses (413) any request body larger than this; uploads are the largest. */
@@ -117,6 +122,26 @@ function asCommand(body) {
 }
 
 /**
+ * The conversation a request names to send to (untrusted JSON), checked for shape.
+ * @param {any} target @returns {ConversationTarget}
+ */
+function asTarget(target) {
+  const optional = (/** @type {unknown} */ v) => v === null || v === undefined || typeof v === 'string';
+  if (!target || typeof target !== 'object' || !optional(target.sessionFile) || !optional(target.session) || typeof target.cwd !== 'string') {
+    throw new HttpError(400, 'expected a target { sessionFile, session, cwd }');
+  }
+  if (!target.sessionFile && !target.session) throw new HttpError(400, 'the target names no conversation');
+  return { sessionFile: target.sessionFile ? resolve(target.sessionFile) : null, session: target.session || null, cwd: resolvePath(target.cwd, homedir()) };
+}
+
+/** A pull request number (untrusted). @param {unknown} value */
+function pullNumber(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number <= 0) throw new HttpError(400, 'expected a pull request number');
+  return number;
+}
+
+/**
  * @param {string | null} header @param {string} bootId
  * @returns {number} the last sequence number this client saw in the current boot, else 0
  */
@@ -128,16 +153,23 @@ function lastSeenSeq(header, bootId) {
 
 /** @param {unknown} err */
 function errorResponse(err) {
-  const status = err instanceof HttpError || err instanceof JournalRefused ? err.status : err instanceof SessionNotRunning ? 409 : 500;
+  const status =
+    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused
+      ? err.status
+      : err instanceof SessionNotRunning
+        ? 409
+        : err instanceof GithubError
+          ? 502
+          : 500;
   if (status === 500) console.error('[daemon]', err);
   return json({ error: err instanceof Error ? err.message : String(err) }, status);
 }
 
 /**
  * Starts serving on `127.0.0.1:port` (0 picks a free port); throws if the port is taken.
- * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, settings: SettingsStore, token: string, root: string, config: DaemonConfig, port: number }} options
+ * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, token: string, root: string, config: DaemonConfig, port: number }} options
  */
-export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, settings, token, root, config, port }) {
+export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, settings, github, delivery, bugbot, token, root, config, port }) {
   const rootDir = resolve(root);
   const indexFile = resolve(rootDir, INDEX_FILE);
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -169,11 +201,11 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
       start(controller) {
         const write = (/** @type {string} */ chunk) => controller.enqueue(chunk);
         write('retry: 1000\n\n');
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), settings: settings.all(), ui })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), settings: settings.all(), bugbot: bugbot.all(), ui })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of hub.since(lastSeenSeq(req.headers.get('last-event-id'), hub.bootId))) send(event);
         const unsubscribe = hub.subscribe(send);
-        // No id: scratchpad, history, unread, pins and settings events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, settings and bugbot events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
@@ -181,6 +213,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
         const offUnread = unread.subscribe((/** @type {Unread} */ marks) => write(`data: ${JSON.stringify({ kind: 'unread', unread: marks })}\n\n`));
         const offPins = pins.subscribe((/** @type {Pinned} */ pinned) => write(`data: ${JSON.stringify({ kind: 'pins', pinned })}\n\n`));
         const offSettings = settings.subscribe((/** @type {DaemonSettings} */ all) => write(`data: ${JSON.stringify({ kind: 'settings', settings: all })}\n\n`));
+        const offBugbot = bugbot.subscribe((/** @type {readonly BugbotWatch[]} */ watches) => write(`data: ${JSON.stringify({ kind: 'bugbot', watches })}\n\n`));
         const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
         stop = () => {
           clearInterval(heartbeat);
@@ -190,6 +223,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           offUnread();
           offPins();
           offSettings();
+          offBugbot();
         };
       },
       cancel: () => stop(),
@@ -408,6 +442,30 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           const { id, response } = session.command(command);
           response.catch(() => {});
           return json({ id }, 202);
+        },
+      }),
+      '/api/deliver': api({
+        POST: async (req) => {
+          const body = (await readJson(req)) ?? {};
+          if (typeof body.message !== 'string' || !body.message.trim()) throw new HttpError(400, 'expected a message to send');
+          return json({ session: await delivery.deliver(asTarget(body.target), body.message) }, 202);
+        },
+      }),
+      '/api/github/pulls': api({
+        GET: async (req) => json(await github.pulls(await existingPath(new URL(req.url).searchParams.get('cwd'), 'directory', 'cwd'))),
+      }),
+      '/api/github/pull': api({
+        GET: async (req) => {
+          const params = new URL(req.url).searchParams;
+          const cwd = await existingPath(params.get('cwd'), 'directory', 'cwd');
+          return json(await github.pull(cwd, pullNumber(params.get('number'))));
+        },
+      }),
+      '/api/github/bugbot': api({
+        POST: async (req) => {
+          const body = (await readJson(req)) ?? {};
+          const cwd = await existingPath(body.cwd, 'directory', 'cwd');
+          return json(await bugbot.start({ cwd, number: pullNumber(body.number), target: asTarget(body.target) }), 201);
         },
       }),
       '/api/files': api({ GET: (req) => listing(req, homedir()) }),

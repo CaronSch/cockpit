@@ -3,24 +3,29 @@
  * Daemon entry point (`bun start`): serves the workbench on loopback and runs the omp
  * processes it shows.
  *
- *   bun daemon/main.js [--port 4777] [--omp <path to omp>] [--cwd <dir>]
+ *   bun daemon/main.js [--port 4777] [--omp <path to omp>] [--gh <path to gh>] [--cwd <dir>]
  *
- * omp defaults to the `omp` on PATH (install it from https://omp.sh). `--cwd` is the
+ * omp defaults to the `omp` on PATH (install it from https://omp.sh), and the GitHub CLI to the
+ * `gh` on PATH (https://cli.github.com; without it, pull requests are not offered). `--cwd` is the
  * directory a new agent window suggests, the home directory unless given.
- * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_CWD, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
- * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), settings.json, scratchpads/,
+ * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_GH, COCKPIT_CWD, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
+ * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), settings.json,
+ * bugbot.json (the Bugbot reviews watched for), scratchpads/,
  * attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
  * COCKPIT_IDLE_COMPACT_MIN_TOKENS (from what size idle compaction applies, see
- * idle-compaction.js; default 200000, at least 100000) and
+ * idle-compaction.js; default 200000, at least 100000),
  * COCKPIT_IDLE_COMPACT_AFTER_MS (how long after its last request; default 54 minutes, shorter
- * for tests).
+ * for tests) and COCKPIT_BUGBOT_POLL_MS (how often a Bugbot review is looked for; default 30 seconds).
  */
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { JournalRefused, createHistory } from './history.js';
+import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
+import { createDelivery } from './deliver.js';
+import { createGithub } from './github.js';
 import { createHub } from './hub.js';
 import { IDLE_COMPACT_AFTER_MS, IDLE_COMPACT_MIN_TOKENS, IDLE_COMPACT_TOKENS_FLOOR } from './idle-compaction.js';
 import { createAttachments } from './attachments.js';
@@ -45,11 +50,14 @@ async function ompVersion(ompPath) {
   }
 }
 
-const { values } = parseArgs({ options: { port: { type: 'string' }, omp: { type: 'string' }, cwd: { type: 'string' } } });
+const { values } = parseArgs({ options: { port: { type: 'string' }, omp: { type: 'string' }, gh: { type: 'string' }, cwd: { type: 'string' } } });
 const port = Number(values.port ?? process.env.COCKPIT_PORT ?? 4777);
 const ompOption = values.omp ?? process.env.COCKPIT_OMP ?? 'omp';
 // A path (not a bare command name) must not depend on each session's cwd.
 const ompPath = ompOption.includes('/') ? resolve(ompOption) : ompOption;
+const ghOption = values.gh ?? process.env.COCKPIT_GH ?? 'gh';
+// gh runs in the directory of the repository asked about: a path must not depend on it.
+const ghPath = ghOption.includes('/') ? resolve(ghOption) : ghOption;
 const defaultCwd = resolve(values.cwd ?? process.env.COCKPIT_CWD ?? homedir());
 const stateDir = process.env.COCKPIT_STATE_DIR ?? join(homedir(), '.cockpit');
 const ompSessions =
@@ -84,6 +92,15 @@ const hub = createHub({
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     }),
 });
+const delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
+const bugbotPoll = Number(process.env.COCKPIT_BUGBOT_POLL_MS);
+const github = createGithub({ ghPath });
+const bugbot = await loadBugbot({
+  file: join(stateDir, 'bugbot.json'),
+  github,
+  delivery,
+  pollMs: bugbotPoll > 0 ? bugbotPoll : BUGBOT_POLL_MS,
+}).catch(unreadable);
 const scratchpadDir = join(stateDir, 'scratchpads');
 /** @type {ReturnType<typeof createDaemonServer>} */
 let server;
@@ -97,6 +114,9 @@ try {
     unread,
     pins,
     settings,
+    github,
+    delivery,
+    bugbot,
     token,
     root: ROOT,
     port,
