@@ -6,16 +6,17 @@
  * to do back there. Without one, it fails as `gh` does outside a repository. A command that
  * names its repository (`-R owner/name`, `api repos/owner/name/…`) reads the one checked out at
  * `$FAKE_GH_ROOT/owner/name`, as `gh` finds any repository on GitHub, and fails as `gh` does for
- * one that does not exist.
+ * one that does not exist. `repo list owner` lists the repositories checked out under
+ * `$FAKE_GH_ROOT/owner/`.
  *
- * `.fake-gh.json`: `{ repo: 'owner/name', pulls: [Pull-like objects, with `diff` and
- * `reviewComments` in GitHub's REST shape], bugbot?: { afterMs, body, comments } }`. Commenting
+ * `.fake-gh.json`: `{ repo: 'owner/name', description?, pushedAt?, pulls: [Pull-like objects,
+ * with `diff` and `reviewComments` in GitHub's REST shape], bugbot?: { afterMs, body, comments } }`. Commenting
  * `bugbot go` makes Cursor Bugbot "review" `afterMs` later, with that body and those line
  * comments; comments made are kept in `issueComments`, Bugbot's reviews in `botReviews`.
  *
  * Shapes follow gh 2.92 and GitHub's REST API, in the fields the daemon reads.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -50,6 +51,16 @@ const option = (name) => {
 const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 
 const nowIso = () => new Date().toISOString();
+// An owner's repositories: those checked out under $FAKE_GH_ROOT/<owner>/, wherever it runs.
+if (args[0] === 'repo' && args[1] === 'list') {
+  const owner = args[2] ?? fail('fake gh: repo list needs an owner');
+  const dir = join(process.env.FAKE_GH_ROOT ?? fail('fake gh: FAKE_GH_ROOT is not set'), owner);
+  const names = existsSync(dir) ? readdirSync(dir).filter((name) => existsSync(join(dir, name, '.fake-gh.json'))) : [];
+  const listed = names.map((name) => JSON.parse(readFileSync(join(dir, name, '.fake-gh.json'), 'utf8')));
+  const fields = (option('--json') ?? 'nameWithOwner').split(',');
+  print(listed.map((s) => Object.fromEntries(fields.map((f) => [f, { nameWithOwner: s.repo, description: s.description ?? '', pushedAt: s.pushedAt ?? '' }[f]]))));
+  process.exit(0);
+}
 // The repository named, else the one the directory is in.
 const file = stateFile();
 if (!file) fail('failed to run git: fatal: not a git repository (or any of the parent directories): .git');
@@ -66,7 +77,9 @@ const asJson = (p, fields) => {
 };
 
 const [group, verb, ...rest] = args;
-if (group === 'pr' && verb === 'list') {
+if (group === 'repo' && verb === 'view') {
+  print({ nameWithOwner: state.repo });
+} else if (group === 'pr' && verb === 'list') {
   print(state.pulls.map((/** @type {any} */ p) => asJson(p, option('--json') ?? 'number')));
 } else if (group === 'pr' && verb === 'view') {
   print(asJson(pull(rest[0]), option('--json') ?? 'number'));

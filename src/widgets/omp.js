@@ -906,7 +906,7 @@ function createPane(body, ctx, daemon) {
     attachMenu(
       prsBtn,
       async () => {
-        const found = await daemon.pulls(cwd() || '~');
+        const found = await daemon.pulls({ cwd: cwd() || '~' });
         if (!found.connected) throw new Error(found.reason);
         return found.pulls.map((pull) => ({
           label: `#${pull.number} ${pull.title}`,
@@ -928,7 +928,7 @@ function createPane(body, ctx, daemon) {
       if (!dir || dir === githubCwd) return;
       githubCwd = dir;
       daemon
-        .pulls(dir)
+        .pulls({ cwd: dir })
         .then((found) => {
           if (!closed && githubCwd === dir) prsBtn.hidden = !found.connected;
         })
@@ -961,7 +961,9 @@ function createPane(body, ctx, daemon) {
     const pulls = createPullSuggest({
       draft,
       list: suggestions,
-      pulls: () => (cwd() ? daemon.pulls(cwd()) : Promise.resolve({ connected: false, reason: 'the conversation has no directory yet' })),
+      repos: () => (cwd() ? daemon.repos(cwd()) : Promise.resolve({ connected: false, reason: 'the conversation has no directory yet' })),
+      pulls: (repo) =>
+        repo ? daemon.pulls({ repo }) : cwd() ? daemon.pulls({ cwd: cwd() }) : Promise.resolve({ connected: false, reason: 'the conversation has no directory yet' }),
       replace: (start, end, text) => composer.replace(start, end, text),
     });
 

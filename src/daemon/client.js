@@ -19,7 +19,7 @@
  * being, or become again, those.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RepoList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -83,7 +83,8 @@ export class DaemonError extends Error {
  *   listFiles(dir: string): Promise<DirListing>,
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
  *   checkUi(): Promise<void>,
- *   pulls(cwd: string): Promise<PullList>,
+ *   pulls(at: { repo: string } | { cwd: string }): Promise<PullList>,
+ *   repos(cwd: string): Promise<RepoList>,
  *   pull(at: { repo: string } | { cwd: string }, number: number): Promise<Pull>,
  *   deliver(target: ConversationTarget, message: string): Promise<string>,
  *   bugbot(): readonly BugbotWatch[],
@@ -484,7 +485,8 @@ export function createDaemonClient(env = {}) {
     },
     // A folder is found relative to home, as a new session's directory is.
     listFiles: (dir) => request(`/api/files?dir=${encodeURIComponent(dir)}`),
-    pulls: (cwd) => request(`/api/github/pulls?cwd=${encodeURIComponent(cwd)}`),
+    pulls: (at) => request(`/api/github/pulls?${new URLSearchParams(at)}`),
+    repos: (cwd) => request(`/api/github/repos?cwd=${encodeURIComponent(cwd)}`),
     pull: (at, number) => request(`/api/github/pull?${new URLSearchParams({ ...at, number: String(number) })}`),
     async deliver(target, message) {
       return (await request('/api/deliver', { method: 'POST', body: JSON.stringify({ target, message }) })).session;

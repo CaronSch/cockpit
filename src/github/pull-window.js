@@ -1,7 +1,7 @@
 /**
  * Opening a pull request window (widgets/github.js) from another window: the params that name
  * the pull request and the conversation it is reviewed for, and dragging one out of text, where
- * a pull request is linked or referred to as `#123` (marked by omp/markdown-dom.js): dropped on
+ * a pull request is linked or referred to as `owner/name#123` or `#123` (marked by omp/markdown-dom.js): dropped on
  * the grid it opens a pull request window there, dropped on a pull request window it shows there.
  * A click on a link still opens it on GitHub.
  */
@@ -48,7 +48,7 @@ export function attachPullDrag({ root, ctx, base, parent }) {
     const marked = link ?? ref;
     if (!marked || !root.contains(marked)) return;
     const number = Number(marked.dataset.number);
-    const at = link ? { repo: link.dataset.repo ?? null, cwd: null } : base();
+    const at = marked.dataset.repo ? { repo: marked.dataset.repo, cwd: null } : base();
     if (!at || !Number.isInteger(number)) return;
     // Pressing it starts no text selection: the press may become a drag. A click still clicks.
     event.preventDefault();
