@@ -242,8 +242,7 @@ What runs today:
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
   (starting, working, idle, *done*: it finished and nobody has read it, or *needs
-  you*: it asks a question or an approval; the title of one with nothing going on, idle or
-  asleep and read, is dimmed), searchable across titles, directories,
+  you*: it asks a question or an approval), searchable across titles, directories,
   prompts and the agents' replies (`daemon/search.js`: ranked, so a question in plain
   words finds the conversation that answers it, best first, with the passage that
   matched and its words marked; the list is by relevance while searching), and sortable. The same
