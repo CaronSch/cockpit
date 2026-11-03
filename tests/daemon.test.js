@@ -9,7 +9,7 @@ import { createAttachments } from '../daemon/attachments.js';
 import { createScratchpads } from '../daemon/scratchpad.js';
 import { createWorkspaces } from '../daemon/workspace.js';
 import { createDaemonServer } from '../daemon/server.js';
-import { listDirectory } from '../daemon/files.js';
+import { listDirectory, readTextFile } from '../daemon/files.js';
 import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
 import { loadSettings } from '../daemon/settings.js';
@@ -886,6 +886,30 @@ describe('decision reviews', () => {
   test('like every API route, reviews need the token; an id that is not one is a 404', async () => {
     assert.equal((await call({ path: '/api/decisions/conv-decide', auth: false })).status, 401);
     assert.equal((await call({ path: '/api/decisions/a%20b' })).status, 404);
+  });
+});
+
+describe('text files', () => {
+  test('a text file is read for the file window, resolved, with its size; any other file, or none, is a 404', async () => {
+    const dir = join(cwd, 'texts');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'jobs.json'), '{ "jobs": 4 }\n');
+    await writeFile(join(dir, 'secret.env'), 'TOKEN=x\n');
+    await writeFile(join(dir, 'blob.txt'), 'a\u0000b');
+    const res = await call({ path: `/api/text?path=${encodeURIComponent(join(dir, 'sub', '..', 'jobs.json'))}` });
+    assert.equal(res.status, 200);
+    assert.deepEqual({ ...res.json, modifiedAt: 0 }, { path: join(dir, 'jobs.json'), text: '{ "jobs": 4 }\n', size: 14, truncated: false, modifiedAt: 0 });
+    for (const name of ['secret.env', 'blob.txt', 'missing.md', '']) {
+      assert.equal((await call({ path: `/api/text?path=${encodeURIComponent(join(dir, name))}` })).status, 404, name);
+    }
+    assert.equal((await call({ path: `/api/text?path=${encodeURIComponent(join(dir, 'jobs.json'))}`, auth: false })).status, 401);
+  });
+
+  test('a file past the cap is read up to it, and says so', async () => {
+    const file = join(cwd, 'texts', 'long.log');
+    await writeFile(file, 'x'.repeat(100));
+    const read = await readTextFile(file, 10);
+    assert.deepEqual([read.text, read.size, read.truncated], ['x'.repeat(10), 100, true]);
   });
 });
 

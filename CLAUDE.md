@@ -307,6 +307,16 @@ What runs today:
   the conversation the same way, and every page shows how each request is doing. GitHub is
   reached only through the user's own `gh` (`daemon/github.js`); the tests' fake `gh` finds a
   repository named outright under `$FAKE_GH_ROOT/<owner>/<name>/`.
+- File windows (the `file` widget): a text file to read (Markdown, JSON, plain text, common
+  code: `src/files/file-refs.js` lists the extensions), read through the daemon (`GET /api/text`,
+  its first 2 MiB; never written). A path to one in an agent window's transcript (absolute, `~/`,
+  relative to the conversation's directory, or a bare name; in text or alone in a code span; a
+  `:42` after it names a line) is marked: a click shows it in the file window this screen used
+  last, or opens one on the agent window's right, and a drag places one where it is dropped, or
+  shows it in the file window it is dropped on (`src/files/file-window.js`). The window shows the
+  text with line numbers, the line asked for marked and scrolled to; Markdown shows rendered
+  unless a line is asked for, with **Source** / **Rendered** to switch; **Reload** reads it again,
+  as showing it again does. Opened from the palette, it asks for a path.
 
 Not built yet: saved-context pins, terminal panes, process view,
 telemetry views, cmux-parity features beyond the above.
@@ -467,6 +477,8 @@ particular, move a capability into "Current state" when it ships.
 
 - `src/app.js` — Cockpit controller: owns the layout atom and wires rendering, interaction and widgets together.
 - `src/daemon/client.js` — Browser side of the daemon connection: one event stream per page, shared by every widget.
+- `src/files/file-refs.js` — Text files named in text the workbench shows (an agent's reply): which files the file window (widgets/file.js) shows, by extension (Markdown, JSON, plain text and common code), and the paths of such files in a run of text or a code span, with the line a `:42` after one names, kept free of the DOM so they can be tested.
+- `src/files/file-window.js` — Opening a file window (widgets/file.js) from text that names a text file (marked by omp/markdown-dom.js): a click opens it in the file window this screen used last, or beside the window clicked in if there is none; a drag places a new one where it is dropped, or shows it in the file window it is dropped on.
 - `src/github/bugbot.js` — Cursor Bugbot's reviews, read from GitHub as the daemon's watcher (daemon/bugbot.js) finds them, and told to the agent: which review answers a `bugbot go` comment, and its findings as one message, kept free of I/O so they can be tested.
 - `src/github/diff.js` — A pull request's changes as the pull request window shows them: `gh pr diff`'s unified diff parsed into files, their hunks and each line with its numbers in the old and the new file, kept free of the DOM so it can be tested.
 - `src/github/pr-mention.js` — `#` pull request mentions typed in the agent pane's message box: the one the caret ends, the pull requests and repositories that match what is typed, and the text that completes it, kept free of the DOM so they can be tested.
@@ -532,6 +544,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.
+- `src/widgets/file.js` — A text file to read beside the agents: Markdown, JSON, plain text or code (files/file-refs.js), read through the daemon (`/api/text`).
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
 - `src/widgets/pane.js` — An empty window: the frame every real widget is mounted into, with nothing inside.
@@ -546,7 +559,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/conversation.js` — A conversation read from its journal, for a window to show while no omp process holds it: the messages omp's `get_messages` would answer with once resumed, so the transcript seeds from either the same way, and what the journal records about the session around them.
 - `daemon/decisions.js` — Decision reviews: once the user turns them on in Config, every turn an agent hands back is read by a small model, which lists the decisions the agent took without its user (at most five, a sentence each; src/omp/decisions.js), so none goes by unnoticed.
 - `daemon/deliver.js` — Sends a message to a conversation from outside its agent window (the pull request window's review, a Bugbot review): as a prompt to the session holding it, woken from its journal first if it is asleep, as the agent window itself would (`omp --resume`).
-- `daemon/files.js` — Folder listings for path suggestions (the agent pane's `@` file mentions, its Directory field): each entry's name and whether it is a folder (a link to one counts), capped so a huge folder cannot flood the page; and how a typed path is read.
+- `daemon/files.js` — Folder listings for path suggestions (the agent pane's `@` file mentions, its Directory field): each entry's name and whether it is a folder (a link to one counts), capped so a huge folder cannot flood the page; how a typed path is read; and the text files the file window shows (src/files/file-refs.js), capped too.
 - `daemon/frame-decoder.js` — Decodes omp's stdout: newline-delimited JSON frames, with protocol-v2 `rpc_chunk` sequences reassembled into the one frame they carry.
 - `daemon/github.js` — GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the pull requests of a repository, the repositories of a directory's repository's owner (for `#` mentions of another one), one pull request to review (its conversation, line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
 - `daemon/guard.js` — Loopback guard: decides which requests may reach the daemon (CLAUDE.md, Invariants).
@@ -575,6 +588,7 @@ particular, move a capability into "Current state" when it ships.
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
 - `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
+- `file` — File: Read a text file (Markdown, JSON, text, code); a path in an agent’s reply opens one with a click
 
 ### Scripts
 
@@ -589,6 +603,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/decisions.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

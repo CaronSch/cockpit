@@ -4,6 +4,7 @@ import omp from './omp.js';
 import sessions from './sessions.js';
 import scratchpad from './scratchpad.js';
 import github from './github.js';
+import file from './file.js';
 
 /**
  * Widgets the palette can add, keyed by type.
@@ -63,7 +64,7 @@ import github from './github.js';
  */
 
 /** @type {readonly WidgetDef[]} */
-const DEFS = [pane, omp, sessions, scratchpad, github];
+const DEFS = [pane, omp, sessions, scratchpad, github, file];
 
 /** @type {Readonly<Record<string, WidgetDef>>} */
 export const WIDGETS = Object.freeze(Object.fromEntries(DEFS.map((def) => [def.type, def])));
