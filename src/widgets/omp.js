@@ -901,8 +901,8 @@ function createPane(body, ctx, daemon) {
       ctx.openBeside('github', pullParams(at, pull, asTarget()));
     }
     // Pull requests the conversation links or refers to (`#123`: of its directory's repository)
-    // drag out of the transcript as pull request windows.
-    const offPullDrag = attachPullDrag({ root: transcript, ctx, base: () => (cwd() ? { repo: null, cwd: cwd() } : null), parent: asTarget });
+    // drag out of the transcript as pull request windows, and a click opens one on GitHub.
+    const offPullDrag = attachPullDrag({ root: transcript, ctx, base: () => (cwd() ? { repo: githubRepo, cwd: cwd() } : null), parent: asTarget });
     attachMenu(
       prsBtn,
       async () => {
@@ -923,14 +923,23 @@ function createPane(body, ctx, daemon) {
     );
     /** The directory GitHub was last asked about, so it is asked once per directory. */
     let githubCwd = '';
+    /** The GitHub repository (`owner/name`) that directory is in, once GitHub has said. @type {string | null} */
+    let githubRepo = null;
     function checkGithub() {
       const dir = cwd();
       if (!dir || dir === githubCwd) return;
       githubCwd = dir;
+      githubRepo = null;
       daemon
         .pulls({ cwd: dir })
         .then((found) => {
           if (!closed && githubCwd === dir) prsBtn.hidden = !found.connected;
+        })
+        .catch(() => {});
+      daemon
+        .repos(dir)
+        .then((found) => {
+          if (githubCwd === dir && found.connected) githubRepo = found.repo;
         })
         .catch(() => {});
     }

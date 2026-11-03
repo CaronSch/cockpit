@@ -277,8 +277,8 @@ What runs today:
   pull request an agent's reply (or a pull request's own text) links, in any repository, or
   refers to as `owner/name#123` or `#123` (of the conversation's, or that pull request's,
   repository) drags out the same way, and dropped on a pull request window shows there (`src/github/pr-refs.js` finds them,
-  `src/omp/markdown-dom.js` marks them, `src/github/pull-window.js` drags them; a click on a link
-  still opens GitHub); one named by its repository is read with `gh -R`, wherever it is
+  `src/omp/markdown-dom.js` marks them, `src/github/pull-window.js` drags them; a click without
+  a drag, on a link or on a `#123` whose repository is known, opens it on GitHub in a new tab); one named by its repository is read with `gh -R`, wherever it is
   checked out or not at all. It
   shows the pull request's description and conversation, and its changes (`gh pr diff`,
   parsed in `src/github/diff.js`) with the comments on their lines. Highlighted text takes a
