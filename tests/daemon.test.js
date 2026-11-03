@@ -188,7 +188,7 @@ beforeAll(async () => {
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
     token: TOKEN,
     root: ROOT,
-    config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads') },
+    config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000 },
     port: 0,
   });
   port = /** @type {number} */ (server.port);
@@ -731,7 +731,7 @@ describe('unread conversations', () => {
       bugbot,
       token: TOKEN,
       root: ROOT,
-      config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads') },
+      config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000 },
       port: 0,
     });
     try {

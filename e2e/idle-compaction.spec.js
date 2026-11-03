@@ -80,3 +80,53 @@ test('an idle long conversation is compacted before its cache expires, staying a
   }
   expect(problems).toEqual([]);
 });
+
+test('an agent window dims once its conversation is quiet past the compaction cutoff, whatever its length and the setting, until used again', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'ac-e2e-cold-'));
+  const sessionsDir = join(dir, 'omp-sessions');
+  mkdirSync(join(sessionsDir, '-p'), { recursive: true });
+  const journal = [
+    { type: 'title', v: 1, title: 'Quiet talk' },
+    { type: 'session', version: 3, id: 'quiet', timestamp: '2026-10-01T10:00:00.000Z', cwd: dir },
+    { type: 'message', message: { role: 'user', content: [{ type: 'text', text: 'hello' }], timestamp: Date.now() } },
+  ];
+  writeFileSync(join(sessionsDir, '-p', '2026-10-01_quiet.jsonl'), `${journal.map((l) => JSON.stringify(l)).join('\n')}\n`);
+  /** @type {string[]} */
+  const problems = [];
+  page.on('pageerror', (err) => problems.push(err.message));
+  await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
+  // Compaction off, and a short conversation: neither keeps the window from dimming.
+  const stateDir = join(dir, 'state');
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(join(stateDir, 'settings.json'), JSON.stringify({ version: 1, settings: { idleCompaction: false } }));
+  const daemon = await startDaemon({ port: await freePort(), stateDir, sessionsDir, env: { COCKPIT_SLEEP_AFTER_MS: '500', COCKPIT_IDLE_COMPACT_AFTER_MS: '2000' } });
+  try {
+    await page.goto(daemon.url(newWorkspace()));
+    await page.locator('#palette-toggle').click();
+    await page.locator('#palette [data-type="sessions"]').click();
+    await page.keyboard.press('Escape');
+    await page.locator('.sessions-item', { hasText: 'Quiet talk' }).click();
+    const pane = page.locator('.widget[data-widget="omp"]');
+    const session = pane.locator('.omp-session');
+    await pane.locator('textarea').fill('short');
+    await pane.locator('textarea').press('Enter');
+    await expect(pane.locator('.omp-assistant').last()).toContainText('You said: short');
+    await expect(session).not.toHaveClass(/is-cold/);
+    await page.evaluate(() => /** @type {HTMLElement | null} */ (document.activeElement)?.blur());
+    await expect(session).toHaveClass(/is-cold/, { timeout: 5000 });
+    await expect(session).toHaveCSS('opacity', '0.55');
+
+    // Asleep, from its journal, still quiet: still dim after a reload.
+    await page.reload();
+    await expect(session).toHaveClass(/is-cold/);
+    // Used again: full while typed in, and no longer quiet once a prompt goes.
+    await pane.locator('textarea').fill('again');
+    await expect(session).toHaveCSS('opacity', '1');
+    await pane.locator('textarea').press('Enter');
+    await expect(pane.locator('.omp-assistant').last()).toContainText('You said: again');
+    await expect(session).not.toHaveClass(/is-cold/);
+  } finally {
+    await daemon.stop();
+  }
+  expect(problems).toEqual([]);
+});

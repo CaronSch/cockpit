@@ -76,6 +76,7 @@ const settings = await loadSettings({ file: join(stateDir, 'settings.json') }).c
 const history = createHistory({ root: ompSessions, archive: join(stateDir, 'archive', 'sessions') });
 const sleepAfter = Number(process.env.COCKPIT_SLEEP_AFTER_MS);
 const compactAfter = Number(process.env.COCKPIT_IDLE_COMPACT_AFTER_MS);
+const idleCompactAfterMs = compactAfter > 0 ? compactAfter : IDLE_COMPACT_AFTER_MS;
 const compactFrom = Number(process.env.COCKPIT_IDLE_COMPACT_MIN_TOKENS);
 const decisions = createDecisionReviews({
   dir: join(stateDir, 'decisions'),
@@ -88,7 +89,7 @@ const hub = createHub({
   ...(sleepAfter > 0 ? { sleepAfterMs: sleepAfter } : {}),
   idleCompaction: {
     on: () => settings.all().idleCompaction,
-    afterMs: compactAfter > 0 ? compactAfter : IDLE_COMPACT_AFTER_MS,
+    afterMs: idleCompactAfterMs,
     minTokens: compactFrom > 0 ? Math.max(IDLE_COMPACT_TOKENS_FLOOR, compactFrom) : IDLE_COMPACT_MIN_TOKENS,
   },
   // The journal a rewind left keeps what was set aside: archived, out of the list, restorable.
@@ -132,6 +133,7 @@ try {
       defaultCwd,
       home: homedir(),
       scratchpadDir,
+      idleCompactAfterMs,
     },
   });
 } catch (err) {

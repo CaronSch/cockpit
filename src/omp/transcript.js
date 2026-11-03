@@ -49,7 +49,7 @@ import { todoPhases } from './todos.js';
  * @typedef {ItemBase & { kind: 'user', text: string, images: number, byAgent: boolean, at: number | null }} UserItem
  * @typedef {ItemBase & {
  *   kind: 'assistant', blocks: Block[], stopReason: string | null, errorMessage: string | null,
- *   model: string | null, ended: boolean,
+ *   model: string | null, ended: boolean, at: number | null,
  * }} AssistantItem
  * @typedef {ItemBase & { kind: 'tool', toolCallId: string }} ToolItem
  * @typedef {ItemBase & {
@@ -145,7 +145,7 @@ const KNOWN_UNRENDERED = new Set([
 const KNOWN_STREAM_NOOPS = new Set(['start', 'done', 'error']);
 
 /** @returns {Omit<AssistantItem, 'key' | 'rev'>} */
-const emptyAssistant = () => ({ kind: 'assistant', blocks: [], stopReason: null, errorMessage: null, model: null, ended: false });
+const emptyAssistant = () => ({ kind: 'assistant', blocks: [], stopReason: null, errorMessage: null, model: null, ended: false, at: null });
 
 /** @returns {Transcript} */
 export function createTranscript() {
@@ -656,6 +656,8 @@ function applyMessage(state, message, key, final, at = null) {
       if (item.kind !== 'assistant') return unrecognised(state, 'assistant (id clash)', message);
       item.blocks = Array.isArray(message.content) ? message.content.map(toBlock) : [];
       item.model = typeof message.model === 'string' ? message.model : null;
+      // When the request that answers with it was made (omp's `timestamp`), live and in the journal.
+      item.at = typeof message.timestamp === 'number' ? message.timestamp : item.at;
       if (final) {
         item.ended = true;
         item.stopReason = typeof message.stopReason === 'string' ? message.stopReason : null;
