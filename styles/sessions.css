@@ -207,6 +207,12 @@
   white-space: nowrap;
 }
 
+/* A conversation with nothing going on (idle or asleep, and read) recedes; one starting,
+   working, asking or unread keeps the full text colour. */
+.sessions-item:not(.is-starting, .is-working, .is-asking, .is-unread) .sessions-title {
+  color: var(--color-text-dim);
+}
+
 .sessions-meta {
   display: flex;
   gap: var(--space-3);

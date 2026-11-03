@@ -12,7 +12,7 @@ as many as you like, side by side.
 | Window | What it does |
 | --- | --- |
 | **Agent** | Chat with an omp agent in a directory: streamed replies with tables, math, Mermaid diagrams, Vega-Lite charts and images; tool calls, approvals and questions; model, thinking level and slash commands; steer, stop, rewind or fork. Shows its todo progress and what it has running. `@` mentions files, `#` pull requests, `!` runs a shell command; select reply text to comment on it or **Ask** about it. With *Review decisions* on, each turn lists up to five decisions the agent took without you. Paths and pull requests in replies open with a click or drag out as windows. |
-| **Sessions** | Every conversation in one list, with how each is doing (working, *done*, *needs you*); search in plain words, sort, narrow to a directory. Click or drag one into an agent window; archive, restore, pin or mark unread. |
+| **Sessions** | Every conversation in one list, with how each is doing (working, *done*, *needs you*; idle ones dimmed); search in plain words, sort, narrow to a directory. Click or drag one into an agent window; archive, restore, pin or mark unread. |
 | **Spotlight** | **⌘K** (Ctrl+K) anywhere: the same search, floating; Enter shows the conversation. |
 | **Notes** | Markdown notes with inline screenshots and files, kept in `~/.cockpit/scratchpads/`. |
 | **Pull request** | A GitHub pull request beside its agent: description, conversation and diff with line comments. Comment on or ask about highlighted parts and send them to the agent as one review; **Bugbot** sends it Cursor Bugbot's findings. The list colours open and draft pull requests and filters by status and author. |
