@@ -65,6 +65,52 @@
   white-space: nowrap;
 }
 
+/* Open pull requests and drafts are the ones to act on: merged and closed ones recede, until
+   pointed at. */
+.gh-pick-item:is(.is-merged, .is-closed) {
+  opacity: 0.5;
+}
+
+.gh-pick-item:is(.is-merged, .is-closed):is(:hover, :focus-visible) {
+  opacity: 1;
+}
+
+.gh-pick-item > .gh-state {
+  flex: none;
+  font-size: var(--text-2xs);
+}
+
+.gh-pick-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--text-xs) / 1.4 var(--font-mono);
+}
+
+.gh-pick-filters[hidden] {
+  display: none;
+}
+
+.gh-filter {
+  height: 28px;
+  min-width: 0;
+  padding: 0 22px 0 8px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--color-text-faint) 50%) calc(100% - 12px) 55% / 4px 4px no-repeat,
+    linear-gradient(135deg, var(--color-text-faint) 50%, transparent 50%) calc(100% - 8px) 55% / 4px 4px no-repeat;
+  color: var(--color-text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gh-filter option {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
 .gh-number {
   flex: none;
   color: var(--color-accent);
@@ -117,6 +163,10 @@
 
 .gh-state.is-open {
   color: oklch(78% 0.15 150);
+}
+
+.gh-state.is-draft {
+  color: oklch(80% 0.09 235);
 }
 
 .gh-state.is-merged {

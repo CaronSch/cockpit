@@ -128,6 +128,42 @@ async function selectWord(where, word) {
   await where.page().mouse.dblclick(box.x, box.y);
 }
 
+test('the pull request list sets open ones and drafts apart from merged and closed ones, and narrows to a status and an author, kept by the window', async ({ page }) => {
+  await openWorkbench(page);
+  /** @param {number} number @param {string} state @param {boolean} isDraft @param {string} author */
+  const pull = (number, state, isDraft, author) => ({ number, title: `change ${number}`, state, isDraft, author, headRefName: `b${number}`, baseRefName: 'main', body: '', createdAt: '', updatedAt: '', additions: 0, deletions: 0, comments: [], reviews: [], diff: '' });
+  const repo = newRepo({ pulls: [pull(12, 'OPEN', false, 'octo'), pull(11, 'OPEN', true, 'hubot'), pull(7, 'MERGED', false, 'octo'), pull(5, 'CLOSED', false, 'hubot')] });
+  await page.locator('#palette-toggle').click();
+  await page.locator('#palette [data-type="github"]').click();
+  await page.keyboard.press('Escape');
+  const pane = page.locator('.widget[data-widget="github"]');
+  await pane.locator('input').fill(repo);
+  await pane.getByRole('button', { name: 'List pull requests' }).click();
+  const rows = pane.locator('.gh-pick-item');
+  await expect(rows.locator('.gh-state')).toHaveText(['open', 'draft', 'merged', 'closed']);
+  const opacities = await rows.evaluateAll((items) => items.map((item) => getComputedStyle(item).opacity));
+  expect(opacities).toEqual(['1', '1', '0.5', '0.5']);
+
+  await pane.getByLabel('Status').selectOption({ label: 'Open or draft' });
+  await expect(rows.locator('.gh-number')).toHaveText(['#12', '#11']);
+  await expect(pane.getByLabel('Author').locator('option')).toHaveText(['Any author', 'hubot', 'octo']);
+  await pane.getByLabel('Author').selectOption('hubot');
+  await expect(rows.locator('.gh-number')).toHaveText(['#11']);
+  await expect(pane.locator('.gh-pick-filters')).toContainText('1 of 4 pull requests');
+  await pane.getByLabel('Status').selectOption({ label: 'Merged' });
+  await expect(pane.locator('.gh-pick-list')).toHaveText('No pull requests match.');
+
+  // The window's own choice: still there after a reload, for the next listing.
+  await pane.getByLabel('Status').selectOption({ label: 'Closed' });
+  await page.waitForTimeout(500); // the layout is saved after a pause
+  await page.reload();
+  await pane.locator('input').fill(repo);
+  await pane.getByRole('button', { name: 'List pull requests' }).click();
+  await expect(rows.locator('.gh-number')).toHaveText(['#5']);
+  await expect(pane.getByLabel('Status')).toHaveValue('closed');
+  await expect(pane.getByLabel('Author')).toHaveValue('hubot');
+});
+
 test('# in the message box suggests the repository’s pull requests by title, and a pick puts in #N', async ({ page }) => {
   await openWorkbench(page);
   const agent = await startedAgent(page, newRepo());
