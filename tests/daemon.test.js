@@ -17,6 +17,7 @@ import { loadPins } from '../daemon/pins.js';
 import { createGithub } from '../daemon/github.js';
 import { createDelivery } from '../daemon/deliver.js';
 import { loadBugbot } from '../daemon/bugbot.js';
+import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
 import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
@@ -41,6 +42,8 @@ let github;
 let delivery;
 /** @type {import('../daemon/bugbot.js').BugbotStore} */
 let bugbot;
+/** @type {import('../daemon/decisions.js').DecisionReviews} */
+let decisions;
 let port = 0;
 let cwd = '';
 
@@ -153,14 +156,19 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
   unread = await loadUnread({ file: join(cwd, 'state', 'unread.json') });
   settings = await loadSettings({ file: join(cwd, 'state', 'settings.json') });
   pins = await loadPins({ file: join(cwd, 'state', 'pins.json') });
-  hub = createHub({ ompPath: FAKE_OMP, unread });
+  decisions = createDecisionReviews({
+    dir: join(cwd, 'state', 'decisions'),
+    on: () => settings.all().decisionReview,
+    ask: (turn) => askReviewer(turn, { ompPath: FAKE_OMP }),
+  });
+  hub = createHub({ ompPath: FAKE_OMP, unread, onTurnEnded: decisions.turnEnded });
   const history = createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') });
   github = createGithub({ ghPath: FAKE_GH });
   delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
@@ -169,6 +177,7 @@ beforeAll(async () => {
     hub,
     unread,
     pins,
+    decisions,
     settings,
     history,
     github,
@@ -711,6 +720,7 @@ describe('unread conversations', () => {
       hub: nextHub,
       unread: marks,
       pins,
+      decisions,
       settings,
       history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),
       scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
@@ -784,11 +794,11 @@ describe('settings', () => {
     const stream = await openStream();
     const changed = await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false } });
     assert.equal(changed.status, 200);
-    assert.deepEqual(changed.json, { idleCompaction: false });
+    assert.deepEqual(changed.json, { idleCompaction: false, decisionReview: false });
     const { events } = await stream.until((events) => events.some((e) => e.kind === 'settings'));
-    assert.deepEqual(events[0].kind === 'hello' && events[0].settings, { idleCompaction: true });
-    assert.deepEqual(events.find((e) => e.kind === 'settings'), { kind: 'settings', settings: { idleCompaction: false } });
-    assert.deepEqual((await loadSettings({ file: join(cwd, 'state', 'settings.json') })).all(), { idleCompaction: false });
+    assert.deepEqual(events[0].kind === 'hello' && events[0].settings, { idleCompaction: true, decisionReview: false });
+    assert.deepEqual(events.find((e) => e.kind === 'settings'), { kind: 'settings', settings: { idleCompaction: false, decisionReview: false } });
+    assert.deepEqual((await loadSettings({ file: join(cwd, 'state', 'settings.json') })).all(), { idleCompaction: false, decisionReview: false });
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: true } })).status, 200);
   });
 
@@ -798,13 +808,84 @@ describe('settings', () => {
     }
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, auth: false })).status, 401);
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, origin: false })).status, 403);
-    assert.deepEqual(settings.all(), { idleCompaction: true });
+    assert.deepEqual(settings.all(), { idleCompaction: true, decisionReview: false });
   });
 
   test('a settings file the daemon cannot read stops it rather than being replaced', async () => {
     const file = join(cwd, 'bad-settings.json');
     await Bun.write(file, '{"version":1,"settings":{"idleCompaction":"off"}}');
     await assert.rejects(loadSettings({ file }), /not a settings file/);
+  });
+});
+
+describe('decision reviews', () => {
+  /** A ready session on a journal of its own, named `ompId`. @param {string} ompId */
+  async function sessionOn(ompId) {
+    const journal = join(cwd, `${ompId}.jsonl`);
+    await Bun.write(journal, `${JSON.stringify({ type: 'session', version: 3, id: ompId, timestamp: '2026-10-01T10:00:00.000Z', cwd })}\n`);
+    const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd, resume: journal } });
+    await waitForStatus(json.session.id, 'ready');
+    return /** @type {string} */ (json.session.id);
+  }
+  /**
+   * Prompts session `id` and waits for the page to hear its review end; the prompt's time names it.
+   * @param {string} id @param {string} ompId @param {string} message
+   */
+  async function reviewed(id, ompId, message) {
+    const stream = await openStream();
+    const from = hub.latest();
+    await rpc(id, { type: 'prompt', message });
+    const prompt = await logged((e) => e.seq > from && e.session === id && e.kind === 'frame' && e.frame.type === 'message_end' && e.frame.message.role === 'user');
+    const at = String(prompt.kind === 'frame' && prompt.frame.message.timestamp);
+    const { events } = await stream.until((events) =>
+      events.some((e) => e.kind === 'decisions' && e.ompId === ompId && e.reviews[at] && e.reviews[at].status !== 'pending'),
+    );
+    const heard = events.filter((e) => e.kind === 'decisions' && e.ompId === ompId).map((e) => e.kind === 'decisions' && e.reviews[at]);
+    return { at, heard };
+  }
+
+  test('off by default; turned on, each turn the agent hands back is reviewed by a one-shot omp, without the turns before it', async () => {
+    const id = await sessionOn('conv-decide');
+    const before = hub.latest();
+    await rpc(id, { type: 'prompt', message: 'decide on a database' });
+    await logged((e) => e.seq > before && e.session === id && e.kind === 'frame' && e.frame.type === 'agent_end');
+    assert.deepEqual((await call({ path: '/api/decisions/conv-decide' })).json, { reviews: {} }, 'not reviewed while off');
+
+    await settings.set({ decisionReview: true });
+    try {
+      // "decide" earns the fake reviewer's decisions: had it read the turn before, it would list them here.
+      const quiet = await reviewed(id, 'conv-decide', 'hello');
+      assert.deepEqual(quiet.heard, [{ status: 'pending' }, { status: 'done', decisions: [] }]);
+
+      const busy = await reviewed(id, 'conv-decide', 'now decide the schema');
+      const done = { status: 'done', decisions: ['Picked SQLite over Postgres, as nothing needs a server.', 'Kept the old API as an alias.'] };
+      assert.deepEqual(busy.heard, [{ status: 'pending' }, done]);
+      const reviews = { [quiet.at]: { status: 'done', decisions: [] }, [busy.at]: done };
+      assert.deepEqual((await call({ path: '/api/decisions/conv-decide' })).json, { reviews });
+      // Kept in the state directory: the next daemon starts with them.
+      const next = createDecisionReviews({ dir: join(cwd, 'state', 'decisions'), on: () => true, ask: () => Promise.reject(new Error('not asked')) });
+      assert.deepEqual(await next.reviews('conv-decide'), reviews);
+    } finally {
+      await settings.set({ decisionReview: false });
+      await call({ method: 'DELETE', path: `/api/sessions/${id}` });
+    }
+  });
+
+  test('a reviewer that fails leaves the reason under the turn', async () => {
+    const id = await sessionOn('conv-review-fails');
+    await settings.set({ decisionReview: true });
+    try {
+      const { heard } = await reviewed(id, 'conv-review-fails', 'the reviewer fails here');
+      assert.deepEqual(heard.at(-1), { status: 'failed', error: 'Error: 529 overloaded' });
+    } finally {
+      await settings.set({ decisionReview: false });
+      await call({ method: 'DELETE', path: `/api/sessions/${id}` });
+    }
+  });
+
+  test('like every API route, reviews need the token; an id that is not one is a 404', async () => {
+    assert.equal((await call({ path: '/api/decisions/conv-decide', auth: false })).status, 401);
+    assert.equal((await call({ path: '/api/decisions/a%20b' })).status, 404);
   });
 });
 

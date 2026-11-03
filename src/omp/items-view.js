@@ -1,11 +1,12 @@
 /**
  * DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes,
- * unrecognised frames), built from text nodes only.
+ * unrecognised frames), and for a turn's decision review, built from text nodes only.
  */
 import { button, el } from '../ui/dom.js';
 import { json } from '../ui/format.js';
 import { renderMarkdown } from './markdown-dom.js';
 /** @import { Block, Item, ToolRun } from './transcript.js' */
+/** @import { Review } from './decisions.js' */
 
 /**
  * `open` remembers which collapsible parts the user expanded, so redrawing an item while
@@ -80,6 +81,25 @@ export function renderItem(item, ctx) {
     case 'unrecognised':
       return collapsible(ctx, item.key, 'omp-unrecognised', [`unrecognised: ${item.label}`], () => [el('pre', 'omp-pre', item.raw)]);
   }
+}
+
+/**
+ * A turn's decision review (omp/decisions.js), where the turn ends: the decisions the agent
+ * took without its user, a sentence each, or that the review is under way or failed.
+ * @param {Review} review @returns {HTMLElement}
+ */
+export function renderReview(review) {
+  const node = el('section', `omp-decisions is-${review.status}`);
+  if (review.status === 'pending') node.append(el('div', 'omp-decisions-head', 'Reviewing decisions…'));
+  else if (review.status === 'failed') node.append(el('div', 'omp-decisions-head', `Decision review failed: ${review.error}`));
+  else {
+    const head = el('div', 'omp-decisions-head', 'Decided without you');
+    const list = el('ol', 'omp-decisions-list');
+    for (const decision of review.decisions) list.append(el('li', '', decision));
+    node.setAttribute('aria-label', 'Decisions the agent took without you');
+    node.append(head, list);
+  }
+  return node;
 }
 
 /** @param {Block} block @param {string} id @param {ItemContext} ctx @returns {HTMLElement} */

@@ -50,6 +50,11 @@
  * and messages into a new journal at once (omp's `SessionManager.forkFrom`), leaving the
  * source alone; a missing source exits with omp's error. The fake writes a journal flat (no
  * entry ids), which the daemon reads as one path.
+ *
+ * With `-p` it is the decision reviewer instead (daemon/decisions.js): it answers the message
+ * (its last argument, the turn) and exits, as `omp -p` does. A turn containing "decide" gets
+ * two decisions, one with a list mark the daemon takes off; one containing "reviewer fails"
+ * fails as a provider error would; any other, NONE.
  */
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -75,6 +80,15 @@ const WIDE_TABLE_REPLY = [
 const args = process.argv.slice(2);
 if (args.includes('--version')) {
   console.log('omp/fake');
+  process.exit(0);
+}
+if (args.includes('-p')) {
+  const turn = args.at(-1) ?? '';
+  if (turn.includes('reviewer fails')) {
+    process.stderr.write('Warning: MCP server "x" failed to connect\nError: 529 overloaded\n');
+    process.exit(1);
+  }
+  console.log(turn.includes('decide') ? '- Picked SQLite over Postgres, as nothing needs a server.\nKept the old API as an alias.' : 'NONE');
   process.exit(0);
 }
 /** @param {string} flag */
