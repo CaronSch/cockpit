@@ -99,13 +99,13 @@ export async function rpcAnswer(request) {
 
 /**
  * A daemon of a test's own, beside the shared one, for a test that restarts it: the real
- * daemon with the fake omp, keeping its state in `stateDir` and reading journals from
+ * daemon with the fake omp and fake gh, keeping its state in `stateDir` and reading journals from
  * `sessionsDir`, with `env` added to its environment. Resolves once it answers; `stop()` ends
  * it as Ctrl+C does.
  * @param {{ port: number, stateDir: string, sessionsDir: string, env?: Record<string, string> }} options
  */
 export async function startDaemon({ port, stateDir, sessionsDir, env = {} }) {
-  const child = spawn('bun', ['daemon/main.js', '--port', String(port), '--omp', 'tests/fixtures/fake-omp.js'], {
+  const child = spawn('bun', ['daemon/main.js', '--port', String(port), '--omp', 'tests/fixtures/fake-omp.js', '--gh', 'tests/fixtures/fake-gh.js'], {
     env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, ...env },
     stdio: 'ignore',
   });

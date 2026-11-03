@@ -4,7 +4,8 @@
  * words when it is let go, so a rough drag quotes clean text. Comment opens a box for a comment, handed to the
  * composer with the selected text as its quote. Ask opens a box for a side question about it,
  * whose short answer streams into the popup and never enters the chat (omp's `btw`); follow-up
- * questions continue the same topic there, one at a time.
+ * questions continue the same topic there, one at a time. Where questions are queued instead
+ * (the pull request window's review), Ask hands the question over as Comment does.
  */
 import { button, el } from '../ui/dom.js';
 import { autosize } from '../ui/autosize.js';
@@ -27,6 +28,11 @@ const INPUT_MAX_PX = 160;
  *   cancel(id: string): void,
  * }} SideQuestions
  */
+/**
+ * Questions kept to be sent later with other notes, instead of answered at once: `queue`
+ * takes one about `quote` (found at `cite`, when the window says where).
+ * @typedef {{ queue(quote: string, question: string, cite: string | null): void }} QueuedQuestions
+ */
 
 /**
  * A question asked in the shown thread: its turn in omp's topic once omp has taken it, or why
@@ -38,24 +44,31 @@ const INPUT_MAX_PX = 160;
 const ACTIONS = {
   comment: { placeholder: 'Your comment on this…', label: 'Comment on the selected text', submit: 'Add comment' },
   ask: { placeholder: 'Ask about this; the answer stays out of the chat…', label: 'Ask about the selected text', submit: 'Ask' },
+  queue: { placeholder: 'Your question about this; it goes to the agent with your review…', label: 'Ask about the selected text', submit: 'Add question' },
 };
 
 /**
  * @param {{
  *   host: HTMLElement,
  *   transcript: HTMLElement,
- *   onComment: (quote: string, comment: string) => void,
- *   ask: SideQuestions,
- * }} options `host`: the positioned element the popup lives in; `transcript`: where selections count.
+ *   onComment: (quote: string, comment: string, cite: string | null) => void,
+ *   ask: SideQuestions | QueuedQuestions,
+ *   cite?: (range: Range) => string | null,
+ * }} options `host`: the positioned element the popup lives in; `transcript`: where selections count;
+ * `cite` says where a selection is, for the comment or question on it (e.g. a file and its lines).
  * Call `refresh()` whenever the session's state changes, so a shown thread keeps up.
  */
-export function attachSelectionPopup({ host, transcript, onComment, ask }) {
+export function attachSelectionPopup({ host, transcript, onComment, ask, cite = () => null }) {
+  const queued = 'queue' in ask ? ask : null;
+  const side = 'queue' in ask ? null : ask;
   const pop = el('div', 'omp-quote-pop');
   pop.hidden = true;
   host.append(pop);
   /** @type {'closed' | 'buttons' | 'editing' | 'thread'} */
   let mode = 'closed';
   let quote = '';
+  /** Where the quote is, as `cite` said. @type {string | null} */
+  let quoteCite = null;
   /** omp's id for the side topic shown, once it has taken a question in it. @type {string | null} */
   let topic = null;
   /** The questions asked in the shown thread, oldest first. @type {Asked[]} */
@@ -66,7 +79,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask }) {
   let drawThread = null;
 
   /** omp's answer to `entry` so far; undefined until omp has taken it and said so. @param {Asked} entry */
-  const answerTo = (entry) => (entry.turn === null || topic === null ? undefined : ask.answers(topic)?.[entry.turn]);
+  const answerTo = (entry) => (entry.turn === null || topic === null ? undefined : side?.answers(topic)?.[entry.turn]);
   /** Whether the thread's newest question is still on its way or being answered: omp runs one at a time. */
   const running = () => {
     const newest = asked.at(-1);
@@ -76,7 +89,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask }) {
   const drafted = () => Boolean(pop.querySelector('textarea')?.value.trim());
 
   function close() {
-    if (topic !== null && running()) ask.cancel(topic);
+    if (topic !== null && running()) side?.cancel(topic);
     generation++;
     topic = null;
     asked = [];
@@ -100,7 +113,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask }) {
     pop.style.top = `${top}px`;
   }
 
-  /** The selected transcript text and where its last line ends, if there is one. */
+  /** The selected transcript text, where its last line ends, and where it is, if there is one. */
   function selection() {
     const sel = document.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
@@ -109,7 +122,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask }) {
     const text = sel.toString().trim();
     const rects = range.getClientRects();
     const end = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
-    return text ? { text, end } : null;
+    return text ? { text, end, cite: cite(range) } : null;
   }
 
   /** @param {string} label @param {string} title @param {() => void} onClick */
@@ -131,9 +144,12 @@ export function attachSelectionPopup({ host, transcript, onComment, ask }) {
     if (mode === 'buttons' && found.text === quote) return; // already offered for it
     close();
     quote = found.text;
+    quoteCite = found.cite;
     pop.replaceChildren(
-      actionButton('Comment', 'Comment on the selected text; the comment goes with your next message', () => openEditor(found.end, 'comment')),
-      actionButton('Ask', 'Ask a quick question about the selected text; the answer is not added to the chat', () => openEditor(found.end, 'ask')),
+      actionButton('Comment', `Comment on the selected text; the comment goes ${queued ? 'to the agent with your review' : 'with your next message'}`, () => openEditor(found.end, 'comment')),
+      queued
+        ? actionButton('Ask', 'Ask a question about the selected text; it goes to the agent with your other notes', () => openEditor(found.end, 'queue'))
+        : actionButton('Ask', 'Ask a quick question about the selected text; the answer is not added to the chat', () => openEditor(found.end, 'ask')),
     );
     mode = 'buttons';
     place(found.end);
@@ -181,7 +197,10 @@ export function attachSelectionPopup({ host, transcript, onComment, ask }) {
       if (!text) return;
       document.getSelection()?.removeAllRanges();
       if (action === 'comment') {
-        onComment(quote, text);
+        onComment(quote, text, quoteCite);
+        close();
+      } else if (action === 'queue') {
+        queued?.queue(quote, text, quoteCite);
         close();
       } else {
         openThread(anchor);
@@ -279,14 +298,15 @@ export function attachSelectionPopup({ host, transcript, onComment, ask }) {
    * @param {string} question
    */
   function askInThread(question) {
+    if (!side) return;
     /** @type {Asked} */
     const entry = { question, turn: null, error: null };
     asked.push(entry);
     drawThread?.();
     const sent = generation;
-    void ask.send(quote, question, topic ?? undefined).then((result) => {
+    void side.send(quote, question, topic ?? undefined).then((result) => {
       if (sent !== generation) {
-        if ('id' in result) ask.cancel(result.id); // closed before omp took it
+        if ('id' in result) side.cancel(result.id); // closed before omp took it
         return;
       }
       if ('error' in result) entry.error = result.error;

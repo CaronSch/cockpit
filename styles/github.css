@@ -1,0 +1,400 @@
+/* pull request window: a GitHub pull request, its conversation and changes, and the review written for the agent. */
+
+.widget-body:has(> .gh) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.gh {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+}
+
+.gh [hidden] {
+  display: none !important;
+}
+
+/* ── picking one ── */
+.gh-pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  overflow: auto;
+}
+
+.gh-pick .omp-row > .omp-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.gh-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gh-pick-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text);
+  font: var(--text-xs) / 1.4 var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.gh-pick-item:hover,
+.gh-pick-item:focus-visible {
+  border-color: var(--color-line-strong);
+  background: var(--color-surface-raised);
+}
+
+.gh-pick-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-number {
+  flex: none;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* ── reviewing one ── */
+.gh-review-pane {
+  position: relative; /* the selection popup is placed inside it */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gh-head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.gh-title {
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.gh-title:hover {
+  text-decoration: underline;
+}
+
+.gh-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.gh-state {
+  padding: 0 6px;
+  border-radius: var(--radius-s);
+  background: var(--color-surface-raised);
+  text-transform: capitalize;
+}
+
+.gh-state.is-open {
+  color: oklch(78% 0.15 150);
+}
+
+.gh-state.is-merged {
+  color: oklch(72% 0.14 300);
+}
+
+.gh-state.is-closed {
+  color: var(--color-danger);
+}
+
+.gh-adds {
+  color: oklch(78% 0.15 150);
+}
+
+.gh-dels {
+  color: var(--color-danger);
+}
+
+.gh-tabs {
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.gh-tab {
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: var(--text-xs) / 1.4 var(--font-mono);
+  cursor: pointer;
+}
+
+.gh-tab[aria-selected='true'] {
+  border-color: var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.gh-bugbot {
+  flex: none;
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}
+
+.gh-bugbot.is-error {
+  color: var(--color-danger);
+}
+
+.gh-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-2);
+  font: var(--text-sm) / var(--leading-read) var(--font-mono);
+}
+
+.gh-item {
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+}
+
+.gh-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface-raised);
+  font-size: var(--text-xs);
+}
+
+.gh-author {
+  font-weight: 600;
+}
+
+.gh-badge {
+  color: var(--color-accent);
+  text-transform: capitalize;
+}
+
+.gh-item-body {
+  padding: var(--space-1) var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.gh-item-body > :first-child {
+  margin-top: 0;
+}
+
+.gh-item-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── the diff ── */
+.gh-file {
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
+.gh-file-head {
+  position: sticky;
+  top: calc(-1 * var(--space-2));
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface-raised);
+  font-size: var(--text-xs);
+}
+
+.gh-file-path {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.gh-file-status {
+  color: var(--color-text-faint);
+}
+
+.gh-hunk {
+  padding: 1px var(--space-2);
+  background: color-mix(in oklch, var(--color-code) 10%, transparent);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+
+.gh-line {
+  display: grid;
+  grid-template-columns: 6ch 6ch 1fr;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.gh-line.is-add {
+  background: color-mix(in oklch, oklch(70% 0.15 150) 14%, transparent);
+}
+
+.gh-line.is-del {
+  background: color-mix(in oklch, var(--color-danger) 14%, transparent);
+}
+
+/* Line numbers and signs are never part of a highlighted quote. */
+.gh-gutter {
+  padding-right: 4px;
+  color: var(--color-text-faint);
+  text-align: right;
+  user-select: none;
+}
+
+.gh-code {
+  padding-left: 1.5ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gh-line > .gh-code::before {
+  margin-left: -1.5ch;
+  display: inline-block;
+  width: 1.5ch;
+  color: var(--color-text-faint);
+  content: ' ';
+  user-select: none;
+}
+
+.gh-line.is-add > .gh-code::before {
+  content: '+';
+}
+
+.gh-line.is-del > .gh-code::before {
+  content: '−';
+}
+
+.gh-thread {
+  margin: var(--space-1) var(--space-2) var(--space-2) 12ch;
+}
+
+.gh-thread .gh-item {
+  margin-bottom: var(--space-1);
+}
+
+.gh-outdated,
+.gh-binary,
+.gh-more {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+}
+
+/* ── the review for the agent ── */
+.gh-tray {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-top: 1px solid var(--color-line);
+}
+
+.gh-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 30vh;
+  overflow: auto;
+}
+
+.gh-note-card.is-comment {
+  border-left: 2px solid var(--color-accent);
+}
+
+.gh-note-card.is-question {
+  border-left: 2px solid var(--color-code);
+}
+
+.gh-note-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 3px 8px;
+  font: var(--text-xs) / 1.4 var(--font-mono);
+}
+
+.gh-note-kind {
+  color: var(--color-text-dim);
+  font-weight: 600;
+}
+
+.gh-note-cite {
+  color: var(--color-code);
+}
+
+.gh-note-quote {
+  overflow: hidden;
+  color: var(--color-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gh-note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.gh-note {
+  resize: vertical;
+}
+
+.gh-send {
+  align-items: baseline;
+}
+
+.gh-to {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+}
+
+.gh-sent {
+  font-size: var(--text-xs);
+}

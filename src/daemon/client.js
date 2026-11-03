@@ -6,8 +6,8 @@
  * one that was open all along. When the daemon restarts, its sessions are gone: buffers are cleared and
  * `onReset` listeners fire before any event from the new daemon is delivered.
  *
- * It keeps which conversations are unread (daemon/unread.js) and pinned (daemon/pins.js), and the daemon's settings
- * (daemon/settings.js), as the daemon last said: every window reads them here, so all of
+ * It keeps which conversations are unread (daemon/unread.js) and pinned (daemon/pins.js), the daemon's settings
+ * (daemon/settings.js) and its Bugbot watches (daemon/bugbot.js), as the daemon last said: every window reads them here, so all of
  * them, and every page, agree.
  *
  * `replayed` tells events the daemon replays on (re)connecting, which happened before this
@@ -19,7 +19,7 @@
  * being, or become again, those.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { Conversation, DaemonConfig, DirListing, HelloEvent, PastSession, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -83,6 +83,12 @@ export class DaemonError extends Error {
  *   listFiles(dir: string): Promise<DirListing>,
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
  *   checkUi(): Promise<void>,
+ *   pulls(cwd: string): Promise<PullList>,
+ *   pull(cwd: string, number: number): Promise<Pull>,
+ *   deliver(target: ConversationTarget, message: string): Promise<string>,
+ *   bugbot(): readonly BugbotWatch[],
+ *   onBugbot(fn: () => void): () => void,
+ *   askBugbot(request: { cwd: string, number: number, target: ConversationTarget }): Promise<BugbotWatch>,
  * }} DaemonClient
  */
 
@@ -149,6 +155,15 @@ export function createDaemonClient(env = {}) {
     settings = next;
     for (const fn of settingsListeners) fn();
   };
+  /** @type {readonly BugbotWatch[]} */
+  let watches = [];
+  /** @type {Set<() => void>} */
+  const bugbotListeners = new Set();
+  /** @param {readonly BugbotWatch[]} next */
+  const setWatches = (next) => {
+    watches = next;
+    for (const fn of bugbotListeners) fn();
+  };
   /** @type {Set<(outdated: boolean) => void>} */
   const uiListeners = new Set();
   /** The UI version this page loaded: the first one heard. @type {string | null} */
@@ -193,6 +208,7 @@ export function createDaemonClient(env = {}) {
     setUnread(hello.unread);
     setPins(hello.pinned);
     setSettings(hello.settings);
+    setWatches(hello.bugbot);
   }
 
   /** @param {StreamEvent} event */
@@ -209,6 +225,7 @@ export function createDaemonClient(env = {}) {
     if (event.kind === 'unread') return setUnread(event.unread);
     if (event.kind === 'pins') return setPins(event.pinned);
     if (event.kind === 'settings') return setSettings(event.settings);
+    if (event.kind === 'bugbot') return setWatches(event.watches);
     if (event.kind === 'session') {
       metas.set(event.session, event.meta);
       sessionsChanged();
@@ -467,6 +484,17 @@ export function createDaemonClient(env = {}) {
     },
     // A folder is found relative to home, as a new session's directory is.
     listFiles: (dir) => request(`/api/files?dir=${encodeURIComponent(dir)}`),
+    pulls: (cwd) => request(`/api/github/pulls?cwd=${encodeURIComponent(cwd)}`),
+    pull: (cwd, number) => request(`/api/github/pull?${new URLSearchParams({ cwd, number: String(number) })}`),
+    async deliver(target, message) {
+      return (await request('/api/deliver', { method: 'POST', body: JSON.stringify({ target, message }) })).session;
+    },
+    bugbot: () => watches,
+    onBugbot(fn) {
+      bugbotListeners.add(fn);
+      return () => bugbotListeners.delete(fn);
+    },
+    askBugbot: ({ cwd, number, target }) => request('/api/github/bugbot', { method: 'POST', body: JSON.stringify({ cwd, number, target }) }),
   };
 }
 
