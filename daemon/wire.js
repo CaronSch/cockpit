@@ -198,7 +198,11 @@
 
 /** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | DecisionsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
 
-/** @typedef {{ defaultCwd: string, home: string, scratchpadDir: string }} DaemonConfig */
+/**
+ * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle
+ * (see `idle-compaction.js`); an agent window dims from then (src/omp/cold.js).
+ * @typedef {{ defaultCwd: string, home: string, scratchpadDir: string, idleCompactAfterMs: number }} DaemonConfig
+ */
 
 /**
  * A text file as the file window shows it: `path` resolved, its `text` (its first 2 MiB:
