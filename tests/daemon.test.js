@@ -1296,7 +1296,9 @@ describe('GitHub', () => {
   const finding = '### Off by one\n\n**Low Severity**\n\n<!-- DESCRIPTION START -->\nThe loop stops a line early.\n<!-- DESCRIPTION END -->\n\n<!-- LOCATIONS START\nsrc/app.js#L3-L7\nLOCATIONS END -->';
 
   beforeAll(async () => {
-    repo = join(cwd, 'widgets');
+    // Checked out where the fake gh finds a repository named outright, as gh finds any on GitHub.
+    process.env.FAKE_GH_ROOT = join(cwd, 'github');
+    repo = join(cwd, 'github', 'acme', 'widgets');
     await mkdir(join(repo, 'src'), { recursive: true });
     await Bun.write(
       join(repo, '.fake-gh.json'),
@@ -1373,6 +1375,17 @@ describe('GitHub', () => {
     assert.equal((await call({ path: `/api/github/pull?cwd=${encodeURIComponent(repo)}&number=x` })).status, 400);
   });
 
+  test('a pull request named by its repository reads wherever that is checked out, or not at all', async () => {
+    const read = await call({ path: '/api/github/pull?repo=acme/widgets&number=12' });
+    assert.equal(read.status, 200);
+    assert.equal(read.json.title, 'feat: pull request window');
+    assert.match(read.json.diff, /^diff --git a\/src\/app.js/);
+    assert.equal((await call({ path: '/api/github/pull?repo=acme/missing&number=12' })).status, 502);
+    for (const bad of ['../x', 'acme/..', '-R/x', 'acme', 'a/b/c']) {
+      assert.equal((await call({ path: `/api/github/pull?repo=${encodeURIComponent(bad)}&number=12` })).status, 400, bad);
+    }
+  });
+
   test('a message delivered to an asleep conversation wakes it from its journal and reaches the agent, after its turn', async () => {
     const journal = join(cwd, 'deliver-asleep.jsonl');
     await Bun.write(journal, `${JSON.stringify({ type: 'session', version: 3, id: 'deliver-asleep', timestamp: '2026-10-01T10:00:00.000Z', cwd })}\n`);
@@ -1403,7 +1416,7 @@ describe('GitHub', () => {
     const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
     const ready = await waitForStatus(json.session.id, 'ready');
     const stream = await openStream();
-    const asked = await call({ method: 'POST', path: '/api/github/bugbot', body: { cwd: repo, number: 12, target: { sessionFile: ready.sessionFile, session: ready.id, cwd } } });
+    const asked = await call({ method: 'POST', path: '/api/github/bugbot', body: { repo: 'acme/widgets', number: 12, target: { sessionFile: ready.sessionFile, session: ready.id, cwd } } });
     assert.equal(asked.status, 201);
     assert.equal(asked.json.status, 'watching');
     assert.equal(asked.json.url, 'https://github.com/acme/widgets/pull/12');

@@ -398,3 +398,11 @@
 .gh-sent {
   font-size: var(--text-xs);
 }
+
+/* Pull requests named in text that drags them out as windows (github/pull-window.js). */
+.omp-transcript .md-pr-ref,
+.gh-content .md-pr-ref {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: grab;
+}

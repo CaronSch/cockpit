@@ -4,12 +4,17 @@
  * TeX math becomes MathML, which the browser typesets itself, through Temml's `render`: it
  * builds the elements with `createElementNS` and text nodes, never markup. TeX it cannot
  * read stays as its source, in the code style, with Temml's reason as the tooltip.
+ *
+ * Pull requests named in text are marked (github/pr-refs.js), so a window can let them be
+ * dragged out: a link to one gets `md-pr-link` with its `repo` and `number`, and a `#123` in
+ * plain text (not in code) is a `md-pr-ref` span with its `number`.
  */
 import temml from 'temml';
 import { el } from '../ui/dom.js';
 import { parseMarkdown } from './markdown.js';
 import { tableCopy } from './table-copy.js';
 import { renderVisual } from './visuals.js';
+import { pullOfUrl, splitRefs } from '../github/pr-refs.js';
 /** @import { Block, Inline } from './markdown.js' */
 
 /**
@@ -97,7 +102,7 @@ function withInline(parent, children, options) {
 function renderInline(node, options) {
   switch (node.type) {
     case 'text':
-      return document.createTextNode(node.text);
+      return renderText(node.text);
     case 'code':
       return el('code', 'md-inline-code', node.text);
     case 'strong':
@@ -111,6 +116,13 @@ function renderInline(node, options) {
       a.href = node.href;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+      const pull = pullOfUrl(node.href);
+      if (pull) {
+        a.classList.add('md-pr-link');
+        a.dataset.repo = pull.repo;
+        a.dataset.number = String(pull.number);
+        a.draggable = false; // dragged out as a pull request window, never as a link
+      }
       return a;
     }
     case 'image':
@@ -118,6 +130,23 @@ function renderInline(node, options) {
     case 'math':
       return renderMath(node.tex, node.display);
   }
+}
+
+/** Plain text, its `#123` references marked. @param {string} text @returns {Node} */
+function renderText(text) {
+  const parts = splitRefs(text);
+  if (parts.length === 1 && !('number' in parts[0])) return document.createTextNode(text);
+  const fragment = document.createDocumentFragment();
+  for (const part of parts) {
+    if (!('number' in part)) {
+      fragment.append(part.text);
+      continue;
+    }
+    const ref = el('span', 'md-pr-ref', part.text);
+    ref.dataset.number = String(part.number);
+    fragment.append(ref);
+  }
+  return fragment;
 }
 
 /**

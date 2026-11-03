@@ -84,11 +84,11 @@ export class DaemonError extends Error {
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
  *   checkUi(): Promise<void>,
  *   pulls(cwd: string): Promise<PullList>,
- *   pull(cwd: string, number: number): Promise<Pull>,
+ *   pull(at: { repo: string } | { cwd: string }, number: number): Promise<Pull>,
  *   deliver(target: ConversationTarget, message: string): Promise<string>,
  *   bugbot(): readonly BugbotWatch[],
  *   onBugbot(fn: () => void): () => void,
- *   askBugbot(request: { cwd: string, number: number, target: ConversationTarget }): Promise<BugbotWatch>,
+ *   askBugbot(request: { repo: string, number: number, target: ConversationTarget }): Promise<BugbotWatch>,
  * }} DaemonClient
  */
 
@@ -485,7 +485,7 @@ export function createDaemonClient(env = {}) {
     // A folder is found relative to home, as a new session's directory is.
     listFiles: (dir) => request(`/api/files?dir=${encodeURIComponent(dir)}`),
     pulls: (cwd) => request(`/api/github/pulls?cwd=${encodeURIComponent(cwd)}`),
-    pull: (cwd, number) => request(`/api/github/pull?${new URLSearchParams({ cwd, number: String(number) })}`),
+    pull: (at, number) => request(`/api/github/pull?${new URLSearchParams({ ...at, number: String(number) })}`),
     async deliver(target, message) {
       return (await request('/api/deliver', { method: 'POST', body: JSON.stringify({ target, message }) })).session;
     },
@@ -494,7 +494,7 @@ export function createDaemonClient(env = {}) {
       bugbotListeners.add(fn);
       return () => bugbotListeners.delete(fn);
     },
-    askBugbot: ({ cwd, number, target }) => request('/api/github/bugbot', { method: 'POST', body: JSON.stringify({ cwd, number, target }) }),
+    askBugbot: ({ repo, number, target }) => request('/api/github/bugbot', { method: 'POST', body: JSON.stringify({ repo, number, target }) }),
   };
 }
 

@@ -7,8 +7,9 @@
  * request and has the daemon send Cursor Bugbot's review to the agent once it is posted
  * (daemon/bugbot.js).
  *
- * Params (persisted with the layout): `cwd` (a directory of the repository, where `gh` runs),
- * `number`, `name` (its title, for the window's top bar), `tab` (`conversation` or `files`), and
+ * Params (persisted with the layout): where the pull request is, `repo` (`owner/name`) or else
+ * `cwd` (a directory of its repository, where `gh` runs), its `number`, `name` (its title, for
+ * the window's top bar), `tab` (`conversation` or `files`), and
  * the conversation it reviews for: `parentFile` (its journal), `parentSession` and
  * `parentCwd`, set by the agent window it was opened from. Without them, the review goes to
  * the agent window this screen used last. Without a pull request, the window lists the
@@ -22,12 +23,13 @@ import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { citeLines, lineKey, lineKeys, parseDiff } from '../github/diff.js';
 import { readableBody } from '../github/text.js';
 import { readReview, reviewMessage, writeReview } from '../github/review.js';
+import { pullOfUrl } from '../github/pr-refs.js';
+import { attachPullDrag, pullParams } from '../github/pull-window.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { BugbotWatch, ConversationTarget, Pull, PullSummary, ReviewComment } from '../../daemon/wire.js' */
 /** @import { DiffFile } from '../github/diff.js' */
 /** @import { Review, ReviewNote } from '../github/review.js' */
-/** @import { LeafParams } from '../layout/grid-model.js' */
 
 /** A file shows this many of its lines at most; the rest are on GitHub. */
 const MAX_FILE_LINES = 3000;
@@ -60,20 +62,8 @@ const excerpt = (text) => {
   return line.length > EXCERPT_CHARS ? `${line.slice(0, EXCERPT_CHARS - 1)}…` : line;
 };
 
-/**
- * The params that open pull request `pull` of the repository in `cwd`, for the conversation an
- * agent window shows: what the agent window gives the pull request window it opens.
- * @param {string} cwd @param {PullSummary} pull @param {ConversationTarget | null} parent @returns {LeafParams}
- */
-export const pullParams = (cwd, pull, parent) => ({
-  cwd,
-  number: pull.number,
-  name: `#${pull.number} ${pull.title}`,
-  tab: 'conversation',
-  parentFile: parent?.sessionFile ?? null,
-  parentSession: parent?.session ?? null,
-  parentCwd: parent?.cwd ?? null,
-});
+/** @param {string} url @returns {string | null} the repository a pull request's URL is in */
+const repoOfUrl = (url) => pullOfUrl(url)?.repo ?? null;
 
 /**
  * @param {HTMLElement} body @param {WidgetContext} ctx @param {DaemonClient} daemon
@@ -88,6 +78,7 @@ function createPullPane(body, ctx, daemon) {
   let shownKey = '';
 
   const params = () => ({
+    repo: str(ctx.params.repo),
     cwd: str(ctx.params.cwd),
     number: Number.isInteger(ctx.params.number) ? /** @type {number} */ (ctx.params.number) : null,
     name: str(ctx.params.name),
@@ -125,13 +116,14 @@ function createPullPane(body, ctx, daemon) {
     if (destroyed) return;
     const p = params();
     ctx.setLabel(p.name);
-    const key = p.cwd && p.number ? `${p.cwd}#${p.number}` : `pick:${p.cwd ?? ''}`;
+    const where = p.repo ?? p.cwd;
+    const key = where && p.number ? `${where}#${p.number}` : `pick:${p.cwd ?? ''}`;
     if (key === shownKey) return;
     shownKey = key;
     view?.destroy();
     root.replaceChildren();
     ctx.headActions.replaceChildren();
-    view = p.cwd && p.number ? reviewView(p.cwd, p.number) : pickView(p.cwd);
+    view = where && p.number ? reviewView(p.repo ? { repo: p.repo } : { cwd: /** @type {string} */ (p.cwd) }, p.number) : pickView(p.cwd);
   }
 
   // ── picking a pull request ──
@@ -169,7 +161,7 @@ function createPullPane(body, ctx, daemon) {
             ...found.pulls.map((pull) => {
               const item = button('gh-pick-item');
               item.append(el('span', 'gh-number', `#${pull.number}`), el('span', 'gh-pick-title', pull.title), el('span', 'omp-muted', stateText(pull)));
-              item.addEventListener('click', () => ctx.setParams(pullParams(dir, pull, null)));
+              item.addEventListener('click', () => ctx.setParams(pullParams({ repo: repoOfUrl(pull.url), cwd: dir }, pull, null)));
               return item;
             }),
           );
@@ -201,8 +193,8 @@ function createPullPane(body, ctx, daemon) {
   }
 
   // ── reviewing one ──
-  /** @param {string} cwd @param {number} number */
-  function reviewView(cwd, number) {
+  /** @param {{ repo: string } | { cwd: string }} at @param {number} number */
+  function reviewView(at, number) {
     const node = el('div', 'gh-review-pane');
     const head = el('div', 'gh-head');
     const tabs = el('div', 'gh-tabs');
@@ -320,6 +312,9 @@ function createPullPane(body, ctx, daemon) {
       keep();
     }
 
+    // Other pull requests it links or refers to (`#123`: this repository's) drag out as windows of their own.
+    const offDrag = attachPullDrag({ root: content, ctx, base: () => (pull ? { repo: pull.repo, cwd: null } : null), parent: target });
+
     // Comments and questions on what is highlighted join the review.
     const popup = attachSelectionPopup({
       host: node,
@@ -355,7 +350,7 @@ function createPullPane(body, ctx, daemon) {
       bugbot = { asking: true, error: null };
       drawBugbot();
       try {
-        await daemon.askBugbot({ cwd, number, target: to });
+        if (pull) await daemon.askBugbot({ repo: pull.repo, number, target: to });
         bugbot = { asking: false, error: null };
       } catch (err) {
         bugbot = { asking: false, error: errorMessage(err) };
@@ -534,7 +529,7 @@ function createPullPane(body, ctx, daemon) {
       const mine = ++loads;
       refreshBtn.disabled = true;
       daemon
-        .pull(cwd, number)
+        .pull(at, number)
         .then((read) => {
           if (mine !== loads || destroyed) return;
           const first = pull === null;
@@ -575,6 +570,7 @@ function createPullPane(body, ctx, daemon) {
         offBugbot();
         offScreen();
         popup.destroy();
+        offDrag();
       },
     };
   }

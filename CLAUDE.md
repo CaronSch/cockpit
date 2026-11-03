@@ -269,7 +269,13 @@ What runs today:
   elsewhere (the file itself, another tab) is never overwritten without asking.
 - Pull request windows (the `github` widget): the agent window's **PRs** (in its title bar,
   shown while its directory is in a GitHub repository) lists the repository's pull requests; a
-  click opens one on the agent window's right, dragging one places it where it is dropped. It
+  click opens one on the agent window's right, dragging one places it where it is dropped. A
+  pull request an agent's reply (or a pull request's own text) links, in any repository, or
+  refers to as `#123` (of the conversation's, or that pull request's, repository) drags out the
+  same way, and dropped on a pull request window shows there (`src/github/pr-refs.js` finds them,
+  `src/omp/markdown-dom.js` marks them, `src/github/pull-window.js` drags them; a click on a link
+  still opens GitHub); one named by its repository is read with `gh -R`, wherever it is
+  checked out or not at all. It
   shows the pull request's description and conversation, and its changes (`gh pr diff`,
   parsed in `src/github/diff.js`) with the comments on their lines. Highlighted text takes a
   **Comment** or a question (**Ask**, queued here instead of answered by `btw`), each cited by
@@ -282,7 +288,8 @@ What runs today:
   (`daemon/bugbot.js`, polled every 30 s, given up after an hour, kept in
   `~/.cockpit/bugbot.json` across restarts); once posted, its findings with their places go to
   the conversation the same way, and every page shows how each request is doing. GitHub is
-  reached only through the user's own `gh` (`daemon/github.js`).
+  reached only through the user's own `gh` (`daemon/github.js`); the tests' fake `gh` finds a
+  repository named outright under `$FAKE_GH_ROOT/<owner>/<name>/`.
 
 Not built yet: saved-context pins, terminal panes, process view,
 telemetry views, cmux-parity features beyond the above.
@@ -446,6 +453,8 @@ particular, move a capability into "Current state" when it ships.
 - `src/github/bugbot.js` — Cursor Bugbot's reviews, read from GitHub as the daemon's watcher (daemon/bugbot.js) finds them, and told to the agent: which review answers a `bugbot go` comment, and its findings as one message, kept free of I/O so they can be tested.
 - `src/github/diff.js` — A pull request's changes as the pull request window shows them: `gh pr diff`'s unified diff parsed into files, their hunks and each line with its numbers in the old and the new file, kept free of the DOM so it can be tested.
 - `src/github/pr-mention.js` — `#` pull request mentions typed in the agent pane's message box, as GitHub writes them (`#123`): the one the caret ends, the repository's pull requests that match what is typed (by number, or by words of the title), and the text that completes it, kept free of the DOM so they can be tested.
+- `src/github/pr-refs.js` — Pull requests named in text the workbench shows (an agent's reply, a pull request's description): a link to one on GitHub (`https://github.com/owner/repo/pull/123`, any page of it), or GitHub's own short reference `#123`, which names a pull request of the repository the text is about.
+- `src/github/pull-window.js` — Opening a pull request window (widgets/github.js) from another window: the params that name the pull request and the conversation it is reviewed for, and dragging one out of text, where a pull request is linked or referred to as `#123` (marked by omp/markdown-dom.js): dropped on the grid it opens a pull request window there, dropped on a pull request window it shows there.
 - `src/github/review.js` — A review written in the pull request window, for its agent: comments and questions on highlighted parts of the pull request, and a note of the reviewer's own, sent to the agent's conversation as one message.
 - `src/github/text.js` — GitHub comment bodies as text to read: GitHub Markdown may hold HTML (bots write comments, tags and buttons into theirs), which the workbench never renders, so it is taken out and its words kept.
 - `src/interaction/drag-controller.js` — Pointer-driven drag & drop for moving widgets and adding new ones.

@@ -1,10 +1,11 @@
 // Behaviour tests for pull requests in the workbench (the pull request window, # suggestions,
 // Bugbot) against the real daemon driving tests/fixtures/fake-omp.js and tests/fixtures/fake-gh.js.
 import { test, expect } from '@playwright/test';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { newWorkspace, workbenchPath } from './daemon.js';
+import { randomUUID } from 'node:crypto';
+import { basename, join } from 'node:path';
+import { E2E_GH_ROOT, newWorkspace, workbenchPath } from './daemon.js';
 
 /** @typedef {import('@playwright/test').Page} Page */
 /** @typedef {import('@playwright/test').Locator} Locator */
@@ -25,14 +26,19 @@ const FINDING = [
   'LOCATIONS END -->',
 ].join('\n');
 
-/** A checkout of acme/widgets with two pull requests, as the fake gh reads it; a new one per test. */
-function newRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'ac-e2e-repo-'));
+/**
+ * A new checkout of a repository `acme/widgets-…` with two pull requests (or `pulls`), as the
+ * fake gh reads it, both there and named outright; one per test.
+ * @param {any[]} [pulls]
+ */
+function newRepo(pulls) {
+  const dir = join(E2E_GH_ROOT, 'acme', `widgets-${randomUUID().slice(0, 8)}`);
+  mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, '.fake-gh.json'),
     JSON.stringify({
-      repo: 'acme/widgets',
-      pulls: [
+      repo: repoOf(dir),
+      pulls: pulls ?? [
         {
           number: 12,
           title: 'feat: pull request window',
@@ -58,6 +64,9 @@ function newRepo() {
   );
   return dir;
 }
+
+/** The repository a checkout made by `newRepo` is, as `owner/name`. @param {string} dir */
+const repoOf = (dir) => `acme/${basename(dir)}`;
 
 /** @type {string[]} */
 let problems = [];
@@ -150,7 +159,8 @@ test('without GitHub, # is plain text and the agent window offers no pull reques
 
 test('PRs opens a pull request beside the agent; comments and questions on highlighted parts reach the agent in one message', async ({ page }) => {
   await openWorkbench(page);
-  const agent = await startedAgent(page, newRepo());
+  const repo = newRepo();
+  const agent = await startedAgent(page, repo);
   const pr = await openPull(page, agent);
   // Beside the agent: on its right, the same height.
   const [a, p] = [await agent.boundingBox(), await pr.boundingBox()];
@@ -179,7 +189,7 @@ test('PRs opens a pull request beside the agent; comments and questions on highl
   const body = (await delivered).postDataJSON();
   expect(body.message).toBe(
     [
-      'My review of PR #12 "feat: pull request window" (https://github.com/acme/widgets/pull/12):',
+      `My review of PR #12 "feat: pull request window" (https://github.com/${repoOf(repo)}/pull/12):`,
       'Question about `the description`:\n> beside\n\nBeside which agent?',
       'On `src/app.js:2`:\n> answer\n\nName it better',
       'Otherwise good.',
@@ -228,4 +238,67 @@ test('Bugbot comments `bugbot go` and sends Cursor Bugbot’s review to the agen
   await expect(agent.locator('.omp-user').last()).toContainText('Cursor Bugbot reviewed PR #12');
   await expect(agent.locator('.omp-user').last()).toContainText('Answer is hard-coded');
   await expect(pr.getByRole('button', { name: 'Bugbot' })).toBeEnabled();
+});
+
+/**
+ * Drags `from` with the mouse and lets go at (`x`, `y`), past the drag threshold.
+ * @param {Page} page @param {Locator} from @param {number} x @param {number} y
+ */
+async function dragTo(page, from, x, y) {
+  const box = await from.boundingBox();
+  if (!box) throw new Error('nothing to drag');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x - 30, y, { steps: 6 });
+  await page.mouse.move(x, y, { steps: 4 });
+  await page.mouse.up();
+}
+
+test('a pull request a reply links, in any repository, or refers to as #N drags out as a pull request window, and onto one shows there', async ({ page }) => {
+  await openWorkbench(page);
+  const here = newRepo();
+  const other = newRepo([
+    { number: 860, title: 'route searcher to customer-ui', state: 'OPEN', isDraft: false, author: 'octo', headRefName: 'route', baseRefName: 'main', body: 'Routing.', createdAt: '2026-11-01T09:00:00Z', updatedAt: '', additions: 0, deletions: 0, comments: [], reviews: [], diff: '' },
+  ]);
+  const agent = await startedAgent(page, here);
+  await agent.locator('textarea').fill(`say:| Repo | PR |\n|---|---|\n| infra | [#860](https://github.com/${repoOf(other)}/pull/860) |\n\nStacked on #12.`);
+  await agent.locator('textarea').press('Enter');
+  const link = agent.locator('.omp-assistant .md-pr-link');
+  await expect(link).toHaveText('#860');
+
+  // Out onto the grid, at the agent window's right edge: a window of its own, of the repository linked.
+  const box = await agent.boundingBox();
+  if (!box) throw new Error('no agent window');
+  await dragTo(page, link, box.x + box.width - 6, box.y + box.height / 2);
+  const pr = page.locator('.widget[data-widget="github"]');
+  await expect(pr.locator('.gh-title')).toHaveText('#860 route searcher to customer-ui');
+  expect(await page.evaluate(() => getSelection()?.toString() ?? '')).toBe('');
+
+  // `#12`, of the conversation's own repository, dropped on that window: it shows there instead.
+  const prBox = await pr.boundingBox();
+  if (!prBox) throw new Error('no pull request window');
+  await dragTo(page, agent.locator('.omp-assistant .md-pr-ref', { hasText: '#12' }), prBox.x + prBox.width / 2, prBox.y + prBox.height / 2);
+  await expect(pr.locator('.gh-title')).toHaveText('#12 feat: pull request window');
+  await expect(page.locator('.widget[data-widget="github"]')).toHaveCount(1);
+
+  // A click on the link still opens it on GitHub.
+  await page.context().route('https://github.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: 'GitHub' }));
+  const [tab] = await Promise.all([page.context().waitForEvent('page'), link.click()]);
+  expect(tab.url()).toBe(`https://github.com/${repoOf(other)}/pull/860`);
+  await tab.close();
+});
+
+test('#N in a pull request’s own text drags out as another pull request of its repository', async ({ page }) => {
+  await openWorkbench(page);
+  const repo = newRepo();
+  const agent = await startedAgent(page, repo);
+  const json = join(repo, '.fake-gh.json');
+  const state = JSON.parse(readFileSync(json, 'utf8'));
+  state.pulls[0].body = 'Follows #7.';
+  writeFileSync(json, JSON.stringify(state));
+  const pr = await openPull(page, agent);
+  const box = await pr.boundingBox();
+  if (!box) throw new Error('no pull request window');
+  await dragTo(page, pr.locator('.gh-item-body .md-pr-ref'), box.x + box.width / 2, box.y + box.height - 6);
+  await expect(page.locator('.widget[data-widget="github"] .gh-title')).toHaveText(['#12 feat: pull request window', '#7 docs: readme']);
 });

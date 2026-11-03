@@ -5,6 +5,7 @@ import { readableBody } from '../src/github/text.js';
 import { BUGBOT_LOGIN, bugbotMessage, bugbotReviewSince, parseFinding } from '../src/github/bugbot.js';
 import { completePull, matchPulls, pullQueryAt } from '../src/github/pr-mention.js';
 import { reviewMessage } from '../src/github/review.js';
+import { REPO, pullOfUrl, splitRefs } from '../src/github/pr-refs.js';
 /** @import { PullSummary } from '../daemon/wire.js' */
 
 const DIFF = [
@@ -210,5 +211,33 @@ describe('a review sent to the agent', () => {
 
   test('is nothing to send when nothing is written', () => {
     assert.equal(reviewMessage(pull, { notes: [], text: '  ' }), '');
+  });
+});
+
+describe('pull requests named in text', () => {
+  test('a link to any page of a pull request names it, with its repository', () => {
+    assert.deepEqual(pullOfUrl('https://github.com/blink-labs/eth-rpc/pull/3841'), { repo: 'blink-labs/eth-rpc', number: 3841 });
+    assert.deepEqual(pullOfUrl('https://github.com/blink-labs/k8s-infra/pull/860/files#diff-1'), { repo: 'blink-labs/k8s-infra', number: 860 });
+    assert.deepEqual(pullOfUrl('https://github.com/acme/.github/pull/2?w=1'), { repo: 'acme/.github', number: 2 });
+    for (const href of ['https://github.com/acme/widgets/issues/3', 'https://github.com/acme/widgets/pull/', 'https://gitlab.com/acme/widgets/pull/3', 'https://github.com/acme/../pull/3', 'http://github.com/acme/widgets/pull/3']) {
+      assert.equal(pullOfUrl(href), null, href);
+    }
+  });
+
+  test('#123 is a reference on its own, not inside a word, a longer token or an anchor', () => {
+    assert.deepEqual(splitRefs('stacked on #3841, see (#12)'), [
+      { text: 'stacked on ' },
+      { text: '#3841', number: 3841 },
+      { text: ', see (' },
+      { text: '#12', number: 12 },
+      { text: ')' },
+    ]);
+    assert.deepEqual(splitRefs('#7'), [{ text: '#7', number: 7 }]);
+    for (const text of ['issue#12', 'color #fff', '#12abc', '#12-x', 'page.html#3', '']) assert.deepEqual(splitRefs(text), [{ text }], text);
+  });
+
+  test('a repository named outright is owner/name, never a path or a flag', () => {
+    for (const ok of ['blink-labs/eth-rpc', 'acme/.github', 'a/b_c.d']) assert.ok(REPO.test(ok), ok);
+    for (const bad of ['../x', 'acme/..', 'acme/.', '-R/x', 'acme', 'a/b/c', '']) assert.ok(!REPO.test(bad), bad);
   });
 });

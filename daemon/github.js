@@ -3,13 +3,17 @@
  * pull requests of a directory's repository, one pull request to review (its conversation,
  * line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
  *
+ * A pull request is found in a repository named outright (`owner/name`, `gh -R`), wherever it
+ * is checked out or not at all, or in the one a directory is in (a `#123` an agent wrote).
+ *
  * `gh` is not a dependency, as omp is not: the daemon runs the `gh` on PATH unless told
  * otherwise, never prompts (GH_PROMPT_DISABLED), and reports `gh`'s own words when it fails:
  * missing, signed out, or a directory in no GitHub repository.
  */
+import { homedir } from 'node:os';
 /** @import { Pull, PullList, PullSummary, ReviewComment } from './wire.js' */
 /** @import { InlineComment, Review } from '../src/github/bugbot.js' */
-/** A repository (`owner/name`) and a directory it is checked out in, where `gh` runs for it. @typedef {{ repo: string, cwd: string }} RepoAt */
+/** Where a pull request is: a repository (`owner/name`), or the one a directory is in. @typedef {{ repo: string } | { cwd: string }} PullAt */
 
 const RUN_TIMEOUT_MS = 30_000;
 /** A directory's pull requests are listed again after this long: `#` suggestions ask on every keystroke. */
@@ -27,6 +31,9 @@ export class GithubError extends Error {}
 
 /** @param {any} user @returns {string} */
 const login = (user) => (typeof user?.login === 'string' ? user.login : 'ghost');
+
+/** The directory `gh` runs in for `at`, and the flag that names its repository, if it is named. @param {PullAt} at */
+const placed = (at) => ('repo' in at ? { cwd: homedir(), repoFlag: ['-R', at.repo] } : { cwd: at.cwd, repoFlag: [] });
 
 /** @param {any} pr parsed `gh` JSON @returns {PullSummary} */
 const summary = (pr) => ({
@@ -85,10 +92,10 @@ export function createGithub({ ghPath, now = Date.now }) {
   }
 
   /**
-   * `gh api path --paginate --slurp`, run in `cwd`: every page's items, as one list.
-   * @param {string} path @param {string} cwd @returns {Promise<any[]>}
+   * `gh api path --paginate --slurp`: every page's items, as one list.
+   * @param {string} path @returns {Promise<any[]>}
    */
-  const api = async (path, cwd) => /** @type {any[][]} */ (JSON.parse(await gh(['api', path, '--paginate', '--slurp'], cwd))).flat();
+  const api = async (path) => /** @type {any[][]} */ (JSON.parse(await gh(['api', path, '--paginate', '--slurp'], homedir()))).flat();
 
   /** @type {Map<string, { at: number, list: Promise<PullList> }>} */
   const lists = new Map();
@@ -111,13 +118,14 @@ export function createGithub({ ghPath, now = Date.now }) {
     },
 
     /**
-     * Pull request `number` of the repository `cwd` is in, to review.
-     * @param {string} cwd @param {number} number @returns {Promise<Pull>}
+     * Pull request `number` of the repository `at` names, to review.
+     * @param {PullAt} at @param {number} number @returns {Promise<Pull>}
      */
-    async pull(cwd, number) {
-      const pr = JSON.parse(await gh(['pr', 'view', String(number), '--json', PULL_FIELDS], cwd));
+    async pull(at, number) {
+      const { cwd, repoFlag } = placed(at);
+      const pr = JSON.parse(await gh(['pr', 'view', String(number), ...repoFlag, '--json', PULL_FIELDS], cwd));
       const repo = repoOf(String(pr.url));
-      const [diff, lineComments] = await Promise.all([gh(['pr', 'diff', String(number)], cwd), api(`repos/${repo}/pulls/${number}/comments`, cwd)]);
+      const [diff, lineComments] = await Promise.all([gh(['pr', 'diff', String(number), ...repoFlag], cwd), api(`repos/${repo}/pulls/${number}/comments`)]);
       const shown = upTo(diff, MAX_DIFF_BYTES);
       return {
         ...summary(pr),
@@ -161,26 +169,25 @@ export function createGithub({ ghPath, now = Date.now }) {
     },
 
     /**
-     * Comments `body` on pull request `number` of the repository `cwd` is in, as the user:
-     * where the comment is, and when GitHub says it was made.
-     * @param {string} cwd @param {number} number @param {string} body
-     * @returns {Promise<{ repo: string, url: string, createdAt: string }>}
+     * Comments `body` on pull request `number` of `repo`, as the user: where the comment is, and
+     * when GitHub says it was made.
+     * @param {string} repo @param {number} number @param {string} body
+     * @returns {Promise<{ url: string, createdAt: string }>}
      */
-    async comment(cwd, number, body) {
-      const url = (await gh(['pr', 'comment', String(number), '--body', body], cwd)).trim().split('\n').at(-1) ?? '';
-      const repo = repoOf(url);
+    async comment(repo, number, body) {
+      const url = (await gh(['pr', 'comment', String(number), '-R', repo, '--body', body], homedir())).trim().split('\n').at(-1) ?? '';
       const id = /#issuecomment-(\d+)$/.exec(url)?.[1];
       if (!id) throw new GithubError(`gh did not say where the comment is: ${url}`);
-      const made = JSON.parse(await gh(['api', `repos/${repo}/issues/comments/${id}`], cwd));
-      return { repo, url, createdAt: String(made.created_at) };
+      const made = JSON.parse(await gh(['api', `repos/${repo}/issues/comments/${id}`], homedir()));
+      return { url, createdAt: String(made.created_at) };
     },
 
     /**
-     * The reviews of pull request `number` of `at.repo` (checked out in `at.cwd`), oldest first.
-     * @param {RepoAt} at @param {number} number @returns {Promise<Review[]>}
+     * The reviews of pull request `number` of `repo`, oldest first.
+     * @param {string} repo @param {number} number @returns {Promise<Review[]>}
      */
-    async reviews(at, number) {
-      return (await api(`repos/${at.repo}/pulls/${number}/reviews`, at.cwd)).map((r) => ({
+    async reviews(repo, number) {
+      return (await api(`repos/${repo}/pulls/${number}/reviews`)).map((r) => ({
         id: Number(r.id),
         author: login(r.user),
         body: String(r.body ?? ''),
@@ -189,11 +196,11 @@ export function createGithub({ ghPath, now = Date.now }) {
     },
 
     /**
-     * The line comments review `review` of pull request `number` of `at.repo` made.
-     * @param {RepoAt} at @param {number} number @param {number} review @returns {Promise<InlineComment[]>}
+     * The line comments review `review` of pull request `number` of `repo` made.
+     * @param {string} repo @param {number} number @param {number} review @returns {Promise<InlineComment[]>}
      */
-    async reviewComments(at, number, review) {
-      return (await api(`repos/${at.repo}/pulls/${number}/reviews/${review}/comments`, at.cwd)).map((c) => ({
+    async reviewComments(repo, number, review) {
+      return (await api(`repos/${repo}/pulls/${number}/reviews/${review}/comments`)).map((c) => ({
         body: String(c.body ?? ''),
         path: String(c.path ?? ''),
         line: Number.isInteger(c.line) ? c.line : null,

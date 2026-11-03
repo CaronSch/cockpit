@@ -36,7 +36,8 @@ import { createSuggestions } from '../omp/suggestions.js';
 import { createFileSuggest } from '../omp/file-suggest.js';
 import { MENTIONS, PLAIN_PATH } from '../omp/file-mention.js';
 import { createPullSuggest } from '../omp/pr-suggest.js';
-import { pullParams } from './github.js';
+import { pullOfUrl } from '../github/pr-refs.js';
+import { attachPullDrag, pullParams } from '../github/pull-window.js';
 import { awaitedAfter } from '../omp/activity.js';
 import { promptsAndResponses } from '../omp/visibility.js';
 import { turnProgress } from '../omp/todos.js';
@@ -883,17 +884,25 @@ function createPane(body, ctx, daemon) {
     // ── pull requests of the conversation's repository (widgets/github.js) ──
     /** The conversation, for a pull request window reviewing for it. */
     const asTarget = () => ({ sessionFile: file, session, cwd: cwd() });
+    /** Where a pull request of the conversation's repository is. @param {import('../../daemon/wire.js').PullSummary} pull */
+    const placeOf = (pull) => ({ repo: pullOfUrl(pull.url)?.repo ?? null, cwd: cwd() });
     /** @param {import('../../daemon/wire.js').PullSummary} pull */
     function openPull(pull) {
-      const open = ctx.screen.get().windows.find((w) => w.widget === 'github' && w.params?.number === pull.number && w.params?.cwd === cwd());
+      const at = placeOf(pull);
+      const open = ctx.screen
+        .get()
+        .windows.find((w) => w.widget === 'github' && w.params?.number === pull.number && (at.repo ? w.params?.repo === at.repo : w.params?.cwd === at.cwd));
       if (open) {
         // Already beside it: point at it rather than open it twice.
         ctx.outline([open.id]);
         setTimeout(() => ctx.outline([]), 1500);
         return;
       }
-      ctx.openBeside('github', pullParams(cwd(), pull, asTarget()));
+      ctx.openBeside('github', pullParams(at, pull, asTarget()));
     }
+    // Pull requests the conversation links or refers to (`#123`: of its directory's repository)
+    // drag out of the transcript as pull request windows.
+    const offPullDrag = attachPullDrag({ root: transcript, ctx, base: () => (cwd() ? { repo: null, cwd: cwd() } : null), parent: asTarget });
     attachMenu(
       prsBtn,
       async () => {
@@ -904,7 +913,7 @@ function createPane(body, ctx, daemon) {
           detail: `${pull.isDraft ? 'draft' : pull.state.toLowerCase()} · ${pull.author}`,
           pick: () => openPull(pull),
           drag: (e, close) =>
-            ctx.dragWidget('github', pullParams(cwd(), pull, asTarget()), e, {
+            ctx.dragWidget('github', pullParams(placeOf(pull), pull, asTarget()), e, {
               label: `#${pull.number} ${pull.title}`,
               onEnd: ({ dropped }) => dropped && close(),
             }),
@@ -1394,6 +1403,7 @@ function createPane(body, ctx, daemon) {
         selectionPopup.destroy();
         offHighlight();
         highlight.destroy();
+        offPullDrag();
       },
     };
   }
