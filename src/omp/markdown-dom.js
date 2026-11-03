@@ -6,8 +6,9 @@
  * read stays as its source, in the code style, with Temml's reason as the tooltip.
  *
  * Pull requests named in text are marked (github/pr-refs.js), so a window can let them be
- * dragged out: a link to one gets `md-pr-link` with its `repo` and `number`, and a `#123` or
- * `owner/repo#123` in plain text (not in code) is a `md-pr-ref` span with its `number` (and `repo`).
+ * dragged out, or clicked open on GitHub (github/pull-window.js): a link to one gets
+ * `md-pr-link` with its `repo` and `number`, and a `#123` or `owner/repo#123` in plain text
+ * (not in code) is a `md-pr-ref` span with its `number` (and `repo`).
  */
 import temml from 'temml';
 import { el } from '../ui/dom.js';
@@ -122,6 +123,7 @@ function renderInline(node, options) {
         a.dataset.repo = pull.repo;
         a.dataset.number = String(pull.number);
         a.draggable = false; // dragged out as a pull request window, never as a link
+        a.title = PULL_HINT;
       }
       return a;
     }
@@ -131,6 +133,9 @@ function renderInline(node, options) {
       return renderMath(node.tex, node.display);
   }
 }
+
+/** What a pull request named in text does, on hover. */
+const PULL_HINT = 'Click to open on GitHub · drag out to review it here';
 
 /** Plain text, its `#123` references marked. @param {string} text @returns {Node} */
 function renderText(text) {
@@ -145,6 +150,7 @@ function renderText(text) {
     const ref = el('span', 'md-pr-ref', part.text);
     ref.dataset.number = String(part.number);
     if (part.repo) ref.dataset.repo = part.repo;
+    ref.title = PULL_HINT;
     fragment.append(ref);
   }
   return fragment;

@@ -284,14 +284,20 @@ test('a pull request a reply links, in any repository, or refers to as #N drags 
   await expect(pr.locator('.gh-title')).toHaveText('#12 feat: pull request window');
   await expect(page.locator('.widget[data-widget="github"]')).toHaveCount(1);
 
-  // A click on the link still opens it on GitHub.
+  // A click (no drag) on the link still opens it on GitHub, in a new tab; so does one on `#12`,
+  // in the conversation's repository. The drags above opened none.
+  expect(page.context().pages()).toHaveLength(1);
   await page.context().route('https://github.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: 'GitHub' }));
   const [tab] = await Promise.all([page.context().waitForEvent('page'), link.click()]);
   expect(tab.url()).toBe(`https://github.com/${repoOf(other)}/pull/860`);
   await tab.close();
+  const [refTab] = await Promise.all([page.context().waitForEvent('page'), agent.locator('.omp-assistant .md-pr-ref', { hasText: '#12' }).click()]);
+  expect(refTab.url()).toBe(`https://github.com/${repoOf(here)}/pull/12`);
+  await refTab.close();
+  await expect(page.locator('.widget[data-widget="github"]')).toHaveCount(1);
 });
 
-test('#N in a pull request’s own text drags out as another pull request of its repository', async ({ page }) => {
+test('#N in a pull request’s own text drags out as another pull request of its repository, and a click opens it on GitHub', async ({ page }) => {
   await openWorkbench(page);
   const repo = newRepo();
   const agent = await startedAgent(page, repo);
@@ -304,6 +310,9 @@ test('#N in a pull request’s own text drags out as another pull request of its
   if (!box) throw new Error('no pull request window');
   await dragTo(page, pr.locator('.gh-item-body .md-pr-ref'), box.x + box.width / 2, box.y + box.height - 6);
   await expect(page.locator('.widget[data-widget="github"] .gh-title')).toHaveText(['#12 feat: pull request window', '#7 docs: readme']);
+  await page.context().route('https://github.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: 'GitHub' }));
+  const [tab] = await Promise.all([page.context().waitForEvent('page'), pr.first().locator('.gh-item-body .md-pr-ref').click()]);
+  expect(tab.url()).toBe(`https://github.com/${repoOf(repo)}/pull/7`);
 });
 
 test('# finds the owner’s other repositories by name, and a pick of one and then of its pull request puts in owner/name#N', async ({ page }) => {

@@ -404,5 +404,5 @@
 .gh-content .md-pr-ref {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
-  cursor: grab;
+  cursor: pointer;
 }
