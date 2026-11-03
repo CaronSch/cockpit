@@ -272,3 +272,31 @@ test('the first window of workspace main adopts the layout this address kept bef
   await page.reload();
   await expect.poll(() => shownIds(page)).toEqual(['w_legacy1', 'w_legacy2']);
 });
+
+test('New screen opens a copy of this screen in a new tab, whose windows are its own', async ({ context }) => {
+  const workspace = newWorkspace();
+  const path = workbenchPath(workspace);
+  const one = await openWindow(context, path);
+  const a = await addWindow(one);
+  const b = await addWindow(one);
+  await expect.poll(() => storedIds(one, workspace)).toEqual([[a, b].sort()]);
+
+  await switcher(one).click();
+  const opening = context.waitForEvent('page');
+  await one.getByRole('button', { name: 'New screen' }).click();
+  const two = await opening;
+  watch(two);
+  await expect(switcher(two)).toHaveText('Screen 2 of 2');
+  await expect(two.locator('.widget')).toHaveCount(2);
+  const copied = await shownIds(two);
+  expect(copied.some((id) => id === a || id === b), 'the copy’s windows have ids of their own').toBe(false);
+  expect(new URL(two.url()).searchParams.has('screen'), 'the address drops the screen it named').toBe(false);
+  expect(await shownIds(one)).toEqual([a, b].sort());
+
+  // Each is its own screen from then on, a reload included.
+  await two.locator(`.widget[data-id="${copied[0]}"] .widget-close`).click();
+  await expect.poll(() => storedIds(one, workspace)).toEqual([[a, b].sort(), [copied[1]]]);
+  await two.reload();
+  await expect(switcher(two)).toHaveText('Screen 2 of 2');
+  await expect.poll(() => shownIds(two)).toEqual([copied[1]]);
+});

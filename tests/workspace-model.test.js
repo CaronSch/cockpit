@@ -1,9 +1,19 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
-import { SCREEN_ID, claimOrder, describeWindows, newScreenId, workspaceFrom } from '../src/workspace/model.js';
+import { SCREEN_ID, claimOrder, copyLayout, describeWindows, newScreenId, workspaceFrom } from '../src/workspace/model.js';
 import { branch, leaf } from '../src/layout/grid-model.js';
 
 describe('workspace model', () => {
+  test('a copied layout has the same windows and settings under new ids, sharing nothing with the original', () => {
+    const one = { ...leaf('w_1', 'omp'), params: { session: 's1' } };
+    const tree = branch('row', [one, leaf('w_2', 'pane')], [0.3, 0.7]);
+    let n = 0;
+    const copy = copyLayout(tree, () => `w_new${++n}`);
+    assert.deepEqual(copy, branch('row', [{ ...leaf('w_new1', 'omp'), params: { session: 's1' } }, leaf('w_new2', 'pane')], [0.3, 0.7]));
+    assert.notEqual(/** @type {any} */ (copy).children[0].params, one.params);
+    assert.equal(copyLayout(null), null);
+  });
+
   test('the page names its workspace in ?workspace=, main when it names none, and nothing that is not a file name', () => {
     assert.equal(workspaceFrom(''), 'main');
     assert.equal(workspaceFrom('?x=1'), 'main');

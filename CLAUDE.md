@@ -539,7 +539,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
 - `src/ui/palette.js` — "Add widget" palette.
 - `src/ui/prefs.js` — Per-browser preferences in localStorage.
-- `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it.
+- `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it, or to open a copy of this one in a new tab.
 - `src/ui/settings.js` — App-wide settings, picked in the top bar's Config menu and kept per browser.
 - `src/ui/spotlight.js` — Spotlight: a floating search over every conversation, as macOS's.
 - `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
