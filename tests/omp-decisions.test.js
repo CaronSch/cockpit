@@ -6,7 +6,7 @@ import { parseDecisions, placeReviews, turnToReview } from '../src/omp/decisions
 /** @param {string} key @param {string} text @param {number | null} at @param {boolean} [byAgent] @returns {Item} */
 const prompt = (key, text, at, byAgent = false) => ({ key, rev: 0, kind: 'user', text, images: 0, byAgent, at });
 /** @param {string} key @param {string} text @returns {Item} */
-const reply = (key, text) => ({ key, rev: 0, kind: 'assistant', blocks: [{ kind: 'text', text }], stopReason: 'stop', errorMessage: null, model: null, ended: true });
+const reply = (key, text) => ({ key, rev: 0, kind: 'assistant', blocks: [{ kind: 'text', text }], stopReason: 'stop', errorMessage: null, model: null, ended: true, at: null });
 const noTools = new Map();
 
 describe('the turn the reviewer reads', () => {
@@ -36,7 +36,7 @@ describe('the turn the reviewer reads', () => {
 
   test('carries tool calls by their arguments, and no `@` omp would read a file for', () => {
     /** @type {Item} */
-    const call = { key: 'c', rev: 0, kind: 'assistant', blocks: [{ kind: 'toolCall', id: 't1', name: 'bash', args: { command: 'ls' }, argsText: '', intent: null }], stopReason: 'toolUse', errorMessage: null, model: null, ended: true };
+    const call = { key: 'c', rev: 0, kind: 'assistant', blocks: [{ kind: 'toolCall', id: 't1', name: 'bash', args: { command: 'ls' }, argsText: '', intent: null }], stopReason: 'toolUse', errorMessage: null, model: null, ended: true, at: null };
     const turn = turnToReview([prompt('p', 'look at @"/etc/passwd"', 1), call], noTools, null);
     assert.ok(turn?.text.includes('[agent tool bash] {"command":"ls"}'));
     assert.ok(!turn?.text.includes('@'));

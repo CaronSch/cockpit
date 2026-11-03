@@ -127,6 +127,13 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  transition: opacity var(--duration-fast);
+}
+
+/* Quiet past idle compaction's cutoff, its prompt cache about to expire (omp/cold.js): the
+   window recedes, until it is used again (typed in, or anything in it focused). */
+.omp-session.is-cold:not(:focus-within) {
+  opacity: 0.55;
 }
 
 .omp-toolbar {

@@ -43,6 +43,7 @@ import { attachFileRefs } from '../files/file-window.js';
 import { awaitedAfter } from '../omp/activity.js';
 import { promptsAndResponses } from '../omp/visibility.js';
 import { placeReviews } from '../omp/decisions.js';
+import { coldAt } from '../omp/cold.js';
 import { turnProgress } from '../omp/todos.js';
 import { elapsed, runningWork } from '../omp/running-work.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
@@ -127,10 +128,13 @@ function createPane(body, ctx, daemon) {
   let focusNext = false;
   /** @type {string | null} */
   let home = null;
+  /** How long after its last request a conversation's window dims (omp/cold.js); null until the daemon says. @type {number | null} */
+  let coldAfterMs = null;
   daemon
     .config()
     .then((c) => {
       home = c.home;
+      coldAfterMs = c.idleCompactAfterMs;
       schedule();
     })
     .catch(() => {});
@@ -1348,6 +1352,17 @@ function createPane(body, ctx, daemon) {
       if (meta()?.fork) void send();
     }
 
+    /** Redraws the window when it is due to dim. @type {ReturnType<typeof setTimeout> | undefined} */
+    let coldTimer;
+    /** Dims the window once its conversation is quiet past idle compaction's cutoff (omp/cold.js). */
+    function drawCold() {
+      const at = coldAfterMs === null ? null : coldAt(state, coldAfterMs);
+      const wait = at === null ? null : at - Date.now();
+      node.classList.toggle('is-cold', wait !== null && wait <= 0);
+      clearTimeout(coldTimer);
+      coldTimer = wait !== null && wait > 0 ? setTimeout(schedule, wait + 50) : undefined;
+    }
+
     function update() {
       // Woken elsewhere (another window, another tab): show the session that holds it now.
       const running = !ready() && !waking ? holding(file) : null;
@@ -1375,6 +1390,7 @@ function createPane(body, ctx, daemon) {
         ctx.setParams({ name });
         schedule(); // the next draw labels the window with it
       }
+      drawCold();
       drawToolbar();
       checkGithub();
       drawStrips();
@@ -1431,6 +1447,7 @@ function createPane(body, ctx, daemon) {
         highlight.destroy();
         offPullDrag();
         offFileRefs();
+        clearTimeout(coldTimer);
       },
     };
   }
