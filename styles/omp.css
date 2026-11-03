@@ -868,6 +868,42 @@
   opacity: 0.7;
 }
 
+/* A turn's decision review: a compact list under the reply, edged so it is not read as the
+   agent's own words; under way or failed, one dim line. */
+.omp-decisions {
+  padding-inline-start: var(--space-2);
+  border-inline-start: 2px solid var(--color-line-strong);
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.omp-decisions.is-pending,
+.omp-decisions.is-failed {
+  border-inline-start-color: transparent;
+  color: var(--color-text-faint);
+}
+
+.omp-decisions-head {
+  color: var(--color-text-faint);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.omp-decisions.is-pending .omp-decisions-head,
+.omp-decisions.is-failed .omp-decisions-head {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: var(--text-xs);
+}
+
+.omp-decisions-list {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: 3ch;
+  overflow-wrap: anywhere;
+}
+
 /* ── Dialogs, queue, suggestions, composer ──────────── */
 .omp-dialogs {
   flex: none;

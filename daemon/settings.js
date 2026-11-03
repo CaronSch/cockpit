@@ -10,10 +10,14 @@ import { loadStateFile } from './state-file.js';
 
 const VERSION = 1;
 
-/** `idleCompaction`: compact long conversations left idle (idle-compaction.js). @typedef {{ idleCompaction: boolean }} DaemonSettings */
+/**
+ * `idleCompaction`: compact long conversations left idle (idle-compaction.js); `decisionReview`:
+ * after every turn, list the decisions the agent took without its user (decisions.js).
+ * @typedef {{ idleCompaction: boolean, decisionReview: boolean }} DaemonSettings
+ */
 
 /** @type {Readonly<DaemonSettings>} */
-const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true });
+const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false });
 
 /**
  * Whether `value` sets some of the settings: known keys only, each with a value of its type.

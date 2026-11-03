@@ -4,7 +4,7 @@ import { branchEntry, rewindPoint } from '../src/omp/rewind.js';
 /** @import { Item } from '../src/omp/transcript.js' */
 
 /** @param {string} key @param {string} text @param {boolean} [byAgent] @returns {Item} */
-const user = (key, text, byAgent = false) => ({ key, rev: 0, kind: 'user', text, images: 0, byAgent });
+const user = (key, text, byAgent = false) => ({ key, rev: 0, kind: 'user', text, images: 0, byAgent, at: null });
 /** @param {string} key @returns {Item} */
 const reply = (key) => ({ key, rev: 0, kind: 'assistant', blocks: [], stopReason: 'stop', errorMessage: null, model: null, ended: true });
 

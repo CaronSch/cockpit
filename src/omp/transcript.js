@@ -46,7 +46,7 @@ import { todoPhases } from './todos.js';
 
 /**
  * @typedef {{ key: string, rev: number }} ItemBase
- * @typedef {ItemBase & { kind: 'user', text: string, images: number, byAgent: boolean }} UserItem
+ * @typedef {ItemBase & { kind: 'user', text: string, images: number, byAgent: boolean, at: number | null }} UserItem
  * @typedef {ItemBase & {
  *   kind: 'assistant', blocks: Block[], stopReason: string | null, errorMessage: string | null,
  *   model: string | null, ended: boolean,
@@ -670,11 +670,13 @@ function applyMessage(state, message, key, final, at = null) {
       return touch(item);
     }
     case 'user': {
-      const item = upsert(state, key, () => ({ kind: 'user', text: '', images: 0, byAgent: false }));
+      const item = upsert(state, key, () => ({ kind: 'user', text: '', images: 0, byAgent: false, at: null }));
       if (item.kind !== 'user') return unrecognised(state, 'user (id clash)', message);
       item.text = contentText(message.content);
       item.images = Array.isArray(message.content) ? message.content.filter((/** @type {any} */ c) => c?.type === 'image').length : 0;
       item.byAgent = message.attribution === 'agent' || message.synthetic === true;
+      // When omp took the prompt (its `timestamp`), the same live and in the journal: what names it.
+      item.at = typeof message.timestamp === 'number' ? message.timestamp : null;
       return touch(item);
     }
     case 'toolResult': {

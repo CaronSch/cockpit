@@ -44,6 +44,11 @@ const DAEMON_SETTINGS = [
     label: 'Compact idle conversations',
     detail: 'Compact a conversation of 200K tokens or more left idle, just before its one-hour prompt cache expires, as Claude Code does; for every browser',
   },
+  {
+    key: 'decisionReview',
+    label: 'Review decisions',
+    detail: 'After every turn, a small model lists up to five decisions the agent took without you, under its reply (a cheap model call per turn); for every browser',
+  },
 ];
 
 /** @typedef {Record<SettingKey, boolean>} Settings */

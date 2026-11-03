@@ -10,7 +10,7 @@
  * directory a new agent window suggests, the home directory unless given.
  * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_GH, COCKPIT_CWD, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
  * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), settings.json,
- * bugbot.json (the Bugbot reviews watched for), scratchpads/,
+ * bugbot.json (the Bugbot reviews watched for), decisions/ (each conversation's decision reviews), scratchpads/,
  * attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
@@ -24,6 +24,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { JournalRefused, createHistory } from './history.js';
 import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
+import { askReviewer, createDecisionReviews } from './decisions.js';
 import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
 import { createHub } from './hub.js';
@@ -76,6 +77,11 @@ const history = createHistory({ root: ompSessions, archive: join(stateDir, 'arch
 const sleepAfter = Number(process.env.COCKPIT_SLEEP_AFTER_MS);
 const compactAfter = Number(process.env.COCKPIT_IDLE_COMPACT_AFTER_MS);
 const compactFrom = Number(process.env.COCKPIT_IDLE_COMPACT_MIN_TOKENS);
+const decisions = createDecisionReviews({
+  dir: join(stateDir, 'decisions'),
+  on: () => settings.all().decisionReview,
+  ask: (turn) => askReviewer(turn, { ompPath }),
+});
 const hub = createHub({
   ompPath,
   unread,
@@ -91,6 +97,7 @@ const hub = createHub({
     void history.archive(file).catch((err) => {
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     }),
+  onTurnEnded: decisions.turnEnded,
 });
 const delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
 const bugbotPoll = Number(process.env.COCKPIT_BUGBOT_POLL_MS);
@@ -113,6 +120,7 @@ try {
     workspaces: createWorkspaces({ dir: join(stateDir, 'workspaces') }),
     unread,
     pins,
+    decisions,
     settings,
     github,
     delivery,

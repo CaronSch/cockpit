@@ -8,7 +8,8 @@
  *
  * It keeps which conversations are unread (daemon/unread.js) and pinned (daemon/pins.js), the daemon's settings
  * (daemon/settings.js) and its Bugbot watches (daemon/bugbot.js), as the daemon last said: every window reads them here, so all of
- * them, and every page, agree.
+ * them, and every page, agree. So are the decision reviews (daemon/decisions.js) of the conversations windows show,
+ * asked for when a window first shows one, and again after a reconnect.
  *
  * `replayed` tells events the daemon replays on (re)connecting, which happened before this
  * page heard of them, from those happening now: the replay is everything up to the `hello`'s
@@ -24,6 +25,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
+/** @import { Reviews } from '../omp/decisions.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
 /** @typedef {{ ok: true, rev: number | null } | { ok: false, current: Screen | null }} ScreenSave */
 
@@ -58,6 +60,8 @@ export class DaemonError extends Error {
  *   isPinned(ompId: string | null): boolean,
  *   onPins(fn: () => void): () => void,
  *   pin(ompId: string, pinned: boolean): Promise<void>,
+ *   decisions(ompId: string | null): Reviews | null,
+ *   onDecisions(fn: () => void): () => void,
  *   settings(): DaemonSettings | null,
  *   onSettings(fn: () => void): () => void,
  *   changeSettings(patch: Partial<DaemonSettings>): Promise<void>,
@@ -165,6 +169,15 @@ export function createDaemonClient(env = {}) {
     watches = next;
     for (const fn of bugbotListeners) fn();
   };
+  /** The decision reviews of the conversations asked about, by omp id. @type {Map<string, Reviews>} */
+  const decisions = new Map();
+  /** Conversations whose reviews are being asked for. @type {Set<string>} */
+  const askingDecisions = new Set();
+  /** @type {Set<() => void>} */
+  const decisionsListeners = new Set();
+  const decisionsChanged = () => {
+    for (const fn of decisionsListeners) fn();
+  };
   /** @type {Set<(outdated: boolean) => void>} */
   const uiListeners = new Set();
   /** The UI version this page loaded: the first one heard. @type {string | null} */
@@ -210,6 +223,9 @@ export function createDaemonClient(env = {}) {
     setPins(hello.pinned);
     setSettings(hello.settings);
     setWatches(hello.bugbot);
+    // Changes made while this page was away were not heard: ask again.
+    decisions.clear();
+    decisionsChanged();
   }
 
   /** @param {StreamEvent} event */
@@ -227,6 +243,10 @@ export function createDaemonClient(env = {}) {
     if (event.kind === 'pins') return setPins(event.pinned);
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'bugbot') return setWatches(event.watches);
+    if (event.kind === 'decisions') {
+      decisions.set(event.ompId, event.reviews);
+      return decisionsChanged();
+    }
     if (event.kind === 'session') {
       metas.set(event.session, event.meta);
       sessionsChanged();
@@ -397,6 +417,26 @@ export function createDaemonClient(env = {}) {
     },
     async pin(ompId, on) {
       await request(`/api/pins/${encodeURIComponent(ompId)}`, { method: on ? 'PUT' : 'DELETE' });
+    },
+    /** Conversation `ompId`'s decision reviews; null until the daemon has said (asking it, if no one has). */
+    decisions(ompId) {
+      if (ompId === null) return null;
+      const known = decisions.get(ompId);
+      if (known || askingDecisions.has(ompId) || status !== 'open') return known ?? null;
+      askingDecisions.add(ompId);
+      request(`/api/decisions/${encodeURIComponent(ompId)}`)
+        // News heard meanwhile is newer than this answer. One that failed is not asked again until a reconnect.
+        .then((body) => !decisions.has(ompId) && decisions.set(ompId, body.reviews))
+        .catch(() => !decisions.has(ompId) && decisions.set(ompId, {}))
+        .finally(() => {
+          askingDecisions.delete(ompId);
+          decisionsChanged();
+        });
+      return null;
+    },
+    onDecisions(fn) {
+      decisionsListeners.add(fn);
+      return () => decisionsListeners.delete(fn);
     },
     settings: () => settings,
     onSettings(fn) {
