@@ -1,6 +1,7 @@
 /**
  * The screen switcher in the top bar: which screen of its workspace this window shows, and a
- * menu of every screen, with what it holds and where it is open, to open one here or delete it.
+ * menu of every screen, with what it holds and where it is open, to open one here or delete it,
+ * or to open a copy of this one in a new tab.
  *
  * Screens are numbered in the order they were created. Deleting a screen closes its windows,
  * after asking; as closing a window never does, it ends no agent (they run on, listed in the
@@ -81,6 +82,20 @@ export function createScreenSwitcher({ opened, describe }) {
       }
       menu.append(row);
     });
+    const copy = button('btn', 'New screen', () => {
+      copy.disabled = true;
+      screen
+        .openCopy()
+        .then(() => menu.hidePopover())
+        .catch((err) => {
+          note = `Could not open a new screen: ${errorMessage(err)}`;
+        })
+        .finally(() => void refresh());
+    });
+    copy.title = 'Open a copy of this screen in a new tab';
+    const actions = el('div', 'screen-actions screen-new');
+    actions.append(copy);
+    menu.append(actions);
     if (note) menu.append(el('p', 'screen-note', note));
   }
 

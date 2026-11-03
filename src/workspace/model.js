@@ -39,6 +39,20 @@ export const claimOrder = (remembered, saved) =>
   remembered ? [remembered, ...saved.filter((id) => id !== remembered)] : [...saved];
 
 /**
+ * A copy of a layout for a new screen: the same windows with the same settings, each with an
+ * id of its own (as the registry gives a new window).
+ * @param {Tree} tree @param {() => string} [newId] @returns {Tree}
+ */
+export function copyLayout(tree, newId = () => `w_${crypto.randomUUID().slice(0, 8)}`) {
+  /** @param {import('../layout/grid-model.js').GridNode} node @returns {import('../layout/grid-model.js').GridNode} */
+  const copy = (node) =>
+    node.kind === 'leaf'
+      ? { ...node, id: newId(), ...(node.params ? { params: { ...node.params } } : {}) }
+      : { ...node, children: node.children.map(copy), sizes: [...node.sizes] };
+  return tree && copy(tree);
+}
+
+/**
  * What a screen holds, e.g. "2 Agent, 1 Notes", kinds in the order they first appear.
  * @param {Tree} tree @param {(widget: string) => string} titleOf @returns {string}
  */

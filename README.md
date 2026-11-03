@@ -33,7 +33,7 @@ are kept by the daemon (`~/.cockpit/workspaces/`), so they survive a browser
 restart: windows opened again get their screens back, and a reload keeps the
 window's screen. The switcher in the top bar (**Screen 2 of 3**) lists every
 screen and what it holds; a screen open in no window can be opened in this one
-(**Open here**, without stopping its agents) or deleted (its agents keep running too). Add
+(**Open here**, without stopping its agents) or deleted (its agents keep running too), and **New screen** opens a copy of this one, the same windows showing the same things, in a new tab. Add
 `?workspace=<name>` to the address for a separate workspace (lowercase letters,
 digits and dashes; the default is `main`). Windows at two different addresses at
 once (say `127.0.0.1` and `localhost`) do not see which screens the other has
