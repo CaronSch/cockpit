@@ -9,6 +9,11 @@
  * dragged out, or clicked open on GitHub (github/pull-window.js): a link to one gets
  * `md-pr-link` with its `repo` and `number`, and a `#123` or `owner/repo#123` in plain text
  * (not in code) is a `md-pr-ref` span with its `number` (and `repo`).
+ *
+ * So are text files (files/file-refs.js) where `files` asks for them, for the file window
+ * (files/file-window.js): a path to one in plain text is a `md-file-ref` span, and a code span
+ * holding just one gets the class, each with its `path` as written and the `line` named after
+ * it, if any.
  */
 import temml from 'temml';
 import { el } from '../ui/dom.js';
@@ -16,12 +21,13 @@ import { parseMarkdown } from './markdown.js';
 import { tableCopy } from './table-copy.js';
 import { renderVisual } from './visuals.js';
 import { pullOfUrl, splitRefs } from '../github/pr-refs.js';
+import { fileRefOf, splitFileRefs } from '../files/file-refs.js';
 /** @import { Block, Inline } from './markdown.js' */
 
 /**
  * How a reply is rendered: `reply` names the reply (its item and block), so the images it
- * shows are its own (see renderImage).
- * @typedef {{ reply?: string }} RenderOptions
+ * shows are its own (see renderImage); `files` marks the text files it names.
+ * @typedef {{ reply?: string, files?: boolean }} RenderOptions
  */
 
 /** @param {string} source @param {RenderOptions} [options] @returns {DocumentFragment} */
@@ -103,9 +109,13 @@ function withInline(parent, children, options) {
 function renderInline(node, options) {
   switch (node.type) {
     case 'text':
-      return renderText(node.text);
-    case 'code':
-      return el('code', 'md-inline-code', node.text);
+      return renderText(node.text, options);
+    case 'code': {
+      const code = el('code', 'md-inline-code', node.text);
+      const file = options.files ? fileRefOf(node.text) : null;
+      if (file) markFile(code, file);
+      return code;
+    }
     case 'strong':
       return withInline(el('strong'), node.children, options);
     case 'em':
@@ -136,24 +146,39 @@ function renderInline(node, options) {
 
 /** What a pull request named in text does, on hover. */
 const PULL_HINT = 'Click to open on GitHub · drag out to review it here';
+/** What a text file named in text does, on hover. */
+const FILE_HINT = 'Click to open beside · drag out to place it';
 
-/** Plain text, its `#123` references marked. @param {string} text @returns {Node} */
-function renderText(text) {
-  const parts = splitRefs(text);
-  if (parts.length === 1 && !('number' in parts[0])) return document.createTextNode(text);
+/** Plain text, its `#123` references (and text file paths) marked. @param {string} text @param {RenderOptions} options @returns {Node} */
+function renderText(text, options) {
   const fragment = document.createDocumentFragment();
-  for (const part of parts) {
-    if (!('number' in part)) {
+  for (const part of splitRefs(text)) {
+    if ('number' in part) {
+      const ref = el('span', 'md-pr-ref', part.text);
+      ref.dataset.number = String(part.number);
+      if (part.repo) ref.dataset.repo = part.repo;
+      ref.title = PULL_HINT;
+      fragment.append(ref);
+      continue;
+    }
+    if (!options.files) {
       fragment.append(part.text);
       continue;
     }
-    const ref = el('span', 'md-pr-ref', part.text);
-    ref.dataset.number = String(part.number);
-    if (part.repo) ref.dataset.repo = part.repo;
-    ref.title = PULL_HINT;
-    fragment.append(ref);
+    for (const run of splitFileRefs(part.text)) {
+      fragment.append('path' in run ? markFile(el('span', undefined, run.text), run) : run.text);
+    }
   }
   return fragment;
+}
+
+/** @template {HTMLElement} E @param {E} node @param {{ path: string, line: number | null }} file @returns {E} */
+function markFile(node, file) {
+  node.classList.add('md-file-ref');
+  node.dataset.path = file.path;
+  if (file.line !== null) node.dataset.line = String(file.line);
+  node.title = FILE_HINT;
+  return node;
 }
 
 /**

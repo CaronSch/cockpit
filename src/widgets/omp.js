@@ -39,6 +39,7 @@ import { MENTIONS, PLAIN_PATH } from '../omp/file-mention.js';
 import { createPullSuggest } from '../omp/pr-suggest.js';
 import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
+import { attachFileRefs } from '../files/file-window.js';
 import { awaitedAfter } from '../omp/activity.js';
 import { promptsAndResponses } from '../omp/visibility.js';
 import { placeReviews } from '../omp/decisions.js';
@@ -907,6 +908,8 @@ function createPane(body, ctx, daemon) {
     // Pull requests the conversation links or refers to (`#123`: of its directory's repository)
     // drag out of the transcript as pull request windows, and a click opens one on GitHub.
     const offPullDrag = attachPullDrag({ root: transcript, ctx, base: () => (cwd() ? { repo: githubRepo, cwd: cwd() } : null), parent: asTarget });
+    // Text files the conversation names (relative ones in its directory) open in a file window.
+    const offFileRefs = attachFileRefs({ root: transcript, ctx, cwd: () => cwd() || null });
     attachMenu(
       prsBtn,
       async () => {
@@ -1427,6 +1430,7 @@ function createPane(body, ctx, daemon) {
         offHighlight();
         highlight.destroy();
         offPullDrag();
+        offFileRefs();
       },
     };
   }

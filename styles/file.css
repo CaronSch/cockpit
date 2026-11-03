@@ -1,0 +1,111 @@
+/* file window: a text file to read, and the paths in replies that open one. */
+
+.widget-body:has(> .fv) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.fv {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font: var(--text-xs) / 1.5 var(--font-mono);
+}
+
+.fv-head {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.fv-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-dim);
+}
+
+.fv-body {
+  position: relative; /* the marked line is placed inside it */
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.fv-source {
+  display: flex;
+  align-items: flex-start;
+}
+
+.fv-gutter,
+.fv-text {
+  margin: 0;
+  padding: var(--space-2) 0;
+  font: inherit;
+  white-space: pre;
+}
+
+.fv-gutter {
+  flex: none;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  padding-inline: var(--space-3) var(--space-2);
+  background: var(--color-bg);
+  color: var(--color-text-faint);
+  text-align: right;
+  user-select: none;
+}
+
+.fv-text {
+  flex: 1;
+  padding-inline: var(--space-2) var(--space-3);
+  color: var(--color-text);
+  tab-size: 2;
+}
+
+.fv-line-mark {
+  position: absolute;
+  inset-inline: 0;
+  background: var(--color-selection);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.fv-rendered {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.fv-pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.fv-pick .omp-row > .omp-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.fv-message {
+  padding: var(--space-3);
+}
+
+/* A text file a reply names: opened beside with a click, placed with a drag (files/file-window.js). */
+.omp-transcript .md-file-ref {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.omp-transcript .md-file-ref:hover {
+  color: var(--color-accent);
+}

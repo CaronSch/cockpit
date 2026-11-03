@@ -26,7 +26,7 @@ export function renderItem(item, ctx) {
       // The user's own prompts need no label (the band and prompt mark say it); another agent's do.
       if (item.byAgent) node.append(el('div', 'omp-role', 'another agent →'));
       const body = el('div', 'omp-md');
-      body.append(renderMarkdown(item.text));
+      body.append(renderMarkdown(item.text, { files: true }));
       if (item.images) body.append(statusLine('muted', `[${item.images} image${item.images === 1 ? '' : 's'}]`));
       node.append(body);
       // The pane acts on it (omp/rewind.js); the user's own prompts can be reworded, not an agent's.
@@ -107,7 +107,7 @@ function renderBlock(block, id, ctx) {
   switch (block.kind) {
     case 'text': {
       const node = el('div', 'omp-md');
-      node.append(renderMarkdown(block.text, { reply: id }));
+      node.append(renderMarkdown(block.text, { reply: id, files: true }));
       return node;
     }
     case 'thinking':

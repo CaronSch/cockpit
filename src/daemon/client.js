@@ -20,7 +20,7 @@
  * being, or become again, those.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RepoList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RepoList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, TextFile, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -85,6 +85,7 @@ export class DaemonError extends Error {
  *   rpc(session: string, command: Record<string, unknown>): Promise<RpcResponse>,
  *   respondUi(session: string, response: Record<string, unknown>): Promise<void>,
  *   listFiles(dir: string): Promise<DirListing>,
+ *   textFile(path: string): Promise<TextFile>,
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
  *   checkUi(): Promise<void>,
  *   pulls(at: { repo: string } | { cwd: string }): Promise<PullList>,
@@ -525,6 +526,7 @@ export function createDaemonClient(env = {}) {
     },
     // A folder is found relative to home, as a new session's directory is.
     listFiles: (dir) => request(`/api/files?dir=${encodeURIComponent(dir)}`),
+    textFile: (path) => request(`/api/text?path=${encodeURIComponent(path)}`),
     pulls: (at) => request(`/api/github/pulls?${new URLSearchParams(at)}`),
     repos: (cwd) => request(`/api/github/repos?cwd=${encodeURIComponent(cwd)}`),
     pull: (at, number) => request(`/api/github/pull?${new URLSearchParams({ ...at, number: String(number) })}`),

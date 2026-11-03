@@ -9,7 +9,7 @@ import { JournalRefused, readConversation } from './history.js';
 import { SessionNotRunning } from './omp-session.js';
 import { OMP_ID } from './unread.js';
 import { isSettingsPatch } from './settings.js';
-import { listDirectory, resolvePath } from './files.js';
+import { TextFileRefused, listDirectory, readTextFile, resolvePath } from './files.js';
 import { DeliveryRefused } from './deliver.js';
 import { GithubError } from './github.js';
 import { REPO } from '../src/github/pr-refs.js';
@@ -498,6 +498,16 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           const file = Bun.file(path);
           if (!type || !(await file.exists())) throw new HttpError(404, 'no such image or data file');
           return new Response(file, { headers: { ...FILE_HEADERS, 'content-type': type } });
+        },
+      }),
+      '/api/text': api({
+        GET: async (req) => {
+          const path = resolvePath(new URL(req.url).searchParams.get('path') ?? '', homedir());
+          try {
+            return json(await readTextFile(path));
+          } catch (err) {
+            throw err instanceof TextFileRefused ? new HttpError(404, err.message) : err;
+          }
         },
       }),
       '/api/sessions/:id/ui': api({

@@ -50,6 +50,9 @@
  *   GET    /api/file?path=path         → a file an agent's reply shows: an image (png, jpeg, gif, webp,
  *                                      avif) or a chart's data (json, csv, tsv), by extension; path
  *                                      as `dir` above; else 404
+ *   GET    /api/text?path=path         → TextFile: a text file for the file window (Markdown, JSON, plain
+ *                                      text, common code: src/files/file-refs.js), by extension; path as
+ *                                      `dir` above; 404 for any other file, or none
  *   GET    /api/scratchpads            → { pads: ScratchpadSummary[] } (most recently changed first)
  *   GET    /api/scratchpads/:id        → Scratchpad (empty text for a pad never written)
  *   PUT    /api/scratchpads/:id        { text, base } → { rev }, or 409 { error, current: Scratchpad }
@@ -196,6 +199,12 @@
 /** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | DecisionsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
 
 /** @typedef {{ defaultCwd: string, home: string, scratchpadDir: string }} DaemonConfig */
+
+/**
+ * A text file as the file window shows it: `path` resolved, its `text` (its first 2 MiB:
+ * `truncated` when there is more), its `size` in bytes and when it was last changed (epoch ms).
+ * @typedef {{ path: string, text: string, size: number, truncated: boolean, modifiedAt: number }} TextFile
+ */
 
 /**
  * A folder's entries for path suggestions, by name; `dir` is the folder,
