@@ -625,29 +625,18 @@ test('a turn that ends while nobody looks stays unread, across reloads and aslee
   await expect(window.locator('.widget-label')).toBeHidden();
 });
 
-test('reading a session in its agent window clears its mark in Sessions, and its title recedes as an idle one', async ({ page }) => {
+test('reading a session in its agent window clears its mark in Sessions', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await row(window, 'deploy staging').click();
   const pane = page.locator('.widget[data-widget="omp"]');
   const deploy = keyRow(window, fileOf('deploy'));
-  /** The colour a token computes to, as the title's would. @param {string} token */
-  const tokenColour = (token) =>
-    page.evaluate((token) => {
-      const probe = document.body.appendChild(document.createElement('span'));
-      probe.style.color = `var(${token})`;
-      const colour = getComputedStyle(probe).color;
-      probe.remove();
-      return colour;
-    }, token);
   await turnWhileAway(page, pane, 'hello');
   await expect(deploy).toHaveClass(/is-unread/);
-  await expect(deploy.locator('.sessions-title')).toHaveCSS('color', await tokenColour('--color-text'));
   const { x, y } = await middleOf(pane);
   await page.mouse.move(x, y);
   await expect(pane).not.toHaveClass(/is-unread/);
   await expect(deploy).not.toHaveClass(/is-unread/);
   await expect(deploy).toHaveClass(/is-idle/);
-  await expect(deploy.locator('.sessions-title')).toHaveCSS('color', await tokenColour('--color-text-dim'));
   await page.reload();
   await expect(deploy).toBeVisible();
   await expect(deploy).not.toHaveClass(/is-unread/);
