@@ -152,7 +152,7 @@ function createPullPane(body, ctx, daemon) {
       const mine = ++asked;
       list.replaceChildren(el('p', 'omp-muted', 'Loading…'));
       daemon
-        .pulls(dir)
+        .pulls({ cwd: dir })
         .then((found) => {
           if (mine !== asked || destroyed) return;
           if (!found.connected) return list.replaceChildren(el('p', 'omp-error', `No pull requests: ${found.reason}`));

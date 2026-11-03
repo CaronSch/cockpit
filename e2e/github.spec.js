@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { E2E_GH_ROOT, newWorkspace, workbenchPath } from './daemon.js';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -27,12 +27,13 @@ const FINDING = [
 ].join('\n');
 
 /**
- * A new checkout of a repository `acme/widgets-…` with two pull requests (or `pulls`), as the
- * fake gh reads it, both there and named outright; one per test.
- * @param {any[]} [pulls]
+ * A new checkout of a repository `<owner>/widgets` (or `<owner>/<name>`) with two pull requests
+ * (or `pulls`), as the fake gh reads it, both there and named outright. The owner is a new one
+ * per test unless given, so its repositories are that test's alone.
+ * @param {{ pulls?: any[], owner?: string, name?: string }} [options]
  */
-function newRepo(pulls) {
-  const dir = join(E2E_GH_ROOT, 'acme', `widgets-${randomUUID().slice(0, 8)}`);
+function newRepo({ pulls, owner = `acme-${randomUUID().slice(0, 8)}`, name = 'widgets' } = {}) {
+  const dir = join(E2E_GH_ROOT, owner, name);
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     join(dir, '.fake-gh.json'),
@@ -66,7 +67,7 @@ function newRepo(pulls) {
 }
 
 /** The repository a checkout made by `newRepo` is, as `owner/name`. @param {string} dir */
-const repoOf = (dir) => `acme/${basename(dir)}`;
+const repoOf = (dir) => `${basename(dirname(dir))}/${basename(dir)}`;
 
 /** @type {string[]} */
 let problems = [];
@@ -257,9 +258,11 @@ async function dragTo(page, from, x, y) {
 test('a pull request a reply links, in any repository, or refers to as #N drags out as a pull request window, and onto one shows there', async ({ page }) => {
   await openWorkbench(page);
   const here = newRepo();
-  const other = newRepo([
-    { number: 860, title: 'route searcher to customer-ui', state: 'OPEN', isDraft: false, author: 'octo', headRefName: 'route', baseRefName: 'main', body: 'Routing.', createdAt: '2026-11-01T09:00:00Z', updatedAt: '', additions: 0, deletions: 0, comments: [], reviews: [], diff: '' },
-  ]);
+  const other = newRepo({
+    pulls: [
+      { number: 860, title: 'route searcher to customer-ui', state: 'OPEN', isDraft: false, author: 'octo', headRefName: 'route', baseRefName: 'main', body: 'Routing.', createdAt: '2026-11-01T09:00:00Z', updatedAt: '', additions: 0, deletions: 0, comments: [], reviews: [], diff: '' },
+    ],
+  });
   const agent = await startedAgent(page, here);
   await agent.locator('textarea').fill(`say:| Repo | PR |\n|---|---|\n| infra | [#860](https://github.com/${repoOf(other)}/pull/860) |\n\nStacked on #12.`);
   await agent.locator('textarea').press('Enter');
@@ -301,4 +304,50 @@ test('#N in a pull request’s own text drags out as another pull request of its
   if (!box) throw new Error('no pull request window');
   await dragTo(page, pr.locator('.gh-item-body .md-pr-ref'), box.x + box.width / 2, box.y + box.height - 6);
   await expect(page.locator('.widget[data-widget="github"] .gh-title')).toHaveText(['#12 feat: pull request window', '#7 docs: readme']);
+});
+
+test('# finds the owner’s other repositories by name, and a pick of one and then of its pull request puts in owner/name#N', async ({ page }) => {
+  await openWorkbench(page);
+  const here = newRepo();
+  const owner = basename(dirname(here));
+  /** @param {number} number @param {string} title */
+  const pr = (number, title) => ({ number, title, state: 'OPEN', isDraft: false, author: 'octo', headRefName: `b${number}`, baseRefName: 'main', body: '', createdAt: '2026-11-01T09:00:00Z', updatedAt: '', additions: 0, deletions: 0, comments: [], reviews: [], diff: '' });
+  newRepo({ owner, name: 'k8s-infra', pulls: [pr(860, 'add searcher cronjobs'), pr(859, 'route searcher')] });
+  const agent = await startedAgent(page, here);
+  const draft = agent.locator('textarea');
+  const rows = agent.locator('.omp-suggestion');
+
+  // Part of its name after #: the repository, to go on into.
+  await draft.pressSequentially('see #k8s');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('k8s-infra#');
+  await expect(rows.first()).toContainText('repository');
+  await draft.press('Tab');
+  await expect(draft).toHaveValue('see k8s-infra#');
+  await expect(rows).toHaveCount(2); // its pull requests
+  await draft.pressSequentially('859');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('k8s-infra#859');
+  await expect(rows.first()).toContainText('route searcher');
+  await draft.press('Tab');
+  // As GitHub writes it, so the agent (and GitHub) know which repository.
+  await expect(draft).toHaveValue(`see ${owner}/k8s-infra#859 `);
+
+  // Typed outright, the other way round, it finds the same; the conversation's own stays #N.
+  await draft.pressSequentially('and #k8s-infra:cron');
+  await expect(rows).toHaveCount(1);
+  await draft.press('Tab');
+  await draft.pressSequentially('or widgets#7');
+  await expect(rows).toHaveCount(1);
+  await draft.press('Tab');
+  await expect(draft).toHaveValue(`see ${owner}/k8s-infra#859 and ${owner}/k8s-infra#860 or #7 `);
+
+  // The agent echoes it back: there, it drags out as that pull request's window.
+  await draft.press('Enter');
+  const ref = agent.locator('.omp-assistant .md-pr-ref', { hasText: `${owner}/k8s-infra#859` });
+  await expect(ref).toBeVisible();
+  const box = await agent.boundingBox();
+  if (!box) throw new Error('no agent window');
+  await dragTo(page, ref, box.x + box.width - 6, box.y + box.height / 2);
+  await expect(page.locator('.widget[data-widget="github"] .gh-title')).toHaveText('#859 route searcher');
 });

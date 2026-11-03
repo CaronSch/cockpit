@@ -6,8 +6,8 @@
  * read stays as its source, in the code style, with Temml's reason as the tooltip.
  *
  * Pull requests named in text are marked (github/pr-refs.js), so a window can let them be
- * dragged out: a link to one gets `md-pr-link` with its `repo` and `number`, and a `#123` in
- * plain text (not in code) is a `md-pr-ref` span with its `number`.
+ * dragged out: a link to one gets `md-pr-link` with its `repo` and `number`, and a `#123` or
+ * `owner/repo#123` in plain text (not in code) is a `md-pr-ref` span with its `number` (and `repo`).
  */
 import temml from 'temml';
 import { el } from '../ui/dom.js';
@@ -144,6 +144,7 @@ function renderText(text) {
     }
     const ref = el('span', 'md-pr-ref', part.text);
     ref.dataset.number = String(part.number);
+    if (part.repo) ref.dataset.repo = part.repo;
     fragment.append(ref);
   }
   return fragment;

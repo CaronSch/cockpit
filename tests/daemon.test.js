@@ -1355,9 +1355,23 @@ describe('GitHub', () => {
     assert.match(listed.json.reason, /not a git repository/);
   });
 
+  test('the repository a directory is in names its owner’s others, most recently pushed first, whose pull requests list by name', async () => {
+    const gadgets = join(cwd, 'github', 'acme', 'gadgets');
+    await mkdir(gadgets, { recursive: true });
+    await Bun.write(join(gadgets, '.fake-gh.json'), JSON.stringify({ repo: 'acme/gadgets', description: 'Gadgets', pushedAt: '2099-01-01T00:00:00Z', pulls: [{ number: 3, title: 'feat: gadget', state: 'OPEN', isDraft: true, author: 'octo', headRefName: 'g', updatedAt: '' }] }));
+    const repos = await call({ path: `/api/github/repos?cwd=${encodeURIComponent(join(repo, 'src'))}` });
+    assert.equal(repos.status, 200);
+    assert.deepEqual(repos.json, { connected: true, repo: 'acme/widgets', repos: [{ repo: 'acme/gadgets', description: 'Gadgets' }, { repo: 'acme/widgets', description: '' }] });
+    const listed = await call({ path: '/api/github/pulls?repo=acme/gadgets' });
+    assert.deepEqual(listed.json.pulls.map((/** @type {any} */ p) => [p.number, p.title, p.isDraft]), [[3, 'feat: gadget', true]]);
+    assert.equal((await call({ path: '/api/github/pulls?repo=..%2Fx' })).status, 400);
+    const elsewhere = await call({ path: `/api/github/repos?cwd=${encodeURIComponent(cwd)}` });
+    assert.equal(elsewhere.json.connected, false);
+  });
+
   test('a missing gh lists none, saying where to get it', async () => {
     const missing = createGithub({ ghPath: join(cwd, 'no-such-gh') });
-    const listed = await missing.pulls(repo);
+    const listed = await missing.pulls({ cwd: repo });
     assert.equal(listed.connected, false);
     assert.match(listed.connected ? '' : listed.reason, /cli\.github\.com/);
   });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { citeLines, lineKey, lineKeys, parseDiff } from '../src/github/diff.js';
 import { readableBody } from '../src/github/text.js';
 import { BUGBOT_LOGIN, bugbotMessage, bugbotReviewSince, parseFinding } from '../src/github/bugbot.js';
-import { completePull, matchPulls, pullQueryAt } from '../src/github/pr-mention.js';
+import { completePull, completeRepo, matchPulls, matchRepos, pullQueryAt, resolveRepo } from '../src/github/pr-mention.js';
 import { reviewMessage } from '../src/github/review.js';
 import { REPO, pullOfUrl, splitRefs } from '../src/github/pr-refs.js';
 /** @import { PullSummary } from '../daemon/wire.js' */
@@ -167,11 +167,20 @@ describe('# pull request mentions', () => {
   const pr = (number, title) => ({ number, title, state: 'OPEN', isDraft: false, author: 'octo', headRefName: 'b', url: '', updatedAt: '' });
   const pulls = [pr(120, 'fix: cache never expires'), pr(12, 'feat: pull request window'), pr(7, 'docs: pull requests'), pr(1205, 'chore: bump')];
 
-  test('the mention is a # at the start or after whitespace, up to the caret', () => {
-    assert.deepEqual(pullQueryAt('see #12', 7), { start: 4, end: 7, query: '12' });
-    assert.deepEqual(pullQueryAt('#', 1), { start: 0, end: 1, query: '' });
-    assert.deepEqual(pullQueryAt('a\n#pull', 7), { start: 2, end: 7, query: 'pull' });
-    for (const text of ['issue#12', '#12 ', '## heading', 'plain']) assert.equal(pullQueryAt(text, text.length), null, text);
+  test('the mention is a # at the start or after whitespace, up to the caret, for the conversation’s repository', () => {
+    assert.deepEqual(pullQueryAt('see #12', 7), { start: 4, end: 7, repo: null, query: '12' });
+    assert.deepEqual(pullQueryAt('#', 1), { start: 0, end: 1, repo: null, query: '' });
+    assert.deepEqual(pullQueryAt('a\n#pull', 7), { start: 2, end: 7, repo: null, query: 'pull' });
+    for (const text of ['x#y#12', '#12 ', '## heading', 'plain', 'https://github.com/a/b#', '-x#1']) assert.equal(pullQueryAt(text, text.length), null, text);
+  });
+
+  test('another repository goes before the # (name#, owner/name#) or right after it, then a colon', () => {
+    assert.deepEqual(pullQueryAt('see k8s-infra#85', 16), { start: 4, end: 16, repo: 'k8s-infra', query: '85' });
+    assert.deepEqual(pullQueryAt('blink-labs/k8s-infra#', 21), { start: 0, end: 21, repo: 'blink-labs/k8s-infra', query: '' });
+    assert.deepEqual(pullQueryAt('see #k8s-infra:859', 18), { start: 4, end: 18, repo: 'k8s-infra', query: '859' });
+    // No colon yet: part of a name, which suggests repositories as well as titles.
+    assert.deepEqual(pullQueryAt('#k8s', 4), { start: 0, end: 4, repo: null, query: 'k8s' });
+    assert.deepEqual(pullQueryAt('#:12', 4), { start: 0, end: 4, repo: null, query: ':12' });
   });
 
   test('digits match numbers that start with them; words match titles holding them all, those starting with them first', () => {
@@ -182,8 +191,28 @@ describe('# pull request mentions', () => {
     assert.deepEqual(matchPulls(pulls, '').map((p) => p.number), [120, 12, 7, 1205]);
   });
 
-  test('a picked pull request goes in as GitHub writes it, the caret after a space', () => {
-    assert.equal(completePull(12), '#12 ');
+  const repos = ['blink-labs/eth-rpc', 'blink-labs/customer-ui', 'blink-labs/k8s-infra', 'blink-labs/infra-docs'].map((repo) => ({ repo, description: '' }));
+
+  test('part of a name matches the other repositories holding it, those starting with it first; digits match none', () => {
+    assert.deepEqual(matchRepos(repos, 'infra', 'blink-labs/eth-rpc').map((r) => r.repo), ['blink-labs/infra-docs', 'blink-labs/k8s-infra']);
+    assert.deepEqual(matchRepos(repos, 'ETH', 'blink-labs/eth-rpc'), []);
+    assert.deepEqual(matchRepos(repos, '8', null).map((r) => r.repo), []);
+    assert.deepEqual(matchRepos(repos, 'k8s', null).map((r) => r.repo), ['blink-labs/k8s-infra']);
+  });
+
+  test('a typed repository is the owner’s one of that name, or named with its owner', () => {
+    assert.equal(resolveRepo('K8s-Infra', repos), 'blink-labs/k8s-infra');
+    assert.equal(resolveRepo('k8s', repos), null);
+    assert.equal(resolveRepo('acme/widgets', repos), 'acme/widgets');
+  });
+
+  test('a picked pull request goes in as GitHub writes it, the caret after a space; a repository, as its name and #', () => {
+    assert.equal(completePull(12, null, 'blink-labs/eth-rpc'), '#12 ');
+    assert.equal(completePull(12, 'blink-labs/eth-rpc', 'blink-labs/eth-rpc'), '#12 ');
+    assert.equal(completePull(859, 'blink-labs/k8s-infra', 'blink-labs/eth-rpc'), 'blink-labs/k8s-infra#859 ');
+    assert.equal(completeRepo('blink-labs/k8s-infra', 'blink-labs/eth-rpc'), 'k8s-infra#');
+    assert.equal(completeRepo('acme/widgets', 'blink-labs/eth-rpc'), 'acme/widgets#');
+    assert.equal(completeRepo('acme/widgets', null), 'acme/widgets#');
   });
 });
 
@@ -224,16 +253,18 @@ describe('pull requests named in text', () => {
     }
   });
 
-  test('#123 is a reference on its own, not inside a word, a longer token or an anchor', () => {
-    assert.deepEqual(splitRefs('stacked on #3841, see (#12)'), [
+  test('#123 and owner/repo#123 are references on their own, not inside a word, a longer token or an anchor', () => {
+    assert.deepEqual(splitRefs('stacked on #3841, see (#12) and blink-labs/k8s-infra#860.'), [
       { text: 'stacked on ' },
-      { text: '#3841', number: 3841 },
+      { text: '#3841', number: 3841, repo: null },
       { text: ', see (' },
-      { text: '#12', number: 12 },
-      { text: ')' },
+      { text: '#12', number: 12, repo: null },
+      { text: ') and ' },
+      { text: 'blink-labs/k8s-infra#860', number: 860, repo: 'blink-labs/k8s-infra' },
+      { text: '.' },
     ]);
-    assert.deepEqual(splitRefs('#7'), [{ text: '#7', number: 7 }]);
-    for (const text of ['issue#12', 'color #fff', '#12abc', '#12-x', 'page.html#3', '']) assert.deepEqual(splitRefs(text), [{ text }], text);
+    assert.deepEqual(splitRefs('#7'), [{ text: '#7', number: 7, repo: null }]);
+    for (const text of ['issue#12', 'color #fff', '#12abc', '#12-x', 'page.html#3', 'a/..#3', 'x/a/b#3', '']) assert.deepEqual(splitRefs(text), [{ text }], text);
   });
 
   test('a repository named outright is owner/name, never a path or a flag', () => {

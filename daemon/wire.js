@@ -67,9 +67,12 @@
  *                                      it is asleep, queued after the turn if its agent works (see
  *                                      `deliver.js`); 404 when no session holds it and it has no
  *                                      journal, 409 when it is archived
- *   GET    /api/github/pulls?cwd=dir   → PullList: the pull requests of the GitHub repository `dir`
- *                                      (as `cwd` above) is in, newest first, or why there are none
- *                                      to list (`gh` missing or signed out, not a GitHub repository)
+ *   GET    /api/github/pulls?cwd=dir, or ?repo=owner/name → PullList: the pull requests of the
+ *                                      GitHub repository `dir` (as `cwd` above) is in, or of the one
+ *                                      named, newest first, or why there are none to list (`gh`
+ *                                      missing or signed out, not a GitHub repository)
+ *   GET    /api/github/repos?cwd=dir   → RepoList: the repository `dir` is in and its owner's other
+ *                                      repositories, most recently pushed first, or why not
  *   GET    /api/github/pull?repo=owner/name&number=n, or ?cwd=dir&number=n → Pull: pull request `n` of
  *                                      the repository named, or of the one `dir` is in; 502 with `gh`'s
  *                                      reason when it cannot be read
@@ -219,9 +222,14 @@
  * @typedef {{ number: number, title: string, state: string, isDraft: boolean, author: string, headRefName: string, url: string, updatedAt: string }} PullSummary
  */
 /**
- * The pull requests of a directory's repository, or why there are none to list: `reason` is
- * `gh`'s own.
+ * The pull requests of a repository, or why there are none to list: `reason` is `gh`'s own.
  * @typedef {{ connected: true, pulls: PullSummary[] } | { connected: false, reason: string }} PullList
+ */
+/** A repository (`owner/name`) and what it says it is. @typedef {{ repo: string, description: string }} RepoSummary */
+/**
+ * The repository a directory is in (`repo`) and its owner's repositories, `repo` among them, or
+ * why there are none: `reason` is `gh`'s own.
+ * @typedef {{ connected: true, repo: string, repos: RepoSummary[] } | { connected: false, reason: string }} RepoList
  */
 /** @typedef {{ author: string, body: string, createdAt: string, url: string }} PullComment */
 /** `id` is GitHub's node id. @typedef {{ id: string, author: string, state: string, body: string, submittedAt: string }} PullReview */

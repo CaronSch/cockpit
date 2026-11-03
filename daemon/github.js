@@ -1,7 +1,8 @@
 /**
  * GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the
- * pull requests of a directory's repository, one pull request to review (its conversation,
- * line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
+ * pull requests of a repository, the repositories of a directory's repository's owner (for `#`
+ * mentions of another one), one pull request to review (its conversation, line comments and
+ * diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
  *
  * A pull request is found in a repository named outright (`owner/name`, `gh -R`), wherever it
  * is checked out or not at all, or in the one a directory is in (a `#123` an agent wrote).
@@ -11,14 +12,17 @@
  * missing, signed out, or a directory in no GitHub repository.
  */
 import { homedir } from 'node:os';
-/** @import { Pull, PullList, PullSummary, ReviewComment } from './wire.js' */
+/** @import { Pull, PullList, PullSummary, RepoList, ReviewComment } from './wire.js' */
 /** @import { InlineComment, Review } from '../src/github/bugbot.js' */
 /** Where a pull request is: a repository (`owner/name`), or the one a directory is in. @typedef {{ repo: string } | { cwd: string }} PullAt */
 
 const RUN_TIMEOUT_MS = 30_000;
-/** A directory's pull requests are listed again after this long: `#` suggestions ask on every keystroke. */
+/** Pull requests are listed again after this long: `#` suggestions ask on every keystroke. */
 const LIST_FRESH_MS = 15_000;
+/** An owner's repositories change seldom: listed again after this long. */
+const REPOS_FRESH_MS = 5 * 60_000;
 const LIST_LIMIT = 100;
+const REPOS_LIMIT = 300;
 /** The most of a diff the window is sent; past it the diff is cut at a line and said to be. */
 const MAX_DIFF_BYTES = 3 * 1024 * 1024;
 const SUMMARY_FIELDS = 'number,title,state,isDraft,author,headRefName,url,updatedAt';
@@ -99,22 +103,52 @@ export function createGithub({ ghPath, now = Date.now }) {
 
   /** @type {Map<string, { at: number, list: Promise<PullList> }>} */
   const lists = new Map();
+  /** @type {Map<string, { at: number, list: Promise<RepoList> }>} */
+  const repoLists = new Map();
+
+  /**
+   * `load()`, kept under `key` in `cache` for `fresh` ms, or why it failed in `gh`'s words.
+   * @template {{ connected: true }} T
+   * @param {Map<string, { at: number, list: Promise<T | { connected: false, reason: string }> }>} cache
+   * @param {string} key @param {number} fresh @param {() => Promise<T>} load
+   */
+  function kept(cache, key, fresh, load) {
+    const held = cache.get(key);
+    if (held && now() - held.at < fresh) return held.list;
+    const list = load().catch((err) => ({ connected: /** @type {const} */ (false), reason: err instanceof Error ? err.message : String(err) }));
+    cache.set(key, { at: now(), list });
+    return list;
+  }
 
   return {
     /**
-     * The pull requests of the repository `cwd` is in, newest first, or why there are none
-     * to list. Kept for a few seconds per directory.
-     * @param {string} cwd @returns {Promise<PullList>}
+     * The pull requests of the repository `at` names, newest first, or why there are none to
+     * list. Kept for a few seconds per repository or directory.
+     * @param {PullAt} at @returns {Promise<PullList>}
      */
-    pulls(cwd) {
-      const kept = lists.get(cwd);
-      if (kept && now() - kept.at < LIST_FRESH_MS) return kept.list;
-      const list = gh(['pr', 'list', '--state', 'all', '--limit', String(LIST_LIMIT), '--json', SUMMARY_FIELDS], cwd).then(
-        (out) => /** @type {PullList} */ ({ connected: true, pulls: /** @type {any[]} */ (JSON.parse(out)).map(summary) }),
-        (err) => /** @type {PullList} */ ({ connected: false, reason: err instanceof Error ? err.message : String(err) }),
-      );
-      lists.set(cwd, { at: now(), list });
-      return list;
+    pulls(at) {
+      const { cwd, repoFlag } = placed(at);
+      return kept(lists, 'repo' in at ? `repo:${at.repo}` : at.cwd, LIST_FRESH_MS, async () => {
+        const out = await gh(['pr', 'list', ...repoFlag, '--state', 'all', '--limit', String(LIST_LIMIT), '--json', SUMMARY_FIELDS], cwd);
+        return { connected: /** @type {const} */ (true), pulls: /** @type {any[]} */ (JSON.parse(out)).map(summary) };
+      });
+    },
+
+    /**
+     * The repository `cwd` is in, and the other repositories of its owner, most recently
+     * pushed first, to mention pull requests of; or why there are none.
+     * @param {string} cwd @returns {Promise<RepoList>}
+     */
+    repos(cwd) {
+      return kept(repoLists, cwd, REPOS_FRESH_MS, async () => {
+        const own = String(JSON.parse(await gh(['repo', 'view', '--json', 'nameWithOwner'], cwd)).nameWithOwner);
+        const owner = own.split('/')[0];
+        const listed = /** @type {any[]} */ (JSON.parse(await gh(['repo', 'list', owner, '--no-archived', '--limit', String(REPOS_LIMIT), '--json', 'nameWithOwner,description,pushedAt'], cwd)));
+        const repos = listed
+          .sort((a, b) => String(b.pushedAt ?? '').localeCompare(String(a.pushedAt ?? '')))
+          .map((r) => ({ repo: String(r.nameWithOwner), description: String(r.description ?? '') }));
+        return { connected: /** @type {const} */ (true), repo: own, repos };
+      });
     },
 
     /**

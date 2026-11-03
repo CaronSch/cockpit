@@ -191,8 +191,12 @@ What runs today:
   reads with the prompt; punctuation typed right after a finished path (`@benches/.`,
   `@app.js,`) closes the list, unless a name in that folder starts with it. Typing `#`
   suggests the pull requests of the GitHub repository the session's directory is in, by
-  number or by words of the title, each shown with its title; a pick goes in as GitHub's `#123`
-  (`src/omp/pr-suggest.js`); without GitHub (no `gh`, signed out, no repository) `#` is plain
+  number or by words of the title, each shown with its title; a pick goes in as GitHub's `#123`.
+  Part of a repository's name after the `#` (`#k8s`) suggests that owner's other repositories
+  too; picking one leaves `k8s-infra#` to go on with, listing its pull requests, and a pick of
+  one goes in as GitHub's `owner/name#123`. Typed outright, `k8s-infra#859`, `owner/name#859`
+  and `#k8s-infra:859` list the same (`src/omp/pr-suggest.js`, `src/github/pr-mention.js`);
+  without GitHub (no `gh`, signed out, no repository) `#` is plain
   text. **Rewind** on one of the user's own prompts puts it back
   in the box and dims what sending would set aside; nothing reaches omp until the
   box is sent (Undo or Esc puts the box back), when omp is rewound to just before
@@ -271,8 +275,8 @@ What runs today:
   shown while its directory is in a GitHub repository) lists the repository's pull requests; a
   click opens one on the agent window's right, dragging one places it where it is dropped. A
   pull request an agent's reply (or a pull request's own text) links, in any repository, or
-  refers to as `#123` (of the conversation's, or that pull request's, repository) drags out the
-  same way, and dropped on a pull request window shows there (`src/github/pr-refs.js` finds them,
+  refers to as `owner/name#123` or `#123` (of the conversation's, or that pull request's,
+  repository) drags out the same way, and dropped on a pull request window shows there (`src/github/pr-refs.js` finds them,
   `src/omp/markdown-dom.js` marks them, `src/github/pull-window.js` drags them; a click on a link
   still opens GitHub); one named by its repository is read with `gh -R`, wherever it is
   checked out or not at all. It
@@ -452,9 +456,9 @@ particular, move a capability into "Current state" when it ships.
 - `src/daemon/client.js` — Browser side of the daemon connection: one event stream per page, shared by every widget.
 - `src/github/bugbot.js` — Cursor Bugbot's reviews, read from GitHub as the daemon's watcher (daemon/bugbot.js) finds them, and told to the agent: which review answers a `bugbot go` comment, and its findings as one message, kept free of I/O so they can be tested.
 - `src/github/diff.js` — A pull request's changes as the pull request window shows them: `gh pr diff`'s unified diff parsed into files, their hunks and each line with its numbers in the old and the new file, kept free of the DOM so it can be tested.
-- `src/github/pr-mention.js` — `#` pull request mentions typed in the agent pane's message box, as GitHub writes them (`#123`): the one the caret ends, the repository's pull requests that match what is typed (by number, or by words of the title), and the text that completes it, kept free of the DOM so they can be tested.
-- `src/github/pr-refs.js` — Pull requests named in text the workbench shows (an agent's reply, a pull request's description): a link to one on GitHub (`https://github.com/owner/repo/pull/123`, any page of it), or GitHub's own short reference `#123`, which names a pull request of the repository the text is about.
-- `src/github/pull-window.js` — Opening a pull request window (widgets/github.js) from another window: the params that name the pull request and the conversation it is reviewed for, and dragging one out of text, where a pull request is linked or referred to as `#123` (marked by omp/markdown-dom.js): dropped on the grid it opens a pull request window there, dropped on a pull request window it shows there.
+- `src/github/pr-mention.js` — `#` pull request mentions typed in the agent pane's message box: the one the caret ends, the pull requests and repositories that match what is typed, and the text that completes it, kept free of the DOM so they can be tested.
+- `src/github/pr-refs.js` — Pull requests named in text the workbench shows (an agent's reply, a pull request's description): a link to one on GitHub (`https://github.com/owner/repo/pull/123`, any page of it), or GitHub's own references, `owner/repo#123`, and `#123`, which names a pull request of the repository the text is about.
+- `src/github/pull-window.js` — Opening a pull request window (widgets/github.js) from another window: the params that name the pull request and the conversation it is reviewed for, and dragging one out of text, where a pull request is linked or referred to as `owner/name#123` or `#123` (marked by omp/markdown-dom.js): dropped on the grid it opens a pull request window there, dropped on a pull request window it shows there.
 - `src/github/review.js` — A review written in the pull request window, for its agent: comments and questions on highlighted parts of the pull request, and a note of the reviewer's own, sent to the agent's conversation as one message.
 - `src/github/text.js` — GitHub comment bodies as text to read: GitHub Markdown may hold HTML (bots write comments, tags and buttons into theirs), which the workbench never renders, so it is taken out and its words kept.
 - `src/interaction/drag-controller.js` — Pointer-driven drag & drop for moving widgets and adding new ones.
@@ -477,7 +481,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/markdown-dom.js` — Renders the safe markdown tree from `markdown.js` as DOM nodes (text nodes only, never HTML).
 - `src/omp/markdown.js` — Safe markdown subset for agent text: parses into a small block/inline tree, never HTML.
 - `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, and side questions about a quote.
-- `src/omp/pr-suggest.js` — Pull request suggestions in the agent pane's message box: while the caret ends a `#` mention and the conversation's directory is in a GitHub repository, the suggestion list shows the repository's pull requests that match it, each with its title, and Tab, Enter or a click completes it as GitHub's `#123` (see `github/pr-mention.js`).
+- `src/omp/pr-suggest.js` — Pull request suggestions in the agent pane's message box: while the caret ends a `#` mention and the conversation's directory is in a GitHub repository, the suggestion list shows the pull requests it names, each with its title, and Tab, Enter or a click completes it as GitHub writes it (see `github/pr-mention.js`).
 - `src/omp/prompt-history.js` — Up and Down in the agent pane's message box step through what was sent in its conversation, as omp's own editor and a shell do: the user's prompts and `!` commands, newest first.
 - `src/omp/rewind.js` — Rewinding an omp conversation to one of the user's prompts, as omp's `/branch` does: what the rewind sets aside, and which of omp's entries the prompt is.
 - `src/omp/running-work.js` — What an agent has running now, for the agent window's Running line and the Sessions list: the shells and subagents its turn is waiting on, and its background jobs (omp/transcript.js `jobs`), which go on after their tool call has returned, even once the turn has ended.
@@ -528,7 +532,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/deliver.js` — Sends a message to a conversation from outside its agent window (the pull request window's review, a Bugbot review): as a prompt to the session holding it, woken from its journal first if it is asleep, as the agent window itself would (`omp --resume`).
 - `daemon/files.js` — Folder listings for path suggestions (the agent pane's `@` file mentions, its Directory field): each entry's name and whether it is a folder (a link to one counts), capped so a huge folder cannot flood the page; and how a typed path is read.
 - `daemon/frame-decoder.js` — Decodes omp's stdout: newline-delimited JSON frames, with protocol-v2 `rpc_chunk` sequences reassembled into the one frame they carry.
-- `daemon/github.js` — GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the pull requests of a directory's repository, one pull request to review (its conversation, line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
+- `daemon/github.js` — GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the pull requests of a repository, the repositories of a directory's repository's owner (for `#` mentions of another one), one pull request to review (its conversation, line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
 - `daemon/guard.js` — Loopback guard: decides which requests may reach the daemon (CLAUDE.md, Invariants).
 - `daemon/history.js` — Past omp sessions, read from omp's session files: one summary per conversation, searchable (search.js, ranked) by title, directory, what the user asked and what the agent answered.
 - `daemon/hub.js` — The daemon's omp sessions and the single ordered event log the browser replays.

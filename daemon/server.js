@@ -141,6 +141,12 @@ function repoName(value) {
   return value;
 }
 
+/** Where the request's pull requests are: its `repo`, else the repository its `cwd` is in. @param {URLSearchParams} params */
+async function pullAt(params) {
+  const repo = params.get('repo');
+  return repo !== null ? { repo: repoName(repo) } : { cwd: await existingPath(params.get('cwd'), 'directory', 'cwd') };
+}
+
 /** A pull request number (untrusted). @param {unknown} value */
 function pullNumber(value) {
   const number = Number(value);
@@ -459,13 +465,15 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
         },
       }),
       '/api/github/pulls': api({
-        GET: async (req) => json(await github.pulls(await existingPath(new URL(req.url).searchParams.get('cwd'), 'directory', 'cwd'))),
+        GET: async (req) => json(await github.pulls(await pullAt(new URL(req.url).searchParams))),
+      }),
+      '/api/github/repos': api({
+        GET: async (req) => json(await github.repos(await existingPath(new URL(req.url).searchParams.get('cwd'), 'directory', 'cwd'))),
       }),
       '/api/github/pull': api({
         GET: async (req) => {
           const params = new URL(req.url).searchParams;
-          const repo = params.get('repo');
-          const at = repo !== null ? { repo: repoName(repo) } : { cwd: await existingPath(params.get('cwd'), 'directory', 'cwd') };
+          const at = await pullAt(params);
           return json(await github.pull(at, pullNumber(params.get('number'))));
         },
       }),
