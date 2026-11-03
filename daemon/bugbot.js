@@ -30,7 +30,6 @@ const isTarget = (t) => (t?.sessionFile === null || typeof t?.sessionFile === 's
 const isWatch = (w) =>
   typeof w?.id === 'string' &&
   typeof w.repo === 'string' &&
-  typeof w.cwd === 'string' &&
   Number.isInteger(w.number) &&
   typeof w.url === 'string' &&
   typeof w.since === 'string' &&
@@ -66,13 +65,13 @@ export async function loadBugbot({ file, github, delivery, pollMs = BUGBOT_POLL_
     if (polling.has(watch.id)) return;
     polling.add(watch.id);
     try {
-      const review = bugbotReviewSince(await github.reviews(watch, watch.number), watch.since);
+      const review = bugbotReviewSince(await github.reviews(watch.repo, watch.number), watch.since);
       if (!review) {
         if (now() - Date.parse(watch.since) > GIVE_UP_MS) change(watch.id, { status: 'timed-out', error: null });
         else if (watch.error) change(watch.id, { error: null });
         return;
       }
-      const comments = await github.reviewComments(watch, watch.number, review.id);
+      const comments = await github.reviewComments(watch.repo, watch.number, review.id);
       const message = bugbotMessage({ number: watch.number, url: watch.url, review, comments });
       try {
         await delivery.deliver(watch.target, message);
@@ -101,17 +100,16 @@ export async function loadBugbot({ file, github, delivery, pollMs = BUGBOT_POLL_
     all: store.get,
     subscribe: store.subscribe,
     /**
-     * Comments `bugbot go` on pull request `number` of the repository `cwd` is in, and watches
-     * for Bugbot's review, to send it to `target`'s conversation.
-     * @param {{ cwd: string, number: number, target: ConversationTarget }} request @returns {Promise<BugbotWatch>}
+     * Comments `bugbot go` on pull request `number` of `repo`, and watches for Bugbot's
+     * review, to send it to `target`'s conversation.
+     * @param {{ repo: string, number: number, target: ConversationTarget }} request @returns {Promise<BugbotWatch>}
      */
-    async start({ cwd, number, target }) {
-      const posted = await github.comment(cwd, number, BUGBOT_COMMAND);
+    async start({ repo, number, target }) {
+      const posted = await github.comment(repo, number, BUGBOT_COMMAND);
       /** @type {BugbotWatch} */
       const watch = {
         id: randomBytes(6).toString('hex'),
-        repo: posted.repo,
-        cwd,
+        repo,
         number,
         url: posted.url.replace(/#.*$/, ''),
         since: posted.createdAt,

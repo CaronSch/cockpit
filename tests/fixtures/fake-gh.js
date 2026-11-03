@@ -3,7 +3,10 @@
  * Scripted stand-in for the GitHub CLI (`gh`), for daemon and browser tests: it answers the
  * commands the daemon runs (daemon/github.js) from a `.fake-gh.json` in the directory it runs in
  * or one above it, as `gh` finds a repository from its git checkout, and writes what it is told
- * to do back there. Without one, it fails as `gh` does outside a repository.
+ * to do back there. Without one, it fails as `gh` does outside a repository. A command that
+ * names its repository (`-R owner/name`, `api repos/owner/name/…`) reads the one checked out at
+ * `$FAKE_GH_ROOT/owner/name`, as `gh` finds any repository on GitHub, and fails as `gh` does for
+ * one that does not exist.
  *
  * `.fake-gh.json`: `{ repo: 'owner/name', pulls: [Pull-like objects, with `diff` and
  * `reviewComments` in GitHub's REST shape], bugbot?: { afterMs, body, comments } }`. Commenting
@@ -23,8 +26,13 @@ function fail(message) {
   process.exit(1);
 }
 
-/** The `.fake-gh.json` of the directory, or one above it. */
+/** The `.fake-gh.json` of the repository the command names, else of the directory or one above it. */
 function stateFile() {
+  const named = option('-R') ?? /^repos\/([^/]+\/[^/]+)\//.exec(args[0] === 'api' ? (args[1] ?? '') : '')?.[1];
+  if (named) {
+    const file = join(process.env.FAKE_GH_ROOT ?? fail('fake gh: FAKE_GH_ROOT is not set'), named, '.fake-gh.json');
+    return existsSync(file) ? file : fail(`GraphQL: Could not resolve to a Repository with the name '${named}'. (repository)`);
+  }
   for (let dir = process.cwd(); ; dir = dirname(dir)) {
     const file = join(dir, '.fake-gh.json');
     if (existsSync(file)) return file;
@@ -42,7 +50,7 @@ const option = (name) => {
 const print = (value) => process.stdout.write(`${JSON.stringify(value)}\n`);
 
 const nowIso = () => new Date().toISOString();
-// The repository is the one the directory is in, for `api` too (the daemon runs it there).
+// The repository named, else the one the directory is in.
 const file = stateFile();
 if (!file) fail('failed to run git: fatal: not a git repository (or any of the parent directories): .git');
 /** @type {any} */

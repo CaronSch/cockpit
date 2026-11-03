@@ -37,6 +37,9 @@ export const E2E_HOME = join(process.env.COCKPIT_E2E_DIR, 'home');
 mkdirSync(E2E_HOME, { recursive: true });
 /** Stands in for ~/.omp/agent/sessions; the Sessions spec writes its journals here. */
 export const E2E_OMP_SESSIONS = join(process.env.COCKPIT_E2E_DIR, 'omp-sessions');
+/** Where the fake gh finds a repository named outright (tests/fixtures/fake-gh.js): `<owner>/<name>/`. */
+export const E2E_GH_ROOT = join(process.env.COCKPIT_E2E_DIR, 'github');
+mkdirSync(E2E_GH_ROOT, { recursive: true });
 
 /** The token the e2e daemon wrote on startup. */
 export const e2eToken = () => readFileSync(join(E2E_STATE_DIR, 'token'), 'utf8').trim();
@@ -106,7 +109,7 @@ export async function rpcAnswer(request) {
  */
 export async function startDaemon({ port, stateDir, sessionsDir, env = {} }) {
   const child = spawn('bun', ['daemon/main.js', '--port', String(port), '--omp', 'tests/fixtures/fake-omp.js', '--gh', 'tests/fixtures/fake-gh.js'], {
-    env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, ...env },
+    env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, FAKE_GH_ROOT: E2E_GH_ROOT, ...env },
     stdio: 'ignore',
   });
   const exited = new Promise((resolve) => child.once('exit', resolve));

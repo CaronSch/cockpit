@@ -70,8 +70,10 @@
  *   GET    /api/github/pulls?cwd=dir   → PullList: the pull requests of the GitHub repository `dir`
  *                                      (as `cwd` above) is in, newest first, or why there are none
  *                                      to list (`gh` missing or signed out, not a GitHub repository)
- *   GET    /api/github/pull?cwd=dir&number=n → Pull; 502 with `gh`'s reason when it cannot be read
- *   POST   /api/github/bugbot          { cwd, number, target: ConversationTarget } → 201 BugbotWatch:
+ *   GET    /api/github/pull?repo=owner/name&number=n, or ?cwd=dir&number=n → Pull: pull request `n` of
+ *                                      the repository named, or of the one `dir` is in; 502 with `gh`'s
+ *                                      reason when it cannot be read
+ *   POST   /api/github/bugbot          { repo, number, target: ConversationTarget } → 201 BugbotWatch:
  *                                      `bugbot go` commented on the pull request, and its review,
  *                                      once Bugbot posts it, sent to the conversation (see `bugbot.js`)
  *   GET    /api/stream                 Server-Sent Events, one StreamEvent per message
@@ -236,11 +238,11 @@
 
 /**
  * A Bugbot review asked for (`bugbot go` commented at `since`, GitHub's time) on pull request
- * `number` of `repo` (checked out in `cwd`, where `gh` runs for it), for the conversation
+ * `number` of `repo`, for the conversation
  * `target`: `watching` until Bugbot reviews, then `delivered` (its review sent to the
  * conversation), `timed-out` when it never did, or `failed` (`error` says why). `error` while
  * watching is the last poll's failure, retried. `at`: when it last changed, epoch milliseconds.
- * @typedef {{ id: string, repo: string, cwd: string, number: number, url: string, since: string, target: ConversationTarget, status: 'watching' | 'delivered' | 'timed-out' | 'failed', error: string | null, at: number }} BugbotWatch
+ * @typedef {{ id: string, repo: string, number: number, url: string, since: string, target: ConversationTarget, status: 'watching' | 'delivered' | 'timed-out' | 'failed', error: string | null, at: number }} BugbotWatch
  */
 
 export {};

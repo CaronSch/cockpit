@@ -12,6 +12,7 @@ import { isSettingsPatch } from './settings.js';
 import { listDirectory, resolvePath } from './files.js';
 import { DeliveryRefused } from './deliver.js';
 import { GithubError } from './github.js';
+import { REPO } from '../src/github/pr-refs.js';
 import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
 import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
@@ -132,6 +133,12 @@ function asTarget(target) {
   }
   if (!target.sessionFile && !target.session) throw new HttpError(400, 'the target names no conversation');
   return { sessionFile: target.sessionFile ? resolve(target.sessionFile) : null, session: target.session || null, cwd: resolvePath(target.cwd, homedir()) };
+}
+
+/** A repository named `owner/name` (untrusted): never a flag or a path `gh` would read otherwise. @param {unknown} value */
+function repoName(value) {
+  if (typeof value !== 'string' || !REPO.test(value)) throw new HttpError(400, 'expected a repository as owner/name');
+  return value;
 }
 
 /** A pull request number (untrusted). @param {unknown} value */
@@ -457,15 +464,15 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
       '/api/github/pull': api({
         GET: async (req) => {
           const params = new URL(req.url).searchParams;
-          const cwd = await existingPath(params.get('cwd'), 'directory', 'cwd');
-          return json(await github.pull(cwd, pullNumber(params.get('number'))));
+          const repo = params.get('repo');
+          const at = repo !== null ? { repo: repoName(repo) } : { cwd: await existingPath(params.get('cwd'), 'directory', 'cwd') };
+          return json(await github.pull(at, pullNumber(params.get('number'))));
         },
       }),
       '/api/github/bugbot': api({
         POST: async (req) => {
           const body = (await readJson(req)) ?? {};
-          const cwd = await existingPath(body.cwd, 'directory', 'cwd');
-          return json(await bugbot.start({ cwd, number: pullNumber(body.number), target: asTarget(body.target) }), 201);
+          return json(await bugbot.start({ repo: repoName(body.repo), number: pullNumber(body.number), target: asTarget(body.target) }), 201);
         },
       }),
       '/api/files': api({ GET: (req) => listing(req, homedir()) }),
