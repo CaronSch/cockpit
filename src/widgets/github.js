@@ -13,7 +13,8 @@
  * the conversation it reviews for: `parentFile` (its journal), `parentSession` and
  * `parentCwd`, set by the agent window it was opened from. Without them, the review goes to
  * the agent window this screen used last. Without a pull request, the window lists the
- * repository's to pick one.
+ * repository's to pick one, open ones and drafts standing out from those merged or closed,
+ * narrowed to the `status` and `author` (params too) picked above the list (github/pull-filter.js).
  */
 import { button, el, setText } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
@@ -25,6 +26,7 @@ import { readableBody } from '../github/text.js';
 import { readReview, reviewMessage, writeReview } from '../github/review.js';
 import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
+import { STATUS_FILTERS, authorsOf, filterPulls, pullStatus, statusFilter } from '../github/pull-filter.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { BugbotWatch, ConversationTarget, Pull, PullSummary, ReviewComment } from '../../daemon/wire.js' */
@@ -143,13 +145,58 @@ function createPullPane(body, ctx, daemon) {
     go.type = 'submit';
     const row = el('div', 'omp-row');
     row.append(input, go);
-    form.append(el('p', 'omp-setup-title', 'Review a pull request'), label, row, list);
+    // Narrowing what is listed, by status and author: the window's own choice, kept in its params.
+    const filters = el('div', 'gh-pick-filters');
+    filters.hidden = true;
+    const statusSelect = el('select', 'gh-filter');
+    statusSelect.setAttribute('aria-label', 'Status');
+    statusSelect.append(...STATUS_FILTERS.map(({ key, label }) => option(key, label)));
+    const authorSelect = el('select', 'gh-filter');
+    authorSelect.setAttribute('aria-label', 'Author');
+    const count = el('span', 'omp-muted');
+    filters.append(statusSelect, authorSelect, count);
+    form.append(el('p', 'omp-setup-title', 'Review a pull request'), label, row, filters, list);
     root.append(form);
+
+    /** The pull requests last listed, and the directory they are of. @type {PullSummary[]} */
+    let listed = [];
+    let listedDir = '';
+    function drawList() {
+      const status = statusFilter(ctx.params.status);
+      const author = str(ctx.params.author);
+      const authors = authorsOf(listed);
+      // An author chosen stays offered when none of theirs is listed, so the choice still shows.
+      if (author && !authors.includes(author)) authors.push(author);
+      authorSelect.replaceChildren(option('', 'Any author'), ...authors.map((a) => option(a, a)));
+      statusSelect.value = status;
+      authorSelect.value = author ?? '';
+      const shown = filterPulls(listed, { status, author });
+      count.textContent = shown.length === listed.length ? `${listed.length} pull requests` : `${shown.length} of ${listed.length} pull requests`;
+      if (!shown.length) return list.replaceChildren(el('p', 'omp-muted', 'No pull requests match.'));
+      list.replaceChildren(
+        ...shown.map((pull) => {
+          const is = pullStatus(pull);
+          const item = button(`gh-pick-item is-${is}`);
+          item.append(el('span', 'gh-number', `#${pull.number}`), el('span', 'gh-pick-title', pull.title), el('span', `gh-state is-${is}`, is), el('span', 'omp-muted', pull.author));
+          item.addEventListener('click', () => ctx.setParams(pullParams({ repo: repoOfUrl(pull.url), cwd: listedDir }, pull, null)));
+          return item;
+        }),
+      );
+    }
+    statusSelect.addEventListener('change', () => {
+      ctx.setParams({ status: statusSelect.value === 'all' ? null : statusSelect.value });
+      drawList();
+    });
+    authorSelect.addEventListener('change', () => {
+      ctx.setParams({ author: authorSelect.value || null });
+      drawList();
+    });
 
     let asked = 0;
     /** @param {string} dir */
     function listPulls(dir) {
       const mine = ++asked;
+      filters.hidden = true;
       list.replaceChildren(el('p', 'omp-muted', 'Loading…'));
       daemon
         .pulls({ cwd: dir })
@@ -157,14 +204,10 @@ function createPullPane(body, ctx, daemon) {
           if (mine !== asked || destroyed) return;
           if (!found.connected) return list.replaceChildren(el('p', 'omp-error', `No pull requests: ${found.reason}`));
           if (!found.pulls.length) return list.replaceChildren(el('p', 'omp-muted', 'This repository has no pull requests.'));
-          list.replaceChildren(
-            ...found.pulls.map((pull) => {
-              const item = button('gh-pick-item');
-              item.append(el('span', 'gh-number', `#${pull.number}`), el('span', 'gh-pick-title', pull.title), el('span', 'omp-muted', stateText(pull)));
-              item.addEventListener('click', () => ctx.setParams(pullParams({ repo: repoOfUrl(pull.url), cwd: dir }, pull, null)));
-              return item;
-            }),
-          );
+          listed = found.pulls;
+          listedDir = dir;
+          filters.hidden = false;
+          drawList();
         })
         .catch((err) => {
           if (mine === asked && !destroyed) list.replaceChildren(el('p', 'omp-error', errorMessage(err)));
@@ -400,7 +443,7 @@ function createPullPane(body, ctx, daemon) {
       link.rel = 'noopener noreferrer';
       const meta = el('div', 'gh-meta');
       meta.append(
-        el('span', `gh-state is-${pull.isDraft ? 'draft' : pull.state.toLowerCase()}`, pull.isDraft ? 'Draft' : pull.state.toLowerCase()),
+        el('span', `gh-state is-${pullStatus(pull)}`, pullStatus(pull)),
         el('span', 'omp-muted', `${pull.author} · ${pull.headRefName} → ${pull.baseRefName}`),
         el('span', 'gh-adds', `+${pull.additions}`),
         el('span', 'gh-dels', `−${pull.deletions}`),
@@ -589,5 +632,9 @@ function createPullPane(body, ctx, daemon) {
   };
 }
 
-/** @param {PullSummary} pull */
-export const stateText = (pull) => `${pull.isDraft ? 'draft' : pull.state.toLowerCase()} · ${pull.author}`;
+/** @param {string} value @param {string} label */
+function option(value, label) {
+  const node = el('option', '', label);
+  node.value = value;
+  return node;
+}
