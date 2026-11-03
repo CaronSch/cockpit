@@ -24,6 +24,8 @@
  *                                      `at` stays. Both are 404 for an id that is not one
  *   PUT    /api/pins/:ompId            → 204: the conversation is pinned to the top of the Sessions list
  *   DELETE /api/pins/:ompId            → 204: it is not (see `pins.js`); both 404 for an id that is not one
+ *   GET    /api/decisions/:ompId       → { reviews: Reviews }: the conversation's decision reviews, those
+ *                                      under way included (see `decisions.js`); 404 for an id that is not one
  *   PUT    /api/settings               Partial<DaemonSettings> → DaemonSettings: the daemon's settings
  *                                      changed (see `settings.js`); 400 for anything but known keys
  *                                      with values of their type
@@ -84,14 +86,15 @@
  * Errors are `{ error: string }` with a 4xx/5xx status. The stream's SSE ids are
  * `<bootId>:<seq>`, so a reconnect resumes after the last event it saw; the first message
  * on every connection is a `hello` carrying the current boot id, the newest event's seq (the
- * events up to it that follow are a replay), session list, unread conversations and UI version. `scratchpad`, `history` and `unread` events carry no id and are
- * not replayed: a reconnecting page reads GET /api/scratchpads/:id and GET /api/history instead,
+ * events up to it that follow are a replay), session list, unread conversations and UI version. `scratchpad`, `history`, `unread` and `decisions` events carry no id and are
+ * not replayed: a reconnecting page reads GET /api/scratchpads/:id, GET /api/history and GET /api/decisions/:ompId instead,
  * and its `hello` carries the unread conversations.
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
 /** @import { Unread } from './unread.js' */
 /** @import { Pinned } from './pins.js' */
 /** @import { DaemonSettings } from './settings.js' */
+/** @import { Reviews } from '../src/omp/decisions.js' */
 
 /** @typedef {'starting' | 'ready' | 'exited' | 'failed'} SessionStatus */
 
@@ -184,11 +187,13 @@
 
 /** Sent to every page after a conversation was pinned or unpinned, with all the pins. @typedef {{ kind: 'pins', pinned: Pinned }} PinsEvent */
 
+/** Sent to every page after a conversation's decision reviews changed (one started or ended), with all of them. @typedef {{ kind: 'decisions', ompId: string, reviews: Reviews }} DecisionsEvent */
+
 /** Sent to every page after the daemon's settings changed, with all of them. @typedef {{ kind: 'settings', settings: DaemonSettings }} SettingsEvent */
 
 /** Sent to every page after a Bugbot watch started or changed, with all of them. @typedef {{ kind: 'bugbot', watches: BugbotWatch[] }} BugbotEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | DecisionsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
 
 /** @typedef {{ defaultCwd: string, home: string, scratchpadDir: string }} DaemonConfig */
 

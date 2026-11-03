@@ -14,7 +14,8 @@
  * (the conversation's title, shown in the window's top bar), `fork` while the window is
  * starting a copy of another journal, and `prompt` while a fork waits to send the message it
  * was dragged off another pane's Send with. What the pane shows follows the app's settings
- * (ui/settings.js), the same in every agent window.
+ * (ui/settings.js), the same in every agent window. Each turn's decision review, when the
+ * daemon made one (daemon/decisions.js), shows where the turn ends (omp/decisions.js).
  *
  * New, Fork, PRs (shown while the conversation's directory is in a GitHub repository), Accounts
  * and Stop sit in the window's top bar, beside its close button. PRs lists the repository's pull
@@ -26,7 +27,7 @@ import { button, el, setText } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
-import { renderItem } from '../omp/items-view.js';
+import { renderItem, renderReview } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
 import { composeAsk, composeFollowUp, isCommand, shellCommand } from '../omp/message.js';
@@ -40,6 +41,7 @@ import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
 import { awaitedAfter } from '../omp/activity.js';
 import { promptsAndResponses } from '../omp/visibility.js';
+import { placeReviews } from '../omp/decisions.js';
 import { turnProgress } from '../omp/todos.js';
 import { elapsed, runningWork } from '../omp/running-work.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
@@ -150,6 +152,8 @@ function createPane(body, ctx, daemon) {
   // Which conversations are unread is the daemon's (daemon/unread.js), so every window showing
   // the session, and the Sessions window, agree on it, across reloads and restarts.
   const offUnread = daemon.onUnread(() => schedule());
+  // Decision reviews (daemon/decisions.js) arrive after the turn, for any conversation.
+  const offDecisions = daemon.onDecisions(() => schedule());
   let pointerInside = false;
   /** Looking at this window: the pointer is over it, in a page that has focus. */
   const reading = () => pointerInside && document.visibilityState === 'visible' && document.hasFocus();
@@ -1064,7 +1068,7 @@ function createPane(body, ctx, daemon) {
     });
 
     // ── drawing ──
-    /** @type {Map<string, { rev: number, node: HTMLElement }>} */
+    /** What is drawn, by key: transcript items, and decision reviews (`review:<prompt time>`, `rev` their JSON). @type {Map<string, { rev: number | string, node: HTMLElement }>} */
     const drawn = new Map();
     /** @type {Map<string, HTMLElement>} */
     const dialogNodes = new Map();
@@ -1100,18 +1104,26 @@ function createPane(body, ctx, daemon) {
       const shown = onlyResponses ? promptsAndResponses(state.items, state.streaming) : { items: state.items, working: null };
       const live = new Set();
       const itemCtx = { tools: state.tools, open: openDetails };
-      shown.items.forEach((item, i) => {
-        live.add(item.key);
-        let entry = drawn.get(item.key);
-        if (!entry || entry.rev !== item.rev) {
-          const fresh = renderItem(item, itemCtx);
+      /** @type {Array<{ key: string, rev: number | string, render: () => HTMLElement }>} */
+      const entries = shown.items.map((item) => ({ key: item.key, rev: item.rev, render: () => renderItem(item, itemCtx) }));
+      // Each turn's decision review shows where the turn ends (placed from the last, so the
+      // places before it hold); one that found no decisions shows nothing.
+      for (const { index, at, review } of placeReviews(shown.items, daemon.decisions(ompId()) ?? {}).reverse()) {
+        if (review.status === 'done' && review.decisions.length === 0) continue;
+        entries.splice(index, 0, { key: `review:${at}`, rev: JSON.stringify(review), render: () => renderReview(review) });
+      }
+      entries.forEach(({ key, rev, render }, i) => {
+        live.add(key);
+        let entry = drawn.get(key);
+        if (!entry || entry.rev !== rev) {
+          const fresh = render();
           if (entry) {
             resizes.unobserve(entry.node);
             entry.node.replaceWith(fresh);
           }
           resizes.observe(fresh);
-          entry = { rev: item.rev, node: fresh };
-          drawn.set(item.key, entry);
+          entry = { rev, node: fresh };
+          drawn.set(key, entry);
         }
         const at = transcript.children[i];
         if (at !== entry.node) transcript.insertBefore(entry.node, at ?? null);
@@ -1436,6 +1448,7 @@ function createPane(body, ctx, daemon) {
       offSettings();
       offReset();
       offUnread();
+      offDecisions();
       // The session runs on: the daemon's, not this window's.
       view?.destroy();
       view = null;

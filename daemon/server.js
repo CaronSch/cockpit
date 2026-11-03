@@ -31,6 +31,8 @@ import { CONTENT_TYPES, INDEX_FILE, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Github } from './github.js' */
 /** @import { Delivery } from './deliver.js' */
 /** @import { BugbotStore } from './bugbot.js' */
+/** @import { DecisionReviews } from './decisions.js' */
+/** @import { Reviews } from '../src/omp/decisions.js' */
 /** @typedef {(req: BunRequest, server: Server<undefined>) => Response | Promise<Response>} Handler */
 
 /** Bun refuses (413) any request body larger than this; uploads are the largest. */
@@ -180,9 +182,9 @@ function errorResponse(err) {
 
 /**
  * Starts serving on `127.0.0.1:port` (0 picks a free port); throws if the port is taken.
- * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, token: string, root: string, config: DaemonConfig, port: number }} options
+ * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, token: string, root: string, config: DaemonConfig, port: number }} options
  */
-export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, settings, github, delivery, bugbot, token, root, config, port }) {
+export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, decisions, settings, github, delivery, bugbot, token, root, config, port }) {
   const rootDir = resolve(root);
   const indexFile = resolve(rootDir, INDEX_FILE);
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -218,13 +220,16 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of hub.since(lastSeenSeq(req.headers.get('last-event-id'), hub.bootId))) send(event);
         const unsubscribe = hub.subscribe(send);
-        // No id: scratchpad, history, unread, pins, settings and bugbot events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, decisions, settings and bugbot events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
         const offHistory = history.watch(() => write(`data: ${JSON.stringify({ kind: 'history' })}\n\n`));
         const offUnread = unread.subscribe((/** @type {Unread} */ marks) => write(`data: ${JSON.stringify({ kind: 'unread', unread: marks })}\n\n`));
         const offPins = pins.subscribe((/** @type {Pinned} */ pinned) => write(`data: ${JSON.stringify({ kind: 'pins', pinned })}\n\n`));
+        const offDecisions = decisions.subscribe((/** @type {string} */ ompId, /** @type {Reviews} */ reviews) =>
+          write(`data: ${JSON.stringify({ kind: 'decisions', ompId, reviews })}\n\n`),
+        );
         const offSettings = settings.subscribe((/** @type {DaemonSettings} */ all) => write(`data: ${JSON.stringify({ kind: 'settings', settings: all })}\n\n`));
         const offBugbot = bugbot.subscribe((/** @type {readonly BugbotWatch[]} */ watches) => write(`data: ${JSON.stringify({ kind: 'bugbot', watches })}\n\n`));
         const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
@@ -235,6 +240,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           offHistory();
           offUnread();
           offPins();
+          offDecisions();
           offSettings();
           offBugbot();
         };
@@ -361,10 +367,11 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           return noContent();
         },
       }),
+      '/api/decisions/:id': api({ GET: async (req) => json({ reviews: await decisions.reviews(ompIdOf(req)) }) }),
       '/api/settings': api({
         PUT: async (req) => {
           const patch = await readJson(req);
-          if (!isSettingsPatch(patch)) throw new HttpError(400, 'expected some of { idleCompaction: boolean }');
+          if (!isSettingsPatch(patch)) throw new HttpError(400, 'expected some of { idleCompaction: boolean, decisionReview: boolean }');
           await settings.set(patch);
           return json(settings.all());
         },

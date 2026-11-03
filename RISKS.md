@@ -184,6 +184,16 @@ is newer. The daemon prints its version at start.
   a review refused mid-turn ("Agent is already processing") or one that interrupts the turn.
   *Response:* re-read `session/agent-session.ts` (`prompt`) and update `deliver.js`.
 
+- **Decision reviews lean on `omp -p` and message timestamps.** `daemon/decisions.js` runs
+  `omp -p --no-session --no-tools … --model @smol --thinking off --system-prompt <prompt> <turn>`
+  and reads the decisions from its stdout, one a line; a turn is named by its user message's
+  `timestamp` (ms), which live frames and journals carry alike (omp 18.10.3). `--no-tools` does
+  not stop omp connecting the user's MCP servers, so each review takes about 5 s more than its
+  model call. A change shows up as reviews that all fail (the reason is omp's last stderr line),
+  that list omp's own output as decisions, or that show under no turn. *Response:* re-read
+  `main.ts` (print mode, `--system-prompt`, `@role` model patterns) and `session/messages.ts`,
+  then update `decisions.js` and the fake's `-p`.
+
 ## When `gh` is upgraded past 2.92, or Cursor changes Bugbot
 
 - **Pull requests lean on `gh`'s output.** `daemon/github.js` reads `gh pr list`/`pr view

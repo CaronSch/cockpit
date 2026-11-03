@@ -27,7 +27,7 @@ import { SLEEP_AFTER_MS, sleepsNow } from './sleep.js';
 import { OMP_ID } from './unread.js';
 import { awaitsUser } from '../src/omp/activity.js';
 import { withoutSpent } from '../src/omp/event-log.js';
-import { applyEvent, createTranscript } from '../src/omp/transcript.js';
+import { applyEvent, createTranscript, handsTurnBack } from '../src/omp/transcript.js';
 /** @import { SessionEvent, SessionMeta } from './wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
 /** @import { OmpSession, SessionEventBody } from './omp-session.js' */
@@ -58,10 +58,12 @@ const SWEEP_MS = 30_000;
  * @param {{
  *   ompPath: string, unread: Pick<UnreadStore, 'awaited'>, now?: () => number, launch?: typeof launchOmp,
  *   sleepAfterMs?: number, idleCompaction?: IdleCompactionOptions & { on(): boolean } | null, onRewound?: (file: string) => void,
- * }} options `idleCompaction`: compacts while `on()` (the user's setting); none when null
+ *   onTurnEnded?: (transcript: Transcript) => void,
+ * }} options `idleCompaction`: compacts while `on()` (the user's setting); none when null.
+ *   `onTurnEnded` hears each time a session's agent hands its turn back, with the session as its events tell it.
  * @returns {Hub}
  */
-export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {} }) {
+export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onTurnEnded = () => {} }) {
   const bootId = randomBytes(6).toString('hex');
   /** @type {SessionEvent[]} */
   let log = [];
@@ -94,6 +96,7 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
         onRewound(seen.rewoundFrom);
         seen.rewoundFrom = null;
       }
+      if (event.kind === 'frame' && event.frame.type === 'agent_end' && handsTurnBack(event.frame)) onTurnEnded(seen.transcript);
       // A session that ended has nothing left to follow.
       const status = seen.transcript.meta?.status;
       if (status === 'exited' || status === 'failed') activity.delete(session);
