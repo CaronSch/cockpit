@@ -112,18 +112,16 @@ const TRAILING_PUNCTUATION = /[.,;:!?)]+$/;
  * Whether a bare mention is done because the sentence goes on after it: what follows the path
  * is punctuation (`@benches/.`, `@src/app.js,`, `@README.md)`), which omp trims from a bare
  * mention's end anyway (see BREAKS_FINISHED). The path before it must be a finished one, a
- * folder (`…/`) or an entry's exact name, and no entry may start with what is typed, since
- * names hold these characters too: `@src/.` may be on its way to `.env`, `@app.js.` to
- * `app.js.bak`, and `@.` or `@..` to `./` and `../`.
+ * folder (`…/`) or an entry's exact name; as in Claude Code, that ends it even though names
+ * hold these characters too: `@src/.e` still lists `.env`, and `@app.js.b` `app.js.bak`. Only
+ * `@.` and `@..`, on their way to `./` and `../`, finish nothing.
  * @param {MentionQuery} query @param {readonly DirEntry[]} entries
  */
 export function endedByPunctuation(query, entries) {
   if (query.quote) return false;
   const name = query.segment.replace(TRAILING_PUNCTUATION, '');
   if (name === query.segment) return false;
-  const finished = name ? entries.some((e) => e.name === name) : query.dir.endsWith('/');
-  const typed = query.segment.toLowerCase();
-  return finished && !entries.some((e) => e.name.toLowerCase().startsWith(typed));
+  return name ? entries.some((e) => e.name === name) : query.dir.endsWith('/');
 }
 
 /**

@@ -11,7 +11,9 @@ import { button, el } from '../ui/dom.js';
 import { autosize } from '../ui/autosize.js';
 import { renderMarkdown } from './markdown-dom.js';
 import { snapToWords } from '../ui/word-snap.js';
+import { withMentions } from './file-suggest.js';
 /** @import { SideAnswer } from './transcript.js' */
+/** @import { ListDir } from './file-suggest.js' */
 
 const GAP_PX = 6;
 const EDGE_PX = 8;
@@ -54,11 +56,13 @@ const ACTIONS = {
  *   onComment: (quote: string, comment: string, cite: string | null) => void,
  *   ask: SideQuestions | QueuedQuestions,
  *   cite?: (range: Range) => string | null,
+ *   listDir?: ListDir,
  * }} options `host`: the positioned element the popup lives in; `transcript`: where selections count;
- * `cite` says where a selection is, for the comment or question on it (e.g. a file and its lines).
+ * `cite` says where a selection is, for the comment or question on it (e.g. a file and its lines);
+ * `listDir`, if given, lists the folders `@` paths typed in its boxes name, to suggest their entries.
  * Call `refresh()` whenever the session's state changes, so a shown thread keeps up.
  */
-export function attachSelectionPopup({ host, transcript, onComment, ask, cite = () => null }) {
+export function attachSelectionPopup({ host, transcript, onComment, ask, cite = () => null, listDir }) {
   const queued = 'queue' in ask ? ask : null;
   const side = 'queue' in ask ? null : ask;
   const pop = el('div', 'omp-quote-pop');
@@ -167,7 +171,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       autosize(box, { max: INPUT_MAX_PX });
     });
     box.addEventListener('keydown', (e) => {
-      if (e.isComposing) return;
+      if (e.isComposing || e.defaultPrevented) return; // an open @ list took it
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         submit();
@@ -189,7 +193,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     const cancel = button('btn', 'Cancel', close);
     const actions = el('div', 'omp-row');
     actions.append(submitBtn, cancel);
-    pop.replaceChildren(preview, box, actions);
+    pop.replaceChildren(preview, withMentions(box, listDir), actions);
     place(anchor);
     box.focus();
     wireBox(box, submitBtn, () => {
@@ -227,7 +231,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     const closeBtn = button('btn', 'Close', close);
     const actions = el('div', 'omp-row');
     actions.append(askBtn, closeBtn);
-    pop.replaceChildren(el('blockquote', 'omp-quote-preview', quote), thread, box, actions);
+    pop.replaceChildren(el('blockquote', 'omp-quote-preview', quote), thread, withMentions(box, listDir), actions);
     closeBtn.focus(); // Esc closes from here while the box is unavailable
     wireBox(box, askBtn, () => {
       const text = box.value.trim();

@@ -593,6 +593,32 @@ test('a comment on selected reply text goes with the next prompt, quoting what i
   await expect(pane.locator('textarea')).toHaveValue('');
 });
 
+test('a comment on reply text suggests @ paths; Esc closes the list, not the comment, and Enter takes a row', async ({ page }) => {
+  mkdirSync(join(PROJECT, 'quoted'), { recursive: true });
+  writeFileSync(join(PROJECT, 'quoted', 'notes.md'), '');
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'hello');
+  const reply = pane.locator('.omp-assistant').last();
+  await reply.locator('strong').dblclick();
+  await pane.getByRole('button', { name: 'Comment' }).click();
+  const box = pane.getByRole('textbox', { name: 'Comment on the selected text' });
+  const rows = pane.locator('.omp-quote-pop .omp-suggest').getByRole('option');
+  await box.pressSequentially('see @quo');
+  await expect(rows).toHaveText(['quoted/']);
+  await box.press('Escape');
+  await expect(rows).toHaveCount(0);
+  await expect(box, 'the comment stays open').toBeVisible();
+  await box.pressSequentially('t');
+  await expect(rows).toHaveText(['quoted/']);
+  await box.press('Enter');
+  await expect(box).toHaveValue('see @quoted/');
+  await box.press('.');
+  await expect(rows, 'a period after a folder ends the path').toHaveCount(0);
+  await box.press('Enter');
+  await expect(pane.locator('.omp-card.is-comment')).toContainText('see @quoted/.');
+});
+
 test('a click in the pane puts the caret in the message box, unless it is on a control or ends a selection', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

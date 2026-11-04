@@ -4,14 +4,10 @@
  * paths after `@` as the message box does.
  */
 import { button, el } from '../ui/dom.js';
-import { createFileSuggest } from './file-suggest.js';
-import { MENTIONS } from './file-mention.js';
-import { createSuggestions } from './suggestions.js';
+import { withMentions } from './file-suggest.js';
 import { askAnswers } from './transcript.js';
 /** @import { Dialog } from './transcript.js' */
-/** @import { DirListing } from '../../daemon/wire.js' */
-
-/** Lists a folder as typed in a path. @typedef {(dir: string) => Promise<DirListing>} ListDir */
+/** @import { ListDir } from './file-suggest.js' */
 
 /** The fields of an `extension_ui_response` after `type` and `id`. @typedef {Record<string, unknown>} UiPayload */
 
@@ -142,38 +138,4 @@ function askQuestion(q, pick, listDir) {
   });
   box.append(withMentions(custom, listDir));
   return box;
-}
-
-/**
- * `field`, with a list under it suggesting the entries of the folder an `@` path names as it is
- * typed; the list takes the arrows, Tab, Enter and Esc while open.
- * @param {HTMLInputElement | HTMLTextAreaElement} field @param {ListDir | undefined} listDir
- * @returns {HTMLElement}
- */
-function withMentions(field, listDir) {
-  if (!listDir) return field;
-  const list = createSuggestions();
-  const files = createFileSuggest({
-    draft: field,
-    syntax: MENTIONS,
-    list,
-    listDir,
-    replace(start, end, text) {
-      field.setRangeText(text, start, end, 'end');
-      field.dispatchEvent(new Event('input')); // the answer follows the field
-    },
-  });
-  field.spellcheck = false;
-  field.addEventListener('input', () => files.update());
-  field.addEventListener('blur', () => files.close());
-  /** @type {HTMLElement} */ (field).addEventListener('keydown', (e) => { // typed as one element, so `e` is a KeyboardEvent
-    if (e.isComposing || list.key(e)) return;
-    if (e.key === 'Escape' && list.open) {
-      e.preventDefault();
-      files.close();
-    }
-  });
-  const wrap = el('div', 'omp-dialog-field');
-  wrap.append(field, list.root);
-  return wrap;
 }

@@ -484,6 +484,7 @@ function createPane(body, ctx, daemon) {
     const selectionPopup = attachSelectionPopup({
       host: node,
       transcript,
+      listDir: listMentioned,
       onComment: (quote, comment) => {
         composer.addComment(quote, comment);
         draft.focus();
