@@ -74,6 +74,18 @@ describe('running work', () => {
     assert.deepEqual([...state.jobs.keys()], ['Gas']);
   });
 
+  test('a parked subagent a message sets going runs again, until reported ended; one already running changes nothing', () => {
+    const send = (/** @type {string} */ outcome) => result({ message: { op: 'send', to: 'Gas', receipts: [{ to: 'Gas', outcome }] } }, 'call_s', 'write');
+    const state = run([start('call_s', 'write'), send('injected')]);
+    assert.equal(state.jobs.size, 0);
+    for (const outcome of ['revived', 'woken']) {
+      applyEvent(state, send(outcome));
+      assert.deepEqual(runningWork(state).map((w) => [w.key, w.kind, w.label, w.background]), [['Gas', 'subagent', 'Gas', true]], outcome);
+      applyEvent(state, result({ op: 'wait', jobs: [{ id: 'Gas', status: 'completed' }] }, 'call_w', 'wait'));
+      assert.equal(state.jobs.size, 0);
+    }
+  });
+
   test('one subagent keeps the call\'s intent', () => {
     const state = run([start('call_t', 'task'), result({ async: { state: 'running', jobId: 'Blind', type: 'task' }, progress: [{ id: 'Blind' }] }, 'call_t', 'task')]);
     assert.equal(state.jobs.get('Blind')?.label, 'Deploying');

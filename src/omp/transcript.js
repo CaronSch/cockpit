@@ -141,6 +141,9 @@ const KNOWN_UNRENDERED = new Set([
   'cache_warming_end',
 ]);
 
+/** How a message reached a subagent that was not running, and so set it going again. */
+const RESUMING_OUTCOMES = new Set(['revived', 'woken']);
+
 /** Assistant stream events with nothing to apply: `message_end` carries the result. */
 const KNOWN_STREAM_NOOPS = new Set(['start', 'done', 'error']);
 
@@ -864,7 +867,7 @@ function ensureTool(state, id, name) {
 
 /**
  * The jobs a tool result tells of: those its call started (they went on in the background),
- * and those it reports ended (a `wait`'s `jobs`, or a read or write of `proc://`'s, such as a
+ * parked subagents a message set going again (a `write` to `agent://`), and those it reports ended (a `wait`'s `jobs`, or a read or write of `proc://`'s, such as a
  * job cancelled).
  * @param {Transcript} state @param {ToolRun} run @param {any} details @param {number | null} at
  */
@@ -877,6 +880,12 @@ function noteJobs(state, run, details, at) {
     for (const id of several ? spawned : [job.jobId]) {
       const label = several ? id : (run.intent ?? argsSummaryText(run.args) ?? run.name);
       state.jobs.set(id, { id, type: String(job.type ?? run.name), label, toolCallId: run.id, startedAt: run.startedAt ?? at });
+    }
+  }
+  if (at !== null && Array.isArray(details?.message?.receipts)) {
+    for (const receipt of details.message.receipts) {
+      const id = receipt?.to;
+      if (typeof id === 'string' && RESUMING_OUTCOMES.has(receipt.outcome)) state.jobs.set(id, { id, type: 'task', label: id, toolCallId: run.id, startedAt: run.startedAt ?? at });
     }
   }
   endJobs(state, details?.jobs ?? details?.proc?.jobs, true);
