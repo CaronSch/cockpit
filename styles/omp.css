@@ -970,13 +970,13 @@
   font-size: var(--text-xs);
 }
 
-.omp-dialog-field {
+.omp-mention-field {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.omp-dialog-field .omp-suggest {
+.omp-mention-field .omp-suggest {
   margin: 0;
 }
 

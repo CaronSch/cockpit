@@ -128,9 +128,14 @@ describe('a mention the sentence goes on after', () => {
     assert.equal(ended('and @README.md!?'), true);
   });
 
-  test('goes on while a name could still start with what is typed', () => {
-    assert.equal(ended('@src/.', [file('.env')]), false, 'a dotfile');
-    assert.equal(ended('@app.js.'), false, 'app.js.bak');
+  test('ends even where a longer name starts with what is typed, which takes one more letter', () => {
+    assert.equal(ended('@src/.', [file('.env')]), true, 'a dotfile');
+    assert.equal(ended('@src/.e', [file('.env')]), false);
+    assert.equal(ended('@app.js.'), true, 'app.js.bak');
+    assert.equal(ended('@app.js.b'), false);
+  });
+
+  test('goes on for `.` and `..`, on their way to ./ and ../', () => {
     assert.equal(ended('@.'), false, './ or a dotfile');
     assert.equal(ended('@..'), false, '../');
   });
