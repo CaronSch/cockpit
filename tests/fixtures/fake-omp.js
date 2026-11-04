@@ -10,6 +10,7 @@
  * - contains "ask": an `ask` dialog; the reply names the chosen option
  * - contains "spawn": a `task` call starting subagents Alpha and Beta in the background, which
  *   run until a prompt containing "kill" cancels them through `proc://` (shapes of omp 18.12.6)
+ * - contains "revive": a `write` to `agent://Alpha`, which a parked Alpha wakes for
  * - contains "mystery": emits a frame type no client knows
  * - contains "garble": writes a stdout line that is not JSON
  * - contains "table": replies with a markdown table; with "wide" too, a heading, a table wider
@@ -242,6 +243,11 @@ function spawnCall() {
   runTool('task', { tasks: [] }, 'Spawning two agents', { content: [{ type: 'text', text: 'Spawned 2 background agents using task.' }], details: { results: [], progress, async: { state: 'running', jobId: 'Alpha', type: 'task' } } });
 }
 
+function reviveCall() {
+  const message = { op: 'send', from: 'Main', to: 'Alpha', receipts: [{ to: 'Alpha', outcome: 'revived' }] };
+  runTool('write', { path: 'agent://Alpha', content: 'One more thing' }, 'Asking Alpha', { content: [{ type: 'text', text: 'Queued for Alpha (was parked; revived).' }], details: { message } });
+}
+
 function killCall() {
   const jobs = ['Alpha', 'Beta'].map((id) => ({ id, type: 'task', status: 'cancelled' }));
   runTool('write', { path: 'proc://all/kill', content: '' }, 'Cancelling agents', { content: [{ type: 'text', text: 'Cancelled.' }], details: { proc: { op: 'cancel', jobs } } });
@@ -288,6 +294,7 @@ async function runPrompt(id, text) {
   if (/todo/.test(text)) todoCall();
   if (/background/.test(text)) backgroundCall();
   if (/spawn/.test(text)) spawnCall();
+  if (/revive/.test(text)) reviveCall();
   if (/kill/.test(text)) killCall();
   if (/slow/.test(text)) {
     // A turn's middle: an intermediate reply and a tool run, then a pause before the final reply.

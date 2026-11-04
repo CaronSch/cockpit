@@ -1800,6 +1800,16 @@ test('subagents started together all show as running until cancelled', async ({ 
   await expect(running).toBeHidden();
 });
 
+test('a parked subagent a message revives shows as running until cancelled', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  const running = pane.locator('.omp-running');
+  await send(pane, 'revive'); // a message to Alpha, which was parked
+  await expect(running).toContainText('Alpha');
+  await send(pane, 'kill');
+  await expect(running).toBeHidden();
+});
+
 test('a shell the agent backgrounds shows as running until its result comes', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
