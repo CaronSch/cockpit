@@ -9,7 +9,7 @@ import { JournalRefused, readConversation } from './history.js';
 import { SessionNotRunning } from './omp-session.js';
 import { OMP_ID } from './unread.js';
 import { isSettingsPatch } from './settings.js';
-import { TextFileRefused, listDirectory, readTextFile, resolvePath } from './files.js';
+import { TextFileRefused, listDirectory, readTextFile, resolvePath, writeTextFile } from './files.js';
 import { DeliveryRefused } from './deliver.js';
 import { GithubError } from './github.js';
 import { REPO } from '../src/github/pr-refs.js';
@@ -506,7 +506,20 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           try {
             return json(await readTextFile(path));
           } catch (err) {
-            throw err instanceof TextFileRefused ? new HttpError(404, err.message) : err;
+            throw err instanceof TextFileRefused ? new HttpError(err.status, err.message) : err;
+          }
+        },
+        PUT: async (req) => {
+          const body = await readJson(req);
+          if (typeof body?.path !== 'string' || typeof body?.text !== 'string' || typeof body?.base !== 'string') {
+            throw new HttpError(400, 'expected { path: string, text: string, base: string }');
+          }
+          try {
+            const result = await writeTextFile(resolvePath(body.path, homedir()), body.text, body.base);
+            if (!result.ok) return json({ error: 'the file changed since this edit began', current: result.current }, 409);
+            return json(result.file);
+          } catch (err) {
+            throw err instanceof TextFileRefused ? new HttpError(err.status, err.message) : err;
           }
         },
       }),

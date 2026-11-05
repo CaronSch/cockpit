@@ -86,6 +86,7 @@ export class DaemonError extends Error {
  *   respondUi(session: string, response: Record<string, unknown>): Promise<void>,
  *   listFiles(dir: string): Promise<DirListing>,
  *   textFile(path: string): Promise<TextFile>,
+ *   saveTextFile(path: string, text: string, base: string): Promise<{ ok: true, file: TextFile } | { ok: false, current: TextFile }>,
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
  *   checkUi(): Promise<void>,
  *   pulls(at: { repo: string } | { cwd: string }): Promise<PullList>,
@@ -527,6 +528,10 @@ export function createDaemonClient(env = {}) {
     // A folder is found relative to home, as a new session's directory is.
     listFiles: (dir) => request(`/api/files?dir=${encodeURIComponent(dir)}`),
     textFile: (path) => request(`/api/text?path=${encodeURIComponent(path)}`),
+    async saveTextFile(path, text, base) {
+      const result = await save('/api/text', { path, text, base }, false);
+      return 'conflict' in result ? { ok: false, current: result.conflict } : { ok: true, file: result.answer };
+    },
     pulls: (at) => request(`/api/github/pulls?${new URLSearchParams(at)}`),
     repos: (cwd) => request(`/api/github/repos?cwd=${encodeURIComponent(cwd)}`),
     pull: (at, number) => request(`/api/github/pull?${new URLSearchParams({ ...at, number: String(number) })}`),

@@ -1,15 +1,25 @@
 /**
- * A text file to read beside the agents: Markdown, JSON, plain text or code (files/file-refs.js),
- * read through the daemon (`/api/text`). A path an agent's reply names opens one with a click,
- * or a drag (files/file-window.js).
+ * A text file to read, and edit, beside the agents: Markdown, JSON, plain text or code
+ * (files/file-refs.js), through the daemon (`/api/text`). A path an agent's reply names opens one
+ * with a click, or a drag (files/file-window.js).
  *
  * Params (persisted with the layout): `path` (absolute, or from home with `~/`), `line` (the one
  * to show, marked, or null) and `rendered` (Markdown shown rendered rather than as its source;
  * unset, it is, unless a line is asked for). Without a path, the window asks for one. The file
- * is read when shown and again on Reload: the window never writes it.
+ * is read when shown and again on Reload.
+ *
+ * The source view is editable; the rendered one only shows. Edits are saved with Save (or
+ * Cmd/Ctrl+S), never by themselves: the file is the user's, or an agent's, not the window's. Until
+ * then they are kept by path for the page's life (`drafts`), so showing another file, or closing
+ * the window, loses none; showing the file again brings them back. A save names the version it was
+ * edited from: if the file has moved on since (an agent wrote it), the window says so and the user
+ * chooses whose text stays, never the window.
  */
 import { button, el, setText } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
+import { autosize } from '../ui/autosize.js';
+import { onZoom } from '../ui/zoom.js';
+import { tabIndent } from '../ui/indent.js';
 import { getDaemon } from '../daemon/client.js';
 import { renderMarkdown } from '../omp/markdown-dom.js';
 /** @import { WidgetContext } from './registry.js' */
@@ -20,7 +30,7 @@ export default {
   type: 'file',
   title: 'File',
   glyph: '¶',
-  description: 'Read a text file (Markdown, JSON, text, code); a path in an agent’s reply opens one with a click',
+  description: 'Read and edit a text file (Markdown, JSON, text, code); a path in an agent’s reply opens one with a click',
 
   /** @param {HTMLElement} body @param {WidgetContext} ctx */
   mount(body, ctx) {
@@ -28,10 +38,28 @@ export default {
   },
 };
 
+/**
+ * Edited text not yet saved, as the text box holds it (`\n` line ends), and the version of the
+ * file (`rev`) it was edited from: by resolved path, for any window that shows that file.
+ * @typedef {{ text: string, base: string }} Draft
+ * @type {Map<string, Draft>}
+ */
+const drafts = new Map();
+// Leaving the page would lose them: the browser asks first.
+addEventListener('beforeunload', (event) => {
+  if (drafts.size) event.preventDefault();
+});
+
 /** @param {string} path */
 const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
 /** @param {number} bytes */
 const sizeText = (bytes) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
+/** A file's text as a text box holds it: a text box turns every `\r\n` into `\n`. @param {TextFile} file */
+const boxText = (file) => file.text.replace(/\r\n/g, '\n');
+/** Edited text as saved: with `\r\n` line ends again, if the file had them. @param {string} text @param {TextFile} file */
+const savedText = (text, file) => (file.text.includes('\r\n') ? text.replace(/\n/g, '\r\n') : text);
+/** @param {string} text */
+const lineCount = (text) => (text.endsWith('\n') ? text.slice(0, -1) : text).split('\n').length;
 
 /** @param {HTMLElement} body @param {WidgetContext} ctx @param {DaemonClient} daemon */
 function createFileWindow(body, ctx, daemon) {
@@ -46,10 +74,25 @@ function createFileWindow(body, ctx, daemon) {
 
   const root = el('div', 'fv');
   body.append(root);
+  tabIndent(root);
+  const saveBtn = button('omp-tool-btn', 'Save', () => void save());
+  saveBtn.title = 'Save your edits to the file (Cmd/Ctrl+S)';
+  const revertBtn = button('omp-tool-btn', 'Revert', () => {
+    if (file) drafts.delete(file.path);
+    draw();
+  });
+  revertBtn.title = 'Drop your unsaved edits and show the file as saved';
   const reloadBtn = button('omp-tool-btn', 'Reload', () => void load());
-  reloadBtn.title = 'Read the file again';
+  reloadBtn.title = 'Read the file again (your unsaved edits are kept)';
   const viewBtn = button('omp-tool-btn', '', () => ctx.setParams({ rendered: !rendered() }));
-  ctx.headActions.append(viewBtn, reloadBtn);
+  ctx.headActions.append(saveBtn, revertBtn, viewBtn, reloadBtn);
+
+  root.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      void save();
+    }
+  });
 
   /** @type {TextFile | null} */
   let file = null;
@@ -57,12 +100,31 @@ function createFileWindow(body, ctx, daemon) {
   let shownPath = '';
   let loads = 0;
   let destroyed = false;
+  let saving = false;
+  /** Why the last save failed, until the next edit or save. @type {string | null} */
+  let saveError = null;
+  /**
+   * What the shown view was drawn from: a read, a save or an edit that leaves both the same keeps
+   * it, with its caret, scroll and undo. @type {{ key: string, text: string } | null}
+   */
+  let drawn = null;
+  /** The text box of the source view, while it is shown. @type {HTMLTextAreaElement | null} */
+  let area = null;
+  // A text box is as tall as its text, so the window scrolls the line numbers with it: refit when
+  // the window is laid out or resized, and when the text size changes.
+  const resize = new ResizeObserver(() => fit());
+  const offZoom = onZoom(() => fit());
 
   /** Whether Markdown shows rendered. */
   const rendered = () => {
     const p = params();
     return Boolean(p.path && isMarkdown(p.path)) && (p.rendered ?? p.line === null);
   };
+  const draft = () => (file ? drafts.get(file.path) : undefined);
+  /** The file changed since the unsaved edits began. */
+  const conflicted = () => Boolean(file && draft() && draft()?.base !== file.rev);
+  /** What a view of `file` is drawn from besides its text. @param {TextFile} file */
+  const viewKey = (file) => JSON.stringify([file.path, rendered(), params().line, file.editable]);
 
   async function load() {
     const { path } = params();
@@ -74,34 +136,125 @@ function createFileWindow(body, ctx, daemon) {
       const read = await daemon.textFile(path);
       if (mine !== loads || destroyed) return;
       file = read;
+      // Edits that came to be the file's text (an agent made the same change) leave nothing to save.
+      if (draft()?.text === boxText(read)) drafts.delete(read.path);
       draw();
     } catch (err) {
       if (mine !== loads || destroyed) return;
       file = null;
+      drawn = null;
+      area = null;
       root.replaceChildren(el('p', 'omp-error fv-message', `Cannot show ${path}: ${errorMessage(err)}`));
     } finally {
       if (mine === loads && !destroyed) reloadBtn.disabled = false;
     }
   }
 
+  async function save() {
+    const edit = draft();
+    if (!file || !edit || saving || !file.editable) return;
+    const path = file.path;
+    saving = true;
+    saveError = null;
+    showState();
+    try {
+      const result = await daemon.saveTextFile(path, savedText(edit.text, file), edit.base);
+      if (destroyed) return;
+      if (result.ok) {
+        // Typing went on during the save: what was typed since is still unsaved, now edited from what was saved.
+        const now = drafts.get(path);
+        if (now === edit) drafts.delete(path);
+        else if (now) drafts.set(path, { text: now.text, base: result.file.rev });
+        file = result.file;
+      } else {
+        file = result.current;
+      }
+    } catch (err) {
+      if (destroyed) return;
+      saveError = errorMessage(err);
+    } finally {
+      saving = false;
+    }
+    draw();
+  }
+
+  /** Keeps the edit, saved over whatever the file now holds. */
+  function keepMine() {
+    const edit = draft();
+    if (!file || !edit) return;
+    drafts.set(file.path, { text: edit.text, base: file.rev });
+    void save();
+  }
+
+  /** Drops the edit for the file as it now is. */
+  function useTheirs() {
+    if (file) drafts.delete(file.path);
+    draw();
+  }
+
   function draw() {
     const p = params();
-    ctx.setLabel(p.path ? p.path.slice(p.path.lastIndexOf('/') + 1) : null);
+    if (!p.path) {
+      drawn = null;
+      area = null;
+      showState();
+      return root.replaceChildren(pathForm());
+    }
+    if (!file) return showState();
+    const text = draft()?.text ?? boxText(file);
+    const asRendered = rendered();
+    const key = viewKey(file);
+    if (key !== drawn?.key || text !== drawn.text) {
+      // Read again (Reload, the agent's edits), it stays where the reader was, unless a line is asked for.
+      const scrolled = root.querySelector('.fv-body')?.scrollTop ?? 0;
+      resize.disconnect();
+      area = null;
+      const view = asRendered ? renderedView(text) : sourceView(text, file.editable, p.line);
+      root.replaceChildren(el('div', 'fv-head'), conflictBar(), view);
+      resize.observe(view);
+      if (p.line === null) view.scrollTop = scrolled;
+      drawn = { key, text };
+    }
+    showState();
+  }
+
+  /** The head, the buttons and the conflict notice, for the file and its edits as they are now. */
+  function showState() {
+    const p = params();
+    const edit = draft();
+    const name = p.path ? p.path.slice(p.path.lastIndexOf('/') + 1) : null;
+    ctx.setLabel(name && edit ? `${name} •` : name);
     viewBtn.hidden = !p.path || !isMarkdown(p.path);
     setText(viewBtn, rendered() ? 'Source' : 'Rendered');
-    viewBtn.title = rendered() ? 'Show the Markdown as written, with line numbers' : 'Show the Markdown rendered';
+    viewBtn.title = rendered() ? 'Show the Markdown as written, with line numbers, to edit it' : 'Show the Markdown rendered';
     reloadBtn.hidden = !p.path;
-    if (!p.path) return root.replaceChildren(pathForm());
-    if (!file) return;
-    const head = el('div', 'fv-head');
+    saveBtn.hidden = revertBtn.hidden = !edit || !file?.editable;
+    saveBtn.disabled = revertBtn.disabled = saving || conflicted();
+    const head = root.querySelector('.fv-head');
+    if (!file || !head) return;
     const where = el('span', 'fv-path', file.path);
     where.title = file.path;
-    head.append(where, el('span', 'omp-muted', file.truncated ? `${sizeText(file.size)}, shown cut short` : sizeText(file.size)));
-    // Read again (Reload, the agent's edits), it stays where the reader was, unless a line is asked for.
-    const scrolled = root.querySelector('.fv-body')?.scrollTop ?? 0;
-    const view = rendered() ? renderedView(file.text) : sourceView(file.text, p.line);
-    root.replaceChildren(head, view);
-    if (p.line === null) view.scrollTop = scrolled;
+    const facts = [file.truncated ? `${sizeText(file.size)}, shown cut short` : sizeText(file.size)];
+    if (!file.editable && !file.truncated) facts.push('read only: not plain UTF-8');
+    const state = saving ? 'Saving…' : saveError ? `Not saved: ${saveError}` : edit ? 'Unsaved edits' : '';
+    const status = el('span', saveError ? 'omp-error fv-status' : 'omp-muted fv-status', state);
+    head.replaceChildren(where, el('span', 'omp-muted', facts.join(', ')), status);
+    const bar = /** @type {HTMLElement | null} */ (root.querySelector('.fv-conflict'));
+    if (bar) bar.hidden = !conflicted();
+  }
+
+  function conflictBar() {
+    const bar = el('div', 'fv-conflict');
+    bar.setAttribute('role', 'alert');
+    const mine = button('btn btn-accent', 'Keep mine', keepMine);
+    mine.title = 'Save your text over the file as it now is';
+    const theirs = button('btn', 'Use the file', useTheirs);
+    theirs.title = 'Drop your edits and show the file as it now is';
+    const row = el('div', 'omp-row');
+    row.append(mine, theirs);
+    bar.append(el('p', '', 'The file changed since you began editing it (an agent, or another editor). Your edits are not saved.'), row);
+    bar.hidden = true;
+    return bar;
   }
 
   /** @param {string} text */
@@ -111,28 +264,63 @@ function createFileWindow(body, ctx, daemon) {
     return node;
   }
 
-  /** The text with its line numbers; `line`, if given, marked and scrolled to. @param {string} text @param {number | null} line */
-  function sourceView(text, line) {
+  /**
+   * The text with its line numbers, in a text box to edit when `editable`; `line`, if given,
+   * marked and scrolled to.
+   * @param {string} text @param {boolean} editable @param {number | null} line
+   */
+  function sourceView(text, editable, line) {
     const node = el('div', 'fv-body fv-source');
-    const lines = text.endsWith('\n') ? text.slice(0, -1).split('\n') : text.split('\n');
-    const gutter = el('pre', 'fv-gutter', lines.map((_, i) => i + 1).join('\n'));
+    let lines = lineCount(text);
+    const numbers = (/** @type {number} */ n) => Array.from({ length: n }, (_, i) => i + 1).join('\n');
+    const gutter = el('pre', 'fv-gutter', numbers(lines));
     gutter.setAttribute('aria-hidden', 'true');
-    const code = el('pre', 'fv-text', text);
-    node.append(gutter, code);
-    if (line !== null && line <= lines.length) {
-      const mark = el('div', 'fv-line-mark');
-      node.append(mark);
+    const box = el('textarea', 'fv-text');
+    box.value = text;
+    box.wrap = 'off';
+    box.spellcheck = false;
+    box.readOnly = !editable;
+    box.setAttribute('aria-label', editable ? 'File text' : 'File text, read only');
+    node.append(gutter, box);
+    area = box;
+    /** @type {HTMLElement | null} */
+    let mark = null;
+    box.addEventListener('input', () => {
+      if (!file) return;
+      const now = box.value;
+      // Back to the file's own text (as it now is), there is nothing to save.
+      if (now === boxText(file)) drafts.delete(file.path);
+      else drafts.set(file.path, { text: now, base: draft()?.base ?? file.rev });
+      drawn = { key: viewKey(file), text: now };
+      saveError = null;
+      if (lineCount(now) !== lines) gutter.textContent = numbers((lines = lineCount(now)));
+      // The marked line has moved with the edit: the mark would point at another.
+      mark?.remove();
+      mark = null;
+      fit();
+      showState();
+    });
+    if (line !== null && line <= lines) {
+      const lineMark = el('div', 'fv-line-mark');
+      mark = lineMark;
+      node.append(lineMark);
       // Placed once laid out: a line's height is the text's.
       requestAnimationFrame(() => {
-        const style = getComputedStyle(code);
+        fit();
+        const style = getComputedStyle(box);
         const height = parseFloat(style.lineHeight);
-        const top = code.offsetTop + parseFloat(style.paddingTop) + (line - 1) * height;
-        mark.style.top = `${top}px`;
-        mark.style.height = `${height}px`;
+        const top = box.offsetTop + parseFloat(style.paddingTop) + (line - 1) * height;
+        lineMark.style.top = `${top}px`;
+        lineMark.style.height = `${height}px`;
         node.scrollTop = Math.max(0, top - node.clientHeight / 3);
       });
     }
     return node;
+  }
+
+  function fit() {
+    const scroller = area?.parentElement;
+    if (area && scroller?.isConnected) autosize(area, { scroller });
   }
 
   function pathForm() {
@@ -160,12 +348,19 @@ function createFileWindow(body, ctx, daemon) {
     paramsChanged() {
       if (params().path !== shownPath) {
         file = null;
+        saveError = null;
+        drawn = null;
+        area = null;
+        resize.disconnect();
         root.replaceChildren();
       }
       void load();
     },
     destroy() {
+      // Unsaved edits stay in `drafts`: the file shown again brings them back.
       destroyed = true;
+      resize.disconnect();
+      offZoom();
       ctx.headActions.replaceChildren();
       root.remove();
     },

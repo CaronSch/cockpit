@@ -310,16 +310,22 @@ What runs today:
   the conversation the same way, and every page shows how each request is doing. GitHub is
   reached only through the user's own `gh` (`daemon/github.js`); the tests' fake `gh` finds a
   repository named outright under `$FAKE_GH_ROOT/<owner>/<name>/`.
-- File windows (the `file` widget): a text file to read (Markdown, JSON, plain text, common
-  code: `src/files/file-refs.js` lists the extensions), read through the daemon (`GET /api/text`,
-  its first 2 MiB; never written). A path to one in an agent window's transcript (absolute, `~/`,
+- File windows (the `file` widget): a text file to read and edit (Markdown, JSON, plain text,
+  common code: `src/files/file-refs.js` lists the extensions), through the daemon (`GET /api/text`,
+  its first 2 MiB; `PUT /api/text` saves). A path to one in an agent window's transcript (absolute, `~/`,
   relative to the conversation's directory, or a bare name; in text or alone in a code span; a
   `:42` after it names a line) is marked: a click shows it in the file window this screen used
   last, or opens one on the agent window's right, and a drag places one where it is dropped, or
   shows it in the file window it is dropped on (`src/files/file-window.js`). The window shows the
   text with line numbers, the line asked for marked and scrolled to; Markdown shows rendered
   unless a line is asked for, with **Source** / **Rendered** to switch; **Reload** reads it again,
-  as showing it again does. Opened from the palette, it asks for a path.
+  as showing it again does. Opened from the palette, it asks for a path. The source view is
+  editable, the rendered one is not: **Save** (Cmd/Ctrl+S) writes the file in place, and only
+  then; unsaved edits are kept per path for the page's life (a window showing that file again
+  brings them back; leaving the page asks first). A save names the version it was edited from:
+  if the file changed since (an agent wrote it), the window asks whose text stays. Only a file
+  read whole and plain UTF-8 is editable (`editable`), so a save changes no byte not edited;
+  `\r\n` line ends are kept.
 
 Not built yet: saved-context pins, terminal panes, process view,
 telemetry views, cmux-parity features beyond the above.
@@ -548,7 +554,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.
-- `src/widgets/file.js` — A text file to read beside the agents: Markdown, JSON, plain text or code (files/file-refs.js), read through the daemon (`/api/text`).
+- `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
 - `src/widgets/pane.js` — An empty window: the frame every real widget is mounted into, with nothing inside.
@@ -563,7 +569,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/conversation.js` — A conversation read from its journal, for a window to show while no omp process holds it: the messages omp's `get_messages` would answer with once resumed, so the transcript seeds from either the same way, and what the journal records about the session around them.
 - `daemon/decisions.js` — Decision reviews: once the user turns them on in Config, every turn an agent hands back is read by a small model, which lists the decisions the agent took without its user (at most five, a sentence each; src/omp/decisions.js), so none goes by unnoticed.
 - `daemon/deliver.js` — Sends a message to a conversation from outside its agent window (the pull request window's review, a Bugbot review): as a prompt to the session holding it, woken from its journal first if it is asleep, as the agent window itself would (`omp --resume`).
-- `daemon/files.js` — Folder listings for path suggestions (the agent pane's `@` file mentions, its Directory field): each entry's name and whether it is a folder (a link to one counts), capped so a huge folder cannot flood the page; how a typed path is read; and the text files the file window shows (src/files/file-refs.js), capped too.
+- `daemon/files.js` — Folder listings for path suggestions (the agent pane's `@` file mentions, its Directory field): each entry's name and whether it is a folder (a link to one counts), capped so a huge folder cannot flood the page; how a typed path is read; and the text files the file window shows (src/files/file-refs.js), capped too, and saves when edited.
 - `daemon/frame-decoder.js` — Decodes omp's stdout: newline-delimited JSON frames, with protocol-v2 `rpc_chunk` sequences reassembled into the one frame they carry.
 - `daemon/github.js` — GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the pull requests of a repository, the repositories of a directory's repository's owner (for `#` mentions of another one), one pull request to review (its conversation, line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
 - `daemon/guard.js` — Loopback guard: decides which requests may reach the daemon (CLAUDE.md, Invariants).
@@ -592,7 +598,7 @@ particular, move a capability into "Current state" when it ships.
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
 - `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
-- `file` — File: Read a text file (Markdown, JSON, text, code); a path in an agent’s reply opens one with a click
+- `file` — File: Read and edit a text file (Markdown, JSON, text, code); a path in an agent’s reply opens one with a click
 
 ### Scripts
 

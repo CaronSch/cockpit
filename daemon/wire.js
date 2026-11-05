@@ -53,6 +53,10 @@
  *   GET    /api/text?path=path         → TextFile: a text file for the file window (Markdown, JSON, plain
  *                                      text, common code: src/files/file-refs.js), by extension; path as
  *                                      `dir` above; 404 for any other file, or none
+ *   PUT    /api/text                   { path, text, base } → TextFile: `text` saved over that file (as
+ *                                      GET, already there and `editable`), or 409 { error, current:
+ *                                      TextFile } when it is no longer at version `base`; 422 when the
+ *                                      file, or `text`, cannot be saved
  *   GET    /api/scratchpads            → { pads: ScratchpadSummary[] } (most recently changed first)
  *   GET    /api/scratchpads/:id        → Scratchpad (empty text for a pad never written)
  *   PUT    /api/scratchpads/:id        { text, base } → { rev }, or 409 { error, current: Scratchpad }
@@ -206,8 +210,10 @@
 
 /**
  * A text file as the file window shows it: `path` resolved, its `text` (its first 2 MiB:
- * `truncated` when there is more), its `size` in bytes and when it was last changed (epoch ms).
- * @typedef {{ path: string, text: string, size: number, truncated: boolean, modifiedAt: number }} TextFile
+ * `truncated` when there is more), its `size` in bytes, when it was last changed (epoch ms), and
+ * its version `rev` (a hash of `text`). `editable`: the file window may save it, being read whole
+ * and plain UTF-8, so a save changes no byte that was not edited.
+ * @typedef {{ path: string, text: string, size: number, truncated: boolean, editable: boolean, modifiedAt: number, rev: string }} TextFile
  */
 
 /**
