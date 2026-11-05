@@ -22,7 +22,7 @@ import { tableCopy } from './table-copy.js';
 import { renderVisual } from './visuals.js';
 import { pullOfUrl, splitRefs } from '../github/pr-refs.js';
 import { fileRefOf, splitFileRefs } from '../files/file-refs.js';
-/** @import { Block, Inline } from './markdown.js' */
+/** @import { Block, Inline, TableBlock } from './markdown.js' */
 
 /**
  * How a reply is rendered: `reply` names the reply (its item and block), so the images it
@@ -35,6 +35,38 @@ export function renderMarkdown(source, options = {}) {
   const fragment = document.createDocumentFragment();
   for (const block of parseMarkdown(source)) fragment.append(renderBlock(block, options));
   return fragment;
+}
+
+/**
+ * A table, with its Copy control (as Markdown, CSV or an image); also the file window's view of
+ * a CSV file (files/csv.js).
+ * @param {TableBlock} block @param {RenderOptions} [options] @returns {HTMLElement}
+ */
+export function renderTable(block, options = {}) {
+  const table = el('table', 'md-table');
+  /** @param {'th' | 'td'} tag @param {Inline[][]} cells */
+  const row = (tag, cells) => {
+    const tr = el('tr');
+    cells.forEach((cell, c) => {
+      const td = withInline(el(tag), cell, options);
+      const align = block.align[c];
+      if (align) td.style.textAlign = align;
+      tr.append(td);
+    });
+    return tr;
+  };
+  const head = el('thead');
+  head.append(row('th', block.head));
+  const body = el('tbody');
+  for (const cells of block.rows) body.append(row('td', cells));
+  table.append(head, body);
+  // Wide tables scroll sideways inside the transcript instead of squeezing their columns;
+  // the Copy control sits outside that scroller so it stays in the corner.
+  const wrap = el('div', 'md-table-wrap');
+  wrap.append(table);
+  const tableBlock = el('div', 'md-table-block');
+  tableBlock.append(...tableCopy(block, table), wrap);
+  return tableBlock;
 }
 
 /** @param {Block} block @param {RenderOptions} options @returns {Node} */
@@ -51,32 +83,8 @@ function renderBlock(block, options) {
       pre.append(code);
       return pre;
     }
-    case 'table': {
-      const table = el('table', 'md-table');
-      /** @param {'th' | 'td'} tag @param {Inline[][]} cells */
-      const row = (tag, cells) => {
-        const tr = el('tr');
-        cells.forEach((cell, c) => {
-          const td = withInline(el(tag), cell, options);
-          const align = block.align[c];
-          if (align) td.style.textAlign = align;
-          tr.append(td);
-        });
-        return tr;
-      };
-      const head = el('thead');
-      head.append(row('th', block.head));
-      const body = el('tbody');
-      for (const cells of block.rows) body.append(row('td', cells));
-      table.append(head, body);
-      // Wide tables scroll sideways inside the transcript instead of squeezing their columns;
-      // the Copy control sits outside that scroller so it stays in the corner.
-      const wrap = el('div', 'md-table-wrap');
-      wrap.append(table);
-      const tableBlock = el('div', 'md-table-block');
-      tableBlock.append(...tableCopy(block, table), wrap);
-      return tableBlock;
-    }
+    case 'table':
+      return renderTable(block, options);
     case 'visual':
       return renderVisual(block.lang, block.source);
     case 'rule':

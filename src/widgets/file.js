@@ -1,12 +1,12 @@
 /**
- * A text file to read, and edit, beside the agents: Markdown, JSON, plain text or code
+ * A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code
  * (files/file-refs.js), through the daemon (`/api/text`). A path an agent's reply names opens one
  * with a click, or a drag (files/file-window.js).
  *
  * Params (persisted with the layout): `path` (absolute, or from home with `~/`), `line` (the one
- * to show, marked, or null) and `rendered` (Markdown shown rendered rather than as its source;
- * unset, it is, unless a line is asked for). Without a path, the window asks for one. The file
- * is read when shown and again on Reload.
+ * to show, marked, or null) and `rendered` (Markdown, or CSV and TSV as a table (files/csv.js),
+ * shown rendered rather than as their source; unset, they are, unless a line is asked for).
+ * Without a path, the window asks for one. The file is read when shown and again on Reload.
  *
  * The source view is editable; the rendered one only shows. Edits are saved with Save (or
  * Cmd/Ctrl+S), never by themselves: the file is the user's, or an agent's, not the window's. Until
@@ -21,7 +21,8 @@ import { autosize } from '../ui/autosize.js';
 import { onZoom } from '../ui/zoom.js';
 import { tabIndent } from '../ui/indent.js';
 import { getDaemon } from '../daemon/client.js';
-import { renderMarkdown } from '../omp/markdown-dom.js';
+import { renderMarkdown, renderTable } from '../omp/markdown-dom.js';
+import { delimitedTable, tableDelimiter } from '../files/csv.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { TextFile } from '../../daemon/wire.js' */
@@ -30,7 +31,7 @@ export default {
   type: 'file',
   title: 'File',
   glyph: '¶',
-  description: 'Read and edit a text file (Markdown, JSON, text, code); a path in an agent’s reply opens one with a click',
+  description: 'Read and edit a text file (Markdown, CSV, JSON, text, code); a path in an agent’s reply opens one with a click',
 
   /** @param {HTMLElement} body @param {WidgetContext} ctx */
   mount(body, ctx) {
@@ -50,8 +51,8 @@ addEventListener('beforeunload', (event) => {
   if (drafts.size) event.preventDefault();
 });
 
-/** @param {string} path */
-const isMarkdown = (path) => /\.(md|markdown|mdx)$/i.test(path);
+/** Whether `path` has a rendered view: Markdown, or a table (CSV, TSV). @param {string} path */
+const renders = (path) => /\.(md|markdown|mdx)$/i.test(path) || tableDelimiter(path) !== null;
 /** @param {number} bytes */
 const sizeText = (bytes) => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
 /** A file's text as a text box holds it: a text box turns every `\r\n` into `\n`. @param {TextFile} file */
@@ -115,10 +116,10 @@ function createFileWindow(body, ctx, daemon) {
   const resize = new ResizeObserver(() => fit());
   const offZoom = onZoom(() => fit());
 
-  /** Whether Markdown shows rendered. */
+  /** Whether the file shows rendered. */
   const rendered = () => {
     const p = params();
-    return Boolean(p.path && isMarkdown(p.path)) && (p.rendered ?? p.line === null);
+    return Boolean(p.path && renders(p.path)) && (p.rendered ?? p.line === null);
   };
   const draft = () => (file ? drafts.get(file.path) : undefined);
   /** The file changed since the unsaved edits began. */
@@ -209,7 +210,7 @@ function createFileWindow(body, ctx, daemon) {
       const scrolled = root.querySelector('.fv-body')?.scrollTop ?? 0;
       resize.disconnect();
       area = null;
-      const view = asRendered ? renderedView(text) : sourceView(text, file.editable, p.line);
+      const view = asRendered ? renderedView(file.path, text) : sourceView(text, file.editable, p.line);
       root.replaceChildren(el('div', 'fv-head'), conflictBar(), view);
       resize.observe(view);
       if (p.line === null) view.scrollTop = scrolled;
@@ -224,9 +225,9 @@ function createFileWindow(body, ctx, daemon) {
     const edit = draft();
     const name = p.path ? p.path.slice(p.path.lastIndexOf('/') + 1) : null;
     ctx.setLabel(name && edit ? `${name} •` : name);
-    viewBtn.hidden = !p.path || !isMarkdown(p.path);
+    viewBtn.hidden = !p.path || !renders(p.path);
     setText(viewBtn, rendered() ? 'Source' : 'Rendered');
-    viewBtn.title = rendered() ? 'Show the Markdown as written, with line numbers, to edit it' : 'Show the Markdown rendered';
+    viewBtn.title = rendered() ? 'Show the file as written, with line numbers, to edit it' : 'Show the file rendered';
     reloadBtn.hidden = !p.path;
     saveBtn.hidden = revertBtn.hidden = !edit || !file?.editable;
     saveBtn.disabled = revertBtn.disabled = saving || conflicted();
@@ -257,10 +258,23 @@ function createFileWindow(body, ctx, daemon) {
     return bar;
   }
 
-  /** @param {string} text */
-  function renderedView(text) {
+  /** Markdown rendered, or CSV and TSV as a table. @param {string} path @param {string} text */
+  function renderedView(path, text) {
     const node = el('div', 'fv-body fv-rendered omp-md');
-    node.append(renderMarkdown(text));
+    const delimiter = tableDelimiter(path);
+    if (delimiter === null) {
+      node.append(renderMarkdown(text));
+      return node;
+    }
+    const table = delimitedTable(text, delimiter);
+    if (!table) {
+      node.append(el('p', 'omp-muted', 'No rows.'));
+      return node;
+    }
+    if (table.shown < table.total) {
+      node.append(el('p', 'omp-muted', `The first ${table.shown.toLocaleString()} of ${table.total.toLocaleString()} rows; Source shows them all.`));
+    }
+    node.append(renderTable(table.block));
     return node;
   }
 

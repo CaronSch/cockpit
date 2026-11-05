@@ -317,8 +317,10 @@ What runs today:
   `:42` after it names a line) is marked: a click shows it in the file window this screen used
   last, or opens one on the agent window's right, and a drag places one where it is dropped, or
   shows it in the file window it is dropped on (`src/files/file-window.js`). The window shows the
-  text with line numbers, the line asked for marked and scrolled to; Markdown shows rendered
-  unless a line is asked for, with **Source** / **Rendered** to switch; **Reload** reads it again,
+  text with line numbers, the line asked for marked and scrolled to; Markdown, and CSV and TSV
+  as a table (`src/files/csv.js`, drawn as a reply's tables are, with their Copy; the first 5000
+  rows), show rendered unless a line is asked for, with **Source** / **Rendered** to switch;
+  **Reload** reads it again,
   as showing it again does. Opened from the palette, it asks for a path. The source view is
   editable, the rendered one is not: **Save** (Cmd/Ctrl+S) writes the file in place, and only
   then; unsaved edits are kept per path for the page's life (a window showing that file again
@@ -486,6 +488,7 @@ particular, move a capability into "Current state" when it ships.
 
 - `src/app.js` — Cockpit controller: owns the layout atom and wires rendering, interaction and widgets together.
 - `src/daemon/client.js` — Browser side of the daemon connection: one event stream per page, shared by every widget.
+- `src/files/csv.js` — CSV and TSV as the file window (widgets/file.js) renders them: a table, drawn as an agent reply's Markdown tables are (omp/markdown-dom.js `renderTable`), so it looks and copies the same.
 - `src/files/file-refs.js` — Text files named in text the workbench shows (an agent's reply): which files the file window (widgets/file.js) shows, by extension (Markdown, JSON, plain text and common code), and the paths of such files in a run of text or a code span, with the line a `:42` after one names, kept free of the DOM so they can be tested.
 - `src/files/file-window.js` — Opening a file window (widgets/file.js) from text that names a text file (marked by omp/markdown-dom.js): a click opens it in the file window this screen used last, or beside the window clicked in if there is none; a drag places a new one where it is dropped, or shows it in the file window it is dropped on.
 - `src/github/bugbot.js` — Cursor Bugbot's reviews, read from GitHub as the daemon's watcher (daemon/bugbot.js) finds them, and told to the agent: which review answers a `bugbot go` comment, and its findings as one message, kept free of I/O so they can be tested.
@@ -554,7 +557,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.
-- `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).
+- `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
 - `src/widgets/pane.js` — An empty window: the frame every real widget is mounted into, with nothing inside.
@@ -598,7 +601,7 @@ particular, move a capability into "Current state" when it ships.
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
 - `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
-- `file` — File: Read and edit a text file (Markdown, JSON, text, code); a path in an agent’s reply opens one with a click
+- `file` — File: Read and edit a text file (Markdown, CSV, JSON, text, code); a path in an agent’s reply opens one with a click
 
 ### Scripts
 
@@ -613,6 +616,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->
