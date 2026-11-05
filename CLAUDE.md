@@ -206,13 +206,15 @@ What runs today:
   the prompt (`branch`, matched to omp's entry by its place among the user
   messages and its text, refused when they differ) and the daemon's fresh
   `get_messages` replaces every window's transcript. A pane whose
-  agent finished its turn (or asks something) while its user was not looking
-  gets an electric-blue border until it is hovered, scrolled, clicked or typed
-  in: its session is unread, for every window and page, across reloads and daemon
+  agent finished its turn (or asks something) while its user was not in it (the last
+  window they clicked, typed or put the cursor in, with the pointer over it, in a focused
+  page) gets an electric-blue border until they click in it, type in it or move the cursor
+  into it; hovering over it or scrolling it reads nothing (it keeps the session awake), nor
+  does a modifier or shortcut (⌘K, ⌘-Tab) nor the focus the browser gives back as the page
+  regains it: its session is unread, for every window and page, across reloads and daemon
   restarts, and after it stops, until it is read there or shown from Sessions. A
   session marked unread from Sessions lights its windows too, and waits for a fresh
-  hover, scroll, click or keystroke there (a pointer already resting on the window
-  does not read it). **Notify** in the top bar (off until clicked, which asks the
+  click, keystroke or cursor there. **Notify** in the top bar (off until clicked, which asks the
   browser's permission; kept per browser) adds a desktop notification for the same
   moments, a second after them if the session is still unread and not shown in a
   focused tab: never for events replayed on (re)connecting (the `hello` carries the seq

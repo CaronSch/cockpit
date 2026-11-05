@@ -483,7 +483,7 @@ test('awake conversations are listed with how each is doing; a click shows one i
   await expect(freshRow.locator('.sessions-state'), 'idle needs no word').toHaveCount(0);
   await expect(keyRow(window, fileOf('login')), 'asleep: no state at all').not.toHaveClass(/is-(idle|working|done|asking|starting)/);
 
-  // Working while a turn runs; done (and unread) once it ends unread; idle again once looked at.
+  // Working while a turn runs; done (and unread) once it ends unread; idle again once read.
   await page.mouse.move(5, 5); // the top bar: no window is being looked at
   await second.locator('textarea').fill('slow');
   await second.locator('textarea').press('Enter');
@@ -491,8 +491,7 @@ test('awake conversations are listed with how each is doing; a click shows one i
   await expect(freshRow.locator('.sessions-title'), 'titled while the turn runs').toHaveText('About slow');
   await expect(freshRow).toHaveClass(/is-done/, { timeout: 5000 });
   await expect(freshRow).toHaveClass(/is-unread/);
-  const { x, y } = await middleOf(second);
-  await page.mouse.move(x, y);
+  await second.locator('.omp-transcript').click();
   await expect(freshRow).toHaveClass(/is-idle/);
 
   // The second window was used last: a click shows the conversation there; its own carries on.
@@ -625,15 +624,14 @@ test('a turn that ends while nobody looks stays unread, across reloads and aslee
   await expect(window.locator('.widget-label')).toBeHidden();
 });
 
-test('reading a session in its agent window clears its mark in Sessions', async ({ page }) => {
+test('reading a session in its agent window (a click in it) clears its mark in Sessions', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await row(window, 'deploy staging').click();
   const pane = page.locator('.widget[data-widget="omp"]');
   const deploy = keyRow(window, fileOf('deploy'));
   await turnWhileAway(page, pane, 'hello');
   await expect(deploy).toHaveClass(/is-unread/);
-  const { x, y } = await middleOf(pane);
-  await page.mouse.move(x, y);
+  await pane.locator('.omp-transcript').click();
   await expect(pane).not.toHaveClass(/is-unread/);
   await expect(deploy).not.toHaveClass(/is-unread/);
   await expect(deploy).toHaveClass(/is-idle/);
@@ -741,8 +739,10 @@ test('from the keyboard, Shift+F10 opens a row’s menu; Mark as unread lights i
   await settle(page);
   await expect(pane).toHaveClass(/is-unread/);
   await expect(zebra).toHaveClass(/is-unread/);
-  // Moving it there again is.
+  // Nor does moving it over the window; a click in it does.
   await page.mouse.move(x + 10, y + 10);
+  await expect(pane).toHaveClass(/is-unread/);
+  await page.mouse.click(x + 10, y + 10);
   await expect(pane).not.toHaveClass(/is-unread/);
   await expect(zebra).not.toHaveClass(/is-unread/);
 });
