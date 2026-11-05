@@ -898,7 +898,10 @@ describe('text files', () => {
     await writeFile(join(dir, 'blob.txt'), 'a\u0000b');
     const res = await call({ path: `/api/text?path=${encodeURIComponent(join(dir, 'sub', '..', 'jobs.json'))}` });
     assert.equal(res.status, 200);
-    assert.deepEqual({ ...res.json, modifiedAt: 0 }, { path: join(dir, 'jobs.json'), text: '{ "jobs": 4 }\n', size: 14, truncated: false, modifiedAt: 0 });
+    assert.deepEqual(
+      { ...res.json, modifiedAt: 0, rev: typeof res.json.rev },
+      { path: join(dir, 'jobs.json'), text: '{ "jobs": 4 }\n', size: 14, truncated: false, editable: true, modifiedAt: 0, rev: 'string' },
+    );
     for (const name of ['secret.env', 'blob.txt', 'missing.md', '']) {
       assert.equal((await call({ path: `/api/text?path=${encodeURIComponent(join(dir, name))}` })).status, 404, name);
     }
@@ -909,7 +912,48 @@ describe('text files', () => {
     const file = join(cwd, 'texts', 'long.log');
     await writeFile(file, 'x'.repeat(100));
     const read = await readTextFile(file, 10);
-    assert.deepEqual([read.text, read.size, read.truncated], ['x'.repeat(10), 100, true]);
+    assert.deepEqual([read.text, read.size, read.truncated, read.editable], ['x'.repeat(10), 100, true, false]);
+  });
+
+  test('an edit is saved from the version it began at; from an older one it is refused with what the file holds now', async () => {
+    const file = join(cwd, 'texts', 'plan.md');
+    await writeFile(file, '# Plan\n');
+    await chmod(file, 0o640);
+    const { json: read } = await call({ path: `/api/text?path=${encodeURIComponent(file)}` });
+    const saved = await call({ method: 'PUT', path: '/api/text', body: { path: file, text: '# Plan\n\nship it\n', base: read.rev } });
+    assert.equal(saved.status, 200);
+    assert.deepEqual([saved.json.text, saved.json.size], ['# Plan\n\nship it\n', 16]);
+    assert.notEqual(saved.json.rev, read.rev);
+    assert.equal(await Bun.file(file).text(), '# Plan\n\nship it\n');
+    assert.equal((await stat(file)).mode & 0o777, 0o640, 'written in place: the file keeps its permissions');
+
+    const stale = await call({ method: 'PUT', path: '/api/text', body: { path: file, text: 'mine', base: read.rev } });
+    assert.equal(stale.status, 409);
+    assert.equal(stale.json.current.text, '# Plan\n\nship it\n');
+    assert.equal(stale.json.current.rev, saved.json.rev);
+    assert.equal(await Bun.file(file).text(), '# Plan\n\nship it\n', 'the newer text stays');
+  });
+
+  test('only a text file the window shows, already there and read whole as UTF-8, is saved', async () => {
+    const dir = join(cwd, 'texts');
+    const latin = join(dir, 'latin.txt');
+    await writeFile(latin, Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a])); // "café\n" in Latin-1
+    const { json: read } = await call({ path: `/api/text?path=${encodeURIComponent(latin)}` });
+    assert.equal(read.editable, false);
+    assert.equal((await call({ method: 'PUT', path: '/api/text', body: { path: latin, text: 'cafe\n', base: read.rev } })).status, 422);
+    assert.deepEqual([...(await Bun.file(latin).bytes())], [0x63, 0x61, 0x66, 0xe9, 0x0a], 'its bytes are untouched');
+
+    const json = join(dir, 'jobs.json');
+    const { json: jobs } = await call({ path: `/api/text?path=${encodeURIComponent(json)}` });
+    assert.equal((await call({ method: 'PUT', path: '/api/text', body: { path: json, text: 'a\u0000b', base: jobs.rev } })).status, 422);
+    for (const name of ['secret.env', 'missing.md']) {
+      assert.equal((await call({ method: 'PUT', path: '/api/text', body: { path: join(dir, name), text: 'x', base: 'x' } })).status, 404, name);
+    }
+    assert.equal(await Bun.file(join(dir, 'missing.md')).exists(), false, 'a save never makes a file');
+    assert.equal((await call({ method: 'PUT', path: '/api/text', body: { path: json, text: 4, base: jobs.rev } })).status, 400);
+    assert.equal((await call({ method: 'PUT', path: '/api/text', body: { path: json, text: 'x', base: jobs.rev }, auth: false })).status, 401);
+    assert.equal((await call({ method: 'PUT', path: '/api/text', body: { path: json, text: 'x', base: jobs.rev }, origin: false })).status, 403);
+    assert.equal(await Bun.file(json).text(), '{ "jobs": 4 }\n');
   });
 });
 
