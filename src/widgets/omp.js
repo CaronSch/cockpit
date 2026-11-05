@@ -160,20 +160,54 @@ function createPane(body, ctx, daemon) {
   // Decision reviews (daemon/decisions.js) arrive after the turn, for any conversation.
   const offDecisions = daemon.onDecisions(() => schedule());
   let pointerInside = false;
-  /** Looking at this window: the pointer is over it, in a page that has focus. */
-  const reading = () => pointerInside && document.visibilityState === 'visible' && document.hasFocus();
-  const markRead = () => view?.markRead();
-
-  // Moving over the pane, scrolling it, clicking or typing in it: all count as reading it.
+  /** The user's last click, keystroke or move of focus was in this window. */
+  let inside = false;
+  /**
+   * The page lost focus and the user has not clicked or typed in it since: the focus the browser
+   * gives back to a message box as they return to the page is not them coming back to its window.
+   */
+  let away = !document.hasFocus();
+  /** Looking at this window: the user is in it and pointing at it, in a page that has focus. */
+  const reading = () => inside && pointerInside && document.visibilityState === 'visible' && document.hasFocus();
+  const read = () => view?.read();
+  const seen = () => view?.seen();
+  /** @param {Event} event */
+  const isHere = (event) => event.target instanceof Node && body.contains(event.target);
+  /** @param {Event} event */
+  const pressed = (event) => {
+    away = false;
+    inside = isHere(event);
+  };
+  /** @param {Event} event */
+  const focused = (event) => {
+    if (!away) inside = isHere(event);
+  };
+  /** @param {Event} event */
+  const left = (event) => {
+    if (event.target === window) away = true;
+  };
+  document.addEventListener('pointerdown', pressed, { capture: true });
+  document.addEventListener('keydown', pressed, { capture: true });
+  document.addEventListener('focusin', focused, { capture: true });
+  window.addEventListener('blur', left);
   body.addEventListener('pointerenter', () => {
     pointerInside = true;
   });
   body.addEventListener('pointerleave', () => {
     pointerInside = false;
   });
-  for (const type of ['pointermove', 'pointerdown', 'wheel', 'keydown', 'focusin']) {
-    body.addEventListener(type, markRead, { passive: true });
-  }
+  // Clicking in the window, typing in it or moving focus into it reads it. Hovering over it or
+  // scrolling it does not: what is unread stays so until the user comes into the window. Both
+  // still use the window, which keeps its session awake. A shortcut held with ⌘, Ctrl or Alt
+  // (⌘K, ⌘-Tab to another app) or a modifier on its own types nothing here: it reads nothing.
+  body.addEventListener('pointerdown', read, { passive: true });
+  body.addEventListener('keydown', (event) => {
+    if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key !== 'Shift') read();
+  });
+  body.addEventListener('focusin', () => {
+    if (!away) read();
+  });
+  for (const type of ['pointermove', 'wheel']) body.addEventListener(type, seen, { passive: true });
 
   function schedule() {
     if (frame || destroyed) return;
@@ -373,7 +407,7 @@ function createPane(body, ctx, daemon) {
   /**
    * The conversation the window's params name: awake (a session's events) or asleep (its
    * journal), and woken by what needs omp.
-   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, update(): void, focus(): void, markRead(): void, destroy(): void }} SessionView
+   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, update(): void, focus(): void, read(): void, seen(): void, destroy(): void }} SessionView
    * @returns {SessionView}
    */
   function createSessionView() {
@@ -388,8 +422,11 @@ function createPane(body, ctx, daemon) {
     /** Waking the conversation: resolves with the session once it is ready. @type {Promise<string> | null} */
     let waking = null;
     let unsubscribe = () => {};
-    /** When the session last waited on its user here (omp/activity.js), and the last mark this window read. */
-    let awaitedAt = 0;
+    /**
+     * When the session last waited on its user (omp/activity.js) as they were looking at the
+     * window (`reading`), and the last mark this window read.
+     */
+    let readLive = 0;
     let readSent = -Infinity;
     let seenAt = -Infinity;
     let closed = false;
@@ -537,12 +574,16 @@ function createPane(body, ctx, daemon) {
       asleep = null;
       Object.assign(state, createTranscript());
       clearDrawn();
-      awaitedAt = 0;
+      let live = false;
       unsubscribe = daemon.subscribe(id, (event) => {
         applyEvent(state, event);
-        awaitedAt = awaitedAfter(awaitedAt, event);
+        // News is read as it lands under its reader's eyes. News that landed while they were
+        // elsewhere, the history replayed now included, waits for them to come into the window,
+        // even once they are looking at it again.
+        if (live && reading()) readLive = awaitedAfter(readLive, event);
         schedule();
       });
+      live = true;
       // The subscription replayed history synchronously: requests in it are already handled.
       editorSeen = state.editorText?.seq ?? 0;
       if (params().session !== id) ctx.setParams({ session: id });
@@ -1402,16 +1443,15 @@ function createPane(body, ctx, daemon) {
       drawQueue();
       drawComposer();
       selectionPopup.refresh();
-      // News that lands under the reader's eyes is read as it comes. A mark the user made
-      // themselves (newer than any news here) waits for them to come back to the window.
+      // News heard as it landed under the reader's eyes is read (see follow). A mark the user
+      // made themselves (newer than any news here) waits for them to come into the window.
       const since = unreadSince();
-      if (since !== null && since <= awaitedAt && reading()) markRead();
+      if (since !== null && since <= readLive) markRead();
       ctx.setUnread(unreadSince() !== null);
     }
 
-    /** The window is being used: what it shows is read, and the session stays awake. */
-    function used() {
-      markRead();
+    /** The window is being used: the session stays awake. */
+    function seen() {
       if (!ready() || !session || performance.now() - seenAt < SEEN_EVERY_MS) return;
       seenAt = performance.now();
       daemon.seen(session).catch(() => {});
@@ -1435,7 +1475,12 @@ function createPane(body, ctx, daemon) {
       shows: (p) => (p.sessionFile !== null && p.sessionFile === file) || (p.session !== null && (p.session === session || p.session === started.session)),
       update,
       focus: () => draft.focus(),
-      markRead: used,
+      /** The user came into the window: what it shows is read, and the session stays awake. */
+      read() {
+        markRead();
+        seen();
+      },
+      seen,
       destroy() {
         closed = true;
         unsubscribe();
@@ -1471,6 +1516,10 @@ function createPane(body, ctx, daemon) {
       offReset();
       offUnread();
       offDecisions();
+      document.removeEventListener('pointerdown', pressed, { capture: true });
+      document.removeEventListener('keydown', pressed, { capture: true });
+      document.removeEventListener('focusin', focused, { capture: true });
+      window.removeEventListener('blur', left);
       // The session runs on: the daemon's, not this window's.
       view?.destroy();
       view = null;

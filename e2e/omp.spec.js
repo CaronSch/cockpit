@@ -1233,7 +1233,7 @@ test('pasted text is typing, however long; pasted or dropped files go with the n
   await expect(pane.locator('.omp-card')).toHaveCount(0);
 });
 
-test('a final response that lands while you are elsewhere lights the pane until you look at it', async ({ page }) => {
+test('a final response that lands while you are elsewhere lights the pane until you click or type in it, not as you hover or scroll', async ({ page }) => {
   const workspace = await openWorkbench(page);
   const pane = await startedPane(page);
   const draft = pane.locator('textarea');
@@ -1253,9 +1253,17 @@ test('a final response that lands while you are elsewhere lights the pane until 
   await expect(pane.locator('.omp-assistant').last()).toContainText('first');
   await expect(pane).toHaveClass(/is-unread/);
 
+  // Pointing at the pane, moving over it and scrolling it read nothing (a read clears the
+  // border at once, before any answer from the daemon).
   const box = await pane.boundingBox();
   if (!box) throw new Error('pane not laid out');
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await page.mouse.move(middle.x, middle.y);
+  await page.mouse.move(middle.x + 20, middle.y + 20, { steps: 4 });
+  await page.mouse.wheel(0, 200);
+  await expect(pane).toHaveClass(/is-unread/);
+  // A click in it does…
+  await page.mouse.click(middle.x, middle.y);
   await expect(pane).not.toHaveClass(/is-unread/);
   // …and read stays read, even across a reload straight after.
   await lookAway();
@@ -1264,29 +1272,46 @@ test('a final response that lands while you are elsewhere lights the pane until 
   await caughtUp(page, workspace, pane);
   await expect(pane).not.toHaveClass(/is-unread/);
 
-  // Scrolling the transcript reads it.
-  await sendFromKeyboard('second');
-  await expect(pane).toHaveClass(/is-unread/);
-  await pane.locator('.omp-transcript').dispatchEvent('wheel');
-  await expect(pane).not.toHaveClass(/is-unread/);
-
   // So does putting the cursor in the message box (without the mouse).
-  await sendFromKeyboard('third');
+  await sendFromKeyboard('second');
   await expect(pane).toHaveClass(/is-unread/);
   await page.locator('#palette-toggle').focus();
   await draft.focus();
   await expect(pane).not.toHaveClass(/is-unread/);
 
-  // Output that arrives while the pointer is over the pane is read as it comes.
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // And typing in it, where the cursor was left; a modifier pressed on its own (⌘-Tab to
+  // another app) types nothing.
+  await sendFromKeyboard('third');
+  await expect(pane).toHaveClass(/is-unread/);
+  await expect(draft).toBeFocused();
+  await page.keyboard.press('Meta');
+  await expect(pane).toHaveClass(/is-unread/);
+  await page.keyboard.type('n');
+  await expect(pane).not.toHaveClass(/is-unread/);
+
+  // The focus the browser gives the box back as you return to the page is not you coming back.
   await sendFromKeyboard('fourth');
+  await expect(pane).toHaveClass(/is-unread/);
+  await draft.evaluate((node) => {
+    const area = /** @type {HTMLTextAreaElement} */ (node);
+    window.dispatchEvent(new Event('blur')); // off to another app…
+    area.blur();
+    area.focus(); // …and back
+  });
+  await expect(pane).toHaveClass(/is-unread/);
+
+  // Output that arrives while you are in the pane and pointing at it is read as it comes.
+  await page.mouse.click(middle.x, middle.y);
+  await expect(pane).not.toHaveClass(/is-unread/);
+  await sendFromKeyboard('fifth');
   await caughtUp(page, workspace, pane);
   await expect(pane).not.toHaveClass(/is-unread/);
 
-  // The middle of a turn (an intermediate reply, a tool run) is not news; its end is.
-  await lookAway();
+  // Pointing at it from elsewhere (the cursor gone to another control) is not being in it. And the
+  // middle of a turn (an intermediate reply, a tool run) is not news; its end is.
   await draft.fill('slow');
   await draft.press('Enter');
+  await page.locator('#palette-toggle').focus();
   await expect(pane.locator('.omp-assistant', { hasText: 'Let me check first.' })).toBeVisible();
   await expect(pane.locator('.omp-tool').last()).toBeVisible();
   await expect(pane).not.toHaveClass(/is-unread/);
