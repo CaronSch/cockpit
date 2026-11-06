@@ -921,13 +921,13 @@ test('the top bar sizes all text up and down, resets it, and keeps it across a r
   await level.click();
 });
 
-test('New, Fork, Accounts and Stop sit in the window’s top bar; pressing them never drags the window, its title still does', async ({ page }) => {
+test('the response arrows, New, Fork, Accounts and Stop sit in the window’s top bar; pressing them never drags the window, its title still does', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   const head = pane.locator('.widget-head');
   const toolbar = pane.locator('.omp-toolbar');
   // PRs shows only in a GitHub repository, which the test project is not.
-  await expect(head.locator('.widget-actions button:visible')).toHaveText(['New', 'Fork', 'Accounts', 'Stop']);
+  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Fork', 'Accounts', 'Stop']);
   for (const name of ['New', 'Fork', 'Accounts', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
   await expect(head.getByRole('button', { name: 'More actions' }), 'no menu of the rest: there is no rest').toHaveCount(0);
 
@@ -953,7 +953,8 @@ test('New, Fork, Accounts and Stop sit in the window’s top bar; pressing them 
     if (!box) throw new Error('not laid out');
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   };
-  for (const [from, picks] of /** @type {const} */ ([[head.getByRole('button', { name: 'New', exact: true }), false], [pane.locator('.widget-title'), true]])) {
+  const previous = head.getByRole('button', { name: 'Previous response', exact: false });
+  for (const [from, picks] of /** @type {const} */ ([[previous, false], [head.getByRole('button', { name: 'New', exact: true }), false], [pane.locator('.widget-title'), true]])) {
     const [start, end] = [await at(from), await at(target)];
     await page.mouse.move(start.x, start.y);
     await page.mouse.down();
@@ -967,6 +968,59 @@ test('New, Fork, Accounts and Stop sit in the window’s top bar; pressing them 
   await head.getByRole('button', { name: 'New', exact: true }).click();
   await expect(pane.getByRole('button', { name: 'Start agent' })).toBeVisible();
   await expect(head.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
+});
+
+test('the response arrows and ⌘↑ / ⌘↓ step through the agent’s replies, one each press, and past the last back to following the bottom', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  // Replies each taller than the transcript, so only one starts in view at a time.
+  const paragraphs = Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1} of the reply.`).join('\n\n');
+  const reply = /** @param {string} name */ (name) => pane.locator('.omp-assistant', { hasText: `Reply ${name}` });
+  for (const name of ['one', 'two', 'three']) {
+    await send(pane, `say: Reply ${name}\n\n${paragraphs}`);
+    await expect(reply(name)).toBeVisible();
+  }
+  const transcript = pane.locator('.omp-transcript');
+  /** How far `name`'s reply starts below the transcript's top edge. @param {string} name */
+  const below = (name) => reply(name).evaluate((n) => n.getBoundingClientRect().top - /** @type {Element} */ (n.closest('.omp-transcript')).getBoundingClientRect().top);
+  const atTop = /** @param {string} name */ (name) => expect.poll(async () => Math.abs(await below(name))).toBeLessThan(2);
+  const fromBottom = () => transcript.evaluate((t) => t.scrollHeight - t.scrollTop - t.clientHeight);
+  // Start from the bottom, as the reader of a conversation that just ended does.
+  await transcript.evaluate((t) => void (t.scrollTop = t.scrollHeight));
+  await expect.poll(fromBottom).toBeLessThan(2);
+
+  // From the message box: the caret stays where it was, the transcript moves.
+  const box = pane.locator('textarea');
+  await box.fill('draft\nsecond line');
+  await box.press('ControlOrMeta+ArrowUp');
+  await atTop('three');
+  expect(await box.evaluate((t) => /** @type {HTMLTextAreaElement} */ (t).selectionStart)).toBe('draft\nsecond line'.length);
+  // It stays there when the pane lays out again (the box grows a line), rather than following the bottom.
+  await box.fill('draft\nsecond line\nthird line');
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await atTop('three');
+
+  await pane.locator('.widget-head').getByRole('button', { name: 'Previous response', exact: false }).click();
+  await atTop('two');
+  // The focus is on the arrow in the top bar now: the keys work there too.
+  await page.keyboard.press('ControlOrMeta+ArrowUp');
+  await atTop('one');
+  await page.keyboard.press('ControlOrMeta+ArrowUp');
+  await expect.poll(() => transcript.evaluate((t) => t.scrollTop)).toBe(0);
+
+  await box.focus();
+  for (const name of ['one', 'two', 'three']) {
+    await page.keyboard.press('ControlOrMeta+ArrowDown');
+    await atTop(name);
+  }
+  await page.keyboard.press('ControlOrMeta+ArrowDown');
+  await expect.poll(fromBottom).toBeLessThan(2);
+  // At the bottom it follows new output again.
+  await box.fill('');
+  await send(pane, 'say: Reply four');
+  await expect(reply('four')).toBeVisible();
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await expect.poll(fromBottom).toBeLessThan(2);
 });
 
 test('with Animated selection on, a drag shows whole words in its own highlight; off, the browser’s', async ({ page }) => {

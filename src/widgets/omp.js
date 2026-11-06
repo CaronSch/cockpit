@@ -41,7 +41,8 @@ import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
 import { attachFileRefs } from '../files/file-window.js';
 import { awaitedAfter } from '../omp/activity.js';
-import { promptsAndResponses } from '../omp/visibility.js';
+import { isResponse, promptsAndResponses } from '../omp/visibility.js';
+import { responseTarget } from '../omp/response-nav.js';
 import { placeReviews } from '../omp/decisions.js';
 import { coldAt } from '../omp/cold.js';
 import { turnProgress } from '../omp/todos.js';
@@ -69,6 +70,8 @@ import { settings } from '../ui/settings.js';
 const SEEN_EVERY_MS = 60_000;
 const MAX_SUGGESTIONS = 8;
 const BOTTOM_SLACK_PX = 24;
+/** ⌘ on Apple's keyboards, Ctrl elsewhere: the modifier of the previous/next response keys. */
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const REFUSED = 'The daemon refused this page.';
 const FORK_TITLE = 'Fork: continue a copy of this conversation in a new window';
 const NOTHING_TO_FORK = 'Nothing to fork yet: the conversation is saved once the agent has replied';
@@ -509,8 +512,12 @@ function createPane(body, ctx, daemon) {
     // Shown only while the session's model has no account signed in to talk to it with.
     const signInBtn = toolButton('Sign in', 'Sign in to a model provider: this conversation’s model needs it');
     toolbar.append(cwdEl, modelBtn, thinkingBtn, activity, progressEl, contextEl, costEl, errorBadge, spacer, signInBtn);
+    // Previous/next response: in a long conversation, steps through the agent's answers.
+    const navKey = MAC ? '⌘' : 'Ctrl+';
+    const prevBtn = navButton('↑', `Previous response (${navKey}↑)`, () => toResponse('previous'));
+    const nextBtn = navButton('↓', `Next response (${navKey}↓)`, () => toResponse('next'));
     // The conversation's own controls go in the window's top bar, for as long as it is shown.
-    ctx.headActions.replaceChildren(newBtn, forkBtn, prsBtn, accountsBtn, stopBtn);
+    ctx.headActions.replaceChildren(prevBtn, nextBtn, newBtn, forkBtn, prsBtn, accountsBtn, stopBtn);
 
     const strip = el('div', 'omp-strip');
     const loginStrip = el('div', 'omp-login');
@@ -530,6 +537,36 @@ function createPane(body, ctx, daemon) {
     // transcript, and fonts or expanded blocks reflow items. Re-pin whenever either moves.
     const resizes = new ResizeObserver(pinToBottom);
     resizes.observe(transcript);
+    /**
+     * Scrolls the transcript so the previous or next response starts at its top, or to its very
+     * top or bottom when there is none (omp/response-nav.js). Going up stops following new
+     * output at once, before the next draw re-pins; reaching the bottom follows it again.
+     * @param {'previous' | 'next'} direction
+     */
+    function toResponse(direction) {
+      const origin = transcript.getBoundingClientRect().top + transcript.clientTop - transcript.scrollTop;
+      /** @type {number[]} */
+      const tops = [];
+      for (const item of state.items) {
+        const at = item.kind === 'assistant' && isResponse(item) ? drawn.get(item.key)?.node : null;
+        if (at?.isConnected) tops.push(at.getBoundingClientRect().top - origin);
+      }
+      const max = transcript.scrollHeight - transcript.clientHeight;
+      const target = responseTarget(tops, transcript.scrollTop, max, direction);
+      stickToBottom = target >= max;
+      transcript.scrollTop = stickToBottom ? transcript.scrollHeight : target;
+    }
+    // ⌘↑ / ⌘↓ (Ctrl elsewhere) anywhere in the window, the message box too, where they would
+    // move its caret to the start or end; an open suggestion list keeps its arrows.
+    /** @param {KeyboardEvent} e */
+    const onNavKey = (e) => {
+      if (e.defaultPrevented || e.isComposing || e.shiftKey || e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      if (MAC ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      toResponse(e.key === 'ArrowUp' ? 'previous' : 'next');
+    };
+    node.addEventListener('keydown', onNavKey);
+    ctx.headActions.addEventListener('keydown', onNavKey);
     const dialogs = el('div', 'omp-dialogs');
     const queue = el('div', 'omp-queue');
     const running = el('div', 'omp-running');
@@ -1515,6 +1552,7 @@ function createPane(body, ctx, daemon) {
         unsubscribe();
         if (runningTimer) clearInterval(runningTimer);
         ctx.headActions.replaceChildren();
+        ctx.headActions.removeEventListener('keydown', onNavKey);
         resizes.disconnect();
         composer.destroy();
         selectionPopup.destroy();
@@ -1531,6 +1569,14 @@ function createPane(body, ctx, daemon) {
   function toolButton(label, title) {
     const b = button('omp-tool-btn', label);
     b.title = title;
+    return b;
+  }
+
+  /** An arrow of the top bar, named by its title. @param {string} arrow @param {string} title @param {() => void} onClick */
+  function navButton(arrow, title, onClick) {
+    const b = button('omp-tool-btn omp-nav-btn', arrow, onClick);
+    b.title = title;
+    b.setAttribute('aria-label', title);
     return b;
   }
 
