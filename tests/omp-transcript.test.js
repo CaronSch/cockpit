@@ -1,6 +1,9 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
 import { IDLE_COMPACTED, IDLE_COMPACTING, addNote, applyEvent, askAnswers, conversationName, createTranscript, needsLogin, seedConversation } from '../src/omp/transcript.js';
+import { CONTINUE_DIRECTIVE } from '../src/omp/message.js';
+import { sentPrompts } from '../src/omp/prompt-history.js';
+import { branchEntry, rewindPoint } from '../src/omp/rewind.js';
 /** @import { SessionEvent } from '../daemon/wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
 
@@ -502,6 +505,52 @@ describe('conversation name', () => {
   test('omp’s title, once the user names the session, wins over the first prompt', () => {
     const state = run([user('fix the login bug'), frame({ type: 'session_info_update', title: 'Login fix', sessionId: 'x' })]);
     assert.equal(conversationName(state), 'Login fix');
+  });
+});
+
+describe('a `.` sent: omp’s continue directive', () => {
+  /** As omp has a prompt the pane sent: a user message, attributed to the user. @param {string} text @param {number} timestamp */
+  const prompt = (text, timestamp) => ({ role: 'user', content: [{ type: 'text', text }], attribution: 'user', timestamp });
+  const said = (/** @type {string} */ text) => assistant([{ type: 'text', text }]);
+  const conversation = [prompt('fix the login bug', 1), said('Fixing it.'), prompt(CONTINUE_DIRECTIVE, 2), said('Carrying on.')];
+
+  /** @param {Transcript} state */
+  function assertNotAPrompt(state) {
+    const directive = state.items.find((i) => i.kind === 'user' && i.text.trim() === CONTINUE_DIRECTIVE.trim());
+    assert.ok(directive?.kind === 'user' && directive.continues && directive.byAgent, 'kept, flagged as the agent’s');
+    assert.equal(conversationName(state), 'fix the login bug');
+    assert.deepEqual(sentPrompts(state.items), ['fix the login bug'], 'Up never brings it back');
+    assert.equal(rewindPoint(state.items, directive.key), null, 'no Rewind on it');
+  }
+
+  test('live, it is no prompt of the user’s: not the name, not in Up’s history, not a rewind point', () => {
+    const live = run(conversation.flatMap((message, i) => [frame({ type: 'message_start', message, messageId: `msg-${i}` }), frame({ type: 'message_end', message, messageId: `msg-${i}` })]));
+    assertNotAPrompt(live);
+  });
+
+  test('from the journal of an asleep conversation, the same', () => {
+    const asleep = createTranscript();
+    seedConversation(asleep, { messages: conversation, title: null, model: null, thinkingLevel: null });
+    assertNotAPrompt(asleep);
+  });
+
+  test('a conversation that starts with one is named by the first prompt after it', () => {
+    const state = createTranscript();
+    seedConversation(state, { messages: [prompt(CONTINUE_DIRECTIVE, 1), said('Carrying on.'), prompt('and tests', 2)], title: null, model: null, thinkingLevel: null });
+    assert.equal(conversationName(state), 'and tests');
+  });
+
+  test('rewinding to a prompt before it still finds omp’s entry, which counts it among the user messages', () => {
+    const state = createTranscript();
+    seedConversation(state, { messages: conversation, title: null, model: null, thinkingLevel: null });
+    const first = state.items.find((i) => i.kind === 'user');
+    const point = first && rewindPoint(state.items, first.key);
+    assert.ok(point);
+    const listed = [
+      { entryId: 'e1', text: 'fix the login bug' },
+      { entryId: 'e2', text: CONTINUE_DIRECTIVE },
+    ];
+    assert.equal(branchEntry(listed, point), 'e1');
   });
 });
 

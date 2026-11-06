@@ -4,7 +4,7 @@ import { parseDecisions, placeReviews, turnToReview } from '../src/omp/decisions
 /** @import { Item } from '../src/omp/transcript.js' */
 
 /** @param {string} key @param {string} text @param {number | null} at @param {boolean} [byAgent] @returns {Item} */
-const prompt = (key, text, at, byAgent = false) => ({ key, rev: 0, kind: 'user', text, images: 0, byAgent, at });
+const prompt = (key, text, at, byAgent = false) => ({ key, rev: 0, kind: 'user', text, images: 0, byAgent, continues: false, at });
 /** @param {string} key @param {string} text @returns {Item} */
 const reply = (key, text) => ({ key, rev: 0, kind: 'assistant', blocks: [{ kind: 'text', text }], stopReason: 'stop', errorMessage: null, model: null, ended: true, at: null });
 const noTools = new Map();

@@ -121,7 +121,9 @@ What runs today:
   and lists home's folders while empty or `~/`; Tab completes and opens a folder on its
   own folders, arrows move, Enter picks the folder the arrows moved to, else starts omp
   in the folder typed, Esc closes;
-  a relative directory is found from home), chat with it from its
+  a relative directory is found from home; under it, the directories of the latest
+  conversations, awake or not, archived ones aside (at most five, most recently active first,
+  `src/omp/recent-dirs.js`), each start omp there with one click), chat with it from its
   structured event stream (streamed replies with Markdown, tables, TeX math as
   MathML, `mermaid` diagrams and `vega-lite` charts drawn once their fence closes
   (`src/omp/visuals.js`: kept as SVG by source, live on hover; Vega's loader reads
@@ -136,8 +138,12 @@ What runs today:
   idle, before the prompt cache expired"), with the summary. Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
-  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New**, **Fork**,
+  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New**, **Forks**,
   **Accounts** and **Stop** sit in the window's title bar (`ctx.headActions`).
+  Before them, **↑** and **↓** (⌘↑ / ⌘↓, Ctrl elsewhere, anywhere in the window, the message box
+  too) put the agent's previous or next response (as *Only prompts and responses* counts them)
+  at the top of the transcript, else its very top or its bottom, which follows new output again
+  (`src/omp/response-nav.js`).
   **New** starts another one there, in the same directory unless the setup
   screen's Directory is changed, while the one shown before carries on. The
   toolbar keeps to one line (the directory gives way first). **Accounts** opens
@@ -153,13 +159,21 @@ What runs today:
   generates one while the agent works; untitled ones show their first prompt. A slash command's one-line output (such as that rename's) is a quiet
   note; output of several lines shows open. omp's info notices (such as the tools it
   mounted) fold into a dim line naming their source, as the messages omp does not display
-  do; its warnings and errors show. **Fork** continues
-  a copy of a pane's conversation in a new pane, as a session of its own (omp's
-  `--fork`: a new journal, the original runs on untouched); it stays off until
-  omp has saved the conversation, which a new session does once the model has
-  replied. Dragging **Send** onto the grid does the same, placed where it is
-  dropped, and sends the message there instead (the box empties once the fork is
-  placed; a click still sends here). The message box starts one line high, set like
+  do; its warnings and errors show. A fork continues a copy of a conversation as a
+  session of its own (omp's `--fork`: a new journal, the original runs on untouched),
+  started by the daemon (`daemon/forks.js`) once omp has saved the conversation (a new
+  session does once the model has replied). `/fork <prompt>` (the workbench's own command,
+  never sent to omp) starts one in the background with that prompt, no window of its own;
+  dragging **Send** onto the grid starts one in a new window placed where it is dropped, with
+  the message in the box (the box empties once the fork is placed; a click still sends here).
+  Forking while the agent works copies the conversation as of its last completed response.
+  A fork is named by its first prompt, not its source's title (which omp copies): the daemon
+  asks omp's small model for a title (`daemon/fork-title.js`; the prompt's first line until
+  it answers, or if it does not) and renames the fork with it. **Forks** lists the
+  conversation it was forked from and its own forks, with a count of the latter: a click
+  shows one beside the window (or points at the window already showing it) and reads it, as
+  showing one from Sessions does; a drag places it. Windows of related conversations on one screen get the same colour in their top bars
+  (`ctx.setFamily`, `src/omp/fork-family.js`). The message box starts one line high, set like
   Notes text, and grows with the prompt; a plain click anywhere else in the pane
   (not on a control, in a dialog omp asked for, or ending a text selection) puts the caret
   at its end without scrolling, as in a terminal (`src/ui/click-focus.js`); Tab indents by two spaces as in a code
@@ -172,7 +186,12 @@ What runs today:
   reloads; a line starting with `!` runs
   as a shell command in the session's directory, at once even mid-turn, and while
   the draft is one the box turns into a shell line (accent-coloured, `$ shell · <dir>`,
-  Run instead of Send, the cards shown as waiting for the next prompt). While a
+  Run instead of Send, the cards shown as waiting for the next prompt). A message of just
+  `.` (no comment cards or files) continues silently, as in omp's own editor: the pane sends
+  omp's continue directive instead (`src/omp/message.js`; a steer while a turn runs), and
+  since omp's RPC cannot send it hidden, every view recognises it by its text and shows no
+  prompt for it (transcript, live or from a journal, Up's history, the conversation's name,
+  Rewind, Sessions' first prompt, count and search), a queued one as `. (continue)`. While a
   turn runs, the toolbar shows how far the agent is through its todo list (tasks
   done of tasks, the current one on hover), read from omp's `todo` results; work
   without a list shows none. A Running line above the message box lists the shells
@@ -180,7 +199,8 @@ What runs today:
   calls the turn waits on, and the background jobs omp handed them off to (a
   result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Markdown table in a reply has a Copy button (on
-  hover) for Markdown, CSV or a PNG image drawn from its cells. Selected
+  hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
+  (not its language label), pinned to its corner while long lines scroll. Selected
   reply text can be commented on (the comment goes quoted with the next prompt)
   or asked about (omp's `btw` answers in the popup, outside the chat, where
   follow-up questions continue the same topic, one at a time; every question asks
@@ -263,7 +283,7 @@ What runs today:
   window to one directory, together with its search, sort and Archived toggle; like
   those, the choice is the window's own. An untitled session is listed by its first
   prompt. Row actions show on hover or focus. A fork is listed as a
-  session of its own, under the title it copied from its source. **Archive** moves a
+  session of its own, under the title its first prompt gave it (until then, the one it copied from its source). **Archive** moves a
   session's journal and its folder out of omp's sessions into
   `~/.cockpit/archive/sessions/` at the same relative path, so neither the list nor omp's
   own resume offers it; the **Archived** toggle lists archived sessions (searchable and
@@ -510,6 +530,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/layout/snap.js` — Magnetic sash behaviour: detents pull the sash onto aligned positions, then minimum sizes clamp the result.
 - `src/main.js` — Bootstrap: starts the app and shows a visible error if it cannot.
 - `src/omp/activity.js` — Which omp events make a session "unread": the agent's final response, when it hands the turn back to the user, or a question it stops to ask them.
+- `src/omp/code-copy.js` — A fenced code block as rendered Markdown shows it, with a Copy button in its top-right corner that copies the code itself (the fence's contents, not its language label).
 - `src/omp/cold.js` — When an agent window dims: its conversation has been quiet past the point at which idle compaction (daemon/idle-compaction.js) compacts a long one, 54 minutes after the last model request, so its prompt cache is about to expire and the next message reads the conversation in full.
 - `src/omp/composer.js` — The agent pane's message box: a draft that starts one line high and grows with its text up to half the pane, cards for what goes with the next message (comments on quoted transcript text, files), and the Send button.
 - `src/omp/decisions.js` — Decisions an agent took without its user: what of a turn the reviewer reads, what it is asked and how its answer becomes at most five one-sentence decisions, and where each review shows in the transcript, kept free of the DOM and of I/O so they can be tested (the daemon runs the reviewer: daemon/decisions.js).
@@ -519,12 +540,15 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/event-log.js` — What of a session's events a later window still needs, so the daemon's log and a page's buffers stay about as long as the conversation instead of growing with every token streamed: a message's deltas go once `message_end` carries it whole, a tool's progress once `tool_execution_end` carries its result, and a session's events once it has ended (windows then read the conversation from its journal), bar the event saying how it ended.
 - `src/omp/file-mention.js` — Paths typed in the agent pane, as `@` file mentions in its draft or plainly in its Directory field: the path being typed at the caret, the folder entries that match it, and the text that completes it, kept free of the DOM so they can be tested.
 - `src/omp/file-suggest.js` — Path suggestions in the agent pane's text boxes (`@` file mentions in its draft, its dialogs' answers and its comments and questions on reply text; its Directory field): while the caret ends a path, the suggestion list shows the matching entries of the folder it names, and Tab, Enter or a click completes the path (see `file-mention.js`).
+- `src/omp/fork-family.js` — Reads the daemon's fork registry (daemon/forks.js: each fork's omp id → the conversation it was forked from, and its title) for one conversation: what it was forked from and its own forks, which the agent pane's Forks menu lists, and the family it belongs to, which colours the windows of related conversations alike.
 - `src/omp/items-view.js` — DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes, unrecognised frames), and for a turn's decision review, built from text nodes only.
 - `src/omp/markdown-dom.js` — Renders the safe markdown tree from `markdown.js` as DOM nodes (text nodes only, never HTML).
 - `src/omp/markdown.js` — Safe markdown subset for agent text: parses into a small block/inline tree, never HTML.
-- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, and side questions about a quote.
+- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), and side questions about a quote.
 - `src/omp/pr-suggest.js` — Pull request suggestions in the agent pane's message box: while the caret ends a `#` mention and the conversation's directory is in a GitHub repository, the suggestion list shows the pull requests it names, each with its title, and Tab, Enter or a click completes it as GitHub writes it (see `github/pr-mention.js`).
 - `src/omp/prompt-history.js` — Up and Down in the agent pane's message box step through what was sent in its conversation, as omp's own editor and a shell do: the user's prompts and `!` commands, newest first.
+- `src/omp/recent-dirs.js` — The directories an agent window's setup screen offers to start in: those of the user's conversations, most recently active first, so the few repositories they work in are a click away instead of typed again; kept free of the DOM so they can be tested.
+- `src/omp/response-nav.js` — Where an agent pane's previous/next response buttons (⌘↑ / ⌘↓) scroll its transcript: the arithmetic, kept apart from the DOM.
 - `src/omp/rewind.js` — Rewinding an omp conversation to one of the user's prompts, as omp's `/branch` does: what the rewind sets aside, and which of omp's entries the prompt is.
 - `src/omp/running-work.js` — What an agent has running now, for the agent window's Running line and the Sessions list: the shells and subagents its turn is waiting on, and its background jobs (omp/transcript.js `jobs`), which go on after their tool call has returned, even once the turn has ended.
 - `src/omp/selection-popup.js` — Actions on highlighted transcript text: select part of a reply and Comment and Ask buttons appear at the end of the selection.
@@ -575,6 +599,8 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/decisions.js` — Decision reviews: once the user turns them on in Config, every turn an agent hands back is read by a small model, which lists the decisions the agent took without its user (at most five, a sentence each; src/omp/decisions.js), so none goes by unnoticed.
 - `daemon/deliver.js` — Sends a message to a conversation from outside its agent window (the pull request window's review, a Bugbot review): as a prompt to the session holding it, woken from its journal first if it is asleep, as the agent window itself would (`omp --resume`).
 - `daemon/files.js` — Folder listings for path suggestions (the agent pane's `@` file mentions, its Directory field): each entry's name and whether it is a folder (a link to one counts), capped so a huge folder cannot flood the page; how a typed path is read; and the text files the file window shows (src/files/file-refs.js), capped too, and saves when edited.
+- `daemon/fork-title.js` — A fork's own title: omp copies the title of the conversation it forks, and its title model names a conversation from its opening request, so left to omp a fork keeps its source's name and two windows read the same.
+- `daemon/forks.js` — Forks: conversations the workbench started from a copy of another (omp's `--fork`), which one each came from, and their own titles.
 - `daemon/frame-decoder.js` — Decodes omp's stdout: newline-delimited JSON frames, with protocol-v2 `rpc_chunk` sequences reassembled into the one frame they carry.
 - `daemon/github.js` — GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the pull requests of a repository, the repositories of a directory's repository's owner (for `#` mentions of another one), one pull request to review (its conversation, line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
 - `daemon/guard.js` — Loopback guard: decides which requests may reach the daemon (CLAUDE.md, Invariants).
@@ -618,6 +644,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

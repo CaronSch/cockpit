@@ -5,7 +5,8 @@
  * omp keeps one journal per session at `<sessions>/<project>/<timestamp>_<id>.jsonl`; folders
  * beside them hold subagent sessions and artifacts, which are not conversations of their own.
  * A journal starts with a `title` line omp rewrites in place, then a `session` header
- * (`id`, `timestamp`, `cwd`); user prompts are `message` lines with role `user`, and the agent's
+ * (`id`, `timestamp`, `cwd`); user prompts are `message` lines with role `user`, less omp's
+ * continue directive (a `.` sent from an agent window, src/omp/message.js), and the agent's
  * replies those with role `assistant` (their text only: thinking and tool calls are left out,
  * as tool output is, being most of a journal and little of what a conversation was about). Summaries are
  * cached by path, size and mtime, so a refresh only re-reads journals that changed.
@@ -26,6 +27,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { conversationOf } from './conversation.js';
 import { indexText, rank } from './search.js';
+import { isContinueDirective } from '../src/omp/message.js';
 /** @import { Conversation, PastSession } from './wire.js' */
 
 const PREVIEW_CHARS = 280;
@@ -81,7 +83,7 @@ async function summarise(file, info) {
     else if (entry?.type === 'session' && header === null) header = entry;
     else if (entry?.type === 'message' && entry.message?.role === 'user' && entry.message.attribution !== 'agent') {
       const text = textOf(entry.message.content).trim();
-      if (!text) continue;
+      if (!text || isContinueDirective(text)) continue;
       prompts.push(text);
     } else if (entry?.type === 'message' && entry.message?.role === 'assistant') {
       const text = textOf(entry.message.content).trim();

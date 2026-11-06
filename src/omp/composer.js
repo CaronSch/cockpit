@@ -314,12 +314,13 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
     },
     /**
      * What Send would send now, without sending it: the draft alone (`withCards` false, for
-     * commands) or with every card whose file is stored. `take()` empties the composer of
-     * exactly that (the draft only if it is unchanged); `restore()` puts it back if the
-     * message was refused, unless something new has been written meanwhile.
-     * @param {{ withCards: boolean }} options
+     * commands) or with every card whose file is stored; `draft` replaces the draft's text in
+     * it (`/fork <prompt>` sends the prompt). `take()` empties the composer of exactly that (the
+     * draft only if it is unchanged); `restore()` puts it back if the message was refused, unless
+     * something new has been written meanwhile.
+     * @param {{ withCards: boolean, draft?: (text: string) => string }} options
      */
-    compose({ withCards }) {
+    compose({ withCards, draft: sending = (text) => text }) {
       const text = draft.value;
       const taken = withCards ? items.filter((c) => c.kind !== 'file' || c.path !== null) : [];
       /** @type {QuoteComment[]} */
@@ -331,7 +332,7 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
         else if (card.path) files.push(card.path);
       }
       return {
-        message: withCards ? composeMessage(text, comments, files) : text.trim(),
+        message: withCards ? composeMessage(sending(text), comments, files) : sending(text).trim(),
         take() {
           if (draft.value === text) draft.value = '';
           items = items.filter((c) => !taken.includes(c));

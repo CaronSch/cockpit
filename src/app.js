@@ -34,6 +34,15 @@ import { WIDGETS, newWidgetLeaf } from './widgets/registry.js';
 const LAYOUT_OPTIONS = Object.freeze({ gap: 6, minWidth: 180, minHeight: 120 });
 const STACK_BREAKPOINT = 640;
 const STACK_ROW_HEIGHT = 260;
+/** How many colours related windows' top bars are drawn in (`--color-family-1` … in tokens.css). */
+const FAMILY_COLOURS = 6;
+
+/** A family's name as a number, so its colour stays the same wherever it shows. @param {string} name */
+function familyHash(name) {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + /** @type {number} */ (char.codePointAt(0))) >>> 0;
+  return hash;
+}
 
 /**
  * @template {Element} [T=HTMLElement]
@@ -181,6 +190,12 @@ export async function createApp(root) {
         outlines.set(leaf.id, ids);
         drawOutlines();
       },
+      setFamily(/** @type {string | null} */ family) {
+        if ((families.get(leaf.id) ?? null) === family) return;
+        if (family) families.set(leaf.id, family);
+        else families.delete(leaf.id);
+        drawFamilies();
+      },
     };
 
     /** @type {{ destroy(): void, paramsChanged?(): void }} */
@@ -210,6 +225,8 @@ export async function createApp(root) {
         instance.destroy?.();
         outlines.delete(leaf.id);
         drawOutlines();
+        families.delete(leaf.id);
+        drawFamilies();
       },
     };
   }
@@ -223,9 +240,40 @@ export async function createApp(root) {
     }
   }
 
+  /** The family each window's conversation belongs to (`ctx.setFamily`), by window id. @type {Map<string, string>} */
+  const families = new Map();
+  /**
+   * Colours the top bars of windows whose conversations are related (forked from one another)
+   * alike, one colour per family shown in two or more windows of this screen; a family's colour
+   * follows from its name, and two families on screen never share one.
+   */
+  function drawFamilies() {
+    /** @type {Map<string, number>} */
+    const count = new Map();
+    for (const family of families.values()) count.set(family, (count.get(family) ?? 0) + 1);
+    /** @type {Map<string, number>} */
+    const colourOf = new Map();
+    for (const family of [...count.keys()].filter((f) => /** @type {number} */ (count.get(f)) > 1).sort()) {
+      let colour = familyHash(family) % FAMILY_COLOURS;
+      for (let tries = 0; tries < FAMILY_COLOURS && [...colourOf.values()].includes(colour); tries++) colour = (colour + 1) % FAMILY_COLOURS;
+      colourOf.set(family, colour);
+    }
+    for (const node of gridEl.querySelectorAll('.widget')) {
+      const frameEl = /** @type {HTMLElement} */ (node);
+      const colour = colourOf.get(families.get(frameEl.dataset.id ?? '') ?? '');
+      if (colour === undefined) delete frameEl.dataset.family;
+      else frameEl.dataset.family = String(colour + 1);
+    }
+  }
+
   const renderer = createGridRenderer(gridEl, { mountWidget, prefersReducedMotion: () => reducedMotion.matches });
   // A window mounted after an outline was asked for (the layout redrawn) gets it too.
-  layoutAtom.subscribe(() => requestAnimationFrame(drawOutlines));
+  layoutAtom.subscribe(() =>
+    requestAnimationFrame(() => {
+      drawOutlines();
+      drawFamilies();
+    }),
+  );
 
   const isStacked = () => bounds.w > 0 && bounds.w < STACK_BREAKPOINT;
 

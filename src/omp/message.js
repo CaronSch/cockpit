@@ -1,7 +1,7 @@
 /**
  * Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted
- * parts of earlier replies, the draft, then files), `!` shell commands, and side questions
- * about a quote.
+ * parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a
+ * prompt for a new fork of the conversation), and side questions about a quote.
  *
  * A comment goes first as a Markdown quote of the text it is about, followed by the comment,
  * the way a reply quotes an email; the model and the transcript both read it naturally.
@@ -9,9 +9,38 @@
  * starts a turn (images to the model, text inline); a steer keeps the path, which the model
  * can open itself. A side question quotes its text the same way, for omp's `btw`, and asks
  * for a short answer.
+ *
+ * A message of just `.` continues the conversation silently, as in omp's own editor: the pane
+ * sends omp's continue directive in its place, which tells the agent to carry on with what it
+ * was doing, and no view shows it as a prompt (transcript.js flags it). The module is free of
+ * the DOM, so the daemon reads the directive from here too.
  */
 
 /** A comment on a quoted part of the transcript. @typedef {{ quote: string, comment: string }} QuoteComment */
+
+/**
+ * omp's continue directive, verbatim (`prompts/system/manual-continue.md`), which its editor
+ * sends as a hidden message for a bare `.`. omp's RPC mode cannot send it hidden, so it lands
+ * in the conversation as a user message, recognised by its text (`isContinueDirective`).
+ */
+export const CONTINUE_DIRECTIVE = `<system-notice>
+Continue.
+
+MUST resume most recent intent; complete unfinished work.
+If interrupted mid-step: resume where stopped.
+NEVER pause to summarize progress, re-confirm plan, or ask whether to proceed; continue.
+</system-notice>
+`;
+
+/** Whether a user message is the continue directive, however omp trimmed it. @param {string} text */
+export const isContinueDirective = (text) => text.trim() === CONTINUE_DIRECTIVE.trim();
+
+/**
+ * What goes to omp for a composed message: the continue directive for a bare `.` (no comments
+ * or files, which would have added to the text), else the message as composed.
+ * @param {string} message what `composeMessage` returned
+ */
+export const outgoingPrompt = (message) => (message === '.' ? CONTINUE_DIRECTIVE : message);
 
 /** Every line of `text` as a Markdown quote. @param {string} text */
 export const asQuote = (text) =>
@@ -37,6 +66,17 @@ export function composeMessage(draft, comments, files = []) {
 
 /** Commands (`/model`, `!ls`) go to omp as typed; comments and files wait for the next prompt. @param {string} draft */
 export const isCommand = (draft) => /^[/!]/.test(draft.trim());
+
+/**
+ * The prompt a `/fork <prompt>` draft gives a new fork of the conversation ('' for a bare
+ * `/fork`), or null when the draft is not one. The workbench's own command, never sent to omp
+ * (whose `/fork` is its terminal UI's).
+ * @param {string} draft
+ */
+export function forkPrompt(draft) {
+  const match = /^\/fork(?:\s+([\s\S]*))?$/.exec(draft.trim());
+  return match ? (match[1] ?? '').trim() : null;
+}
 
 /**
  * The shell command a `!cmd` draft runs ('' for a bare `!`), or null when the draft is not one.

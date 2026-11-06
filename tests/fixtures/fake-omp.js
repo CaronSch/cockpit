@@ -4,6 +4,8 @@
  * JSONL protocol with frame shapes recorded from omp 18.12.3, and answers prompts by keyword.
  *
  * - default: streams "You said: <prompt>" (assistant message_start arrives pre-filled, as omp's does)
+ * - omp's continue directive (src/omp/message.js): replies "Carrying on where I left off."
+ *   without reading it for the keywords below (it says "ask", "interrupted" and "notice")
  * - run in a folder whose name has "slow-start": takes 1.5 s to come up
  * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
@@ -55,13 +57,16 @@
  * With `-p` it is the decision reviewer instead (daemon/decisions.js): it answers the message
  * (its last argument, the turn) and exits, as `omp -p` does. A turn containing "decide" gets
  * two decisions, one with a list mark the daemon takes off; one containing "reviewer fails"
- * fails as a provider error would; any other, NONE.
+ * fails as a provider error would; any other, NONE. Asked to title a fork (daemon/fork-title.js's
+ * system prompt), it answers `"Forked: <the fork's first prompt>".` (quoted and closed, as a
+ * model might), or fails for a prompt containing "untitled".
  */
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { isContinueDirective } from '../../src/omp/message.js';
 
 /** Shaped like a real omp reply: a heading, a table too wide for a narrow pane, then long list lines. */
 const WIDE_TABLE_REPLY = [
@@ -85,6 +90,12 @@ if (args.includes('--version')) {
 }
 if (args.includes('-p')) {
   const turn = args.at(-1) ?? '';
+  if (args[args.indexOf('--system-prompt') + 1]?.startsWith('You title a fork')) {
+    const prompt = turn.split('First message in the fork:\n')[1] ?? '';
+    if (prompt.includes('untitled')) process.exit(1);
+    console.log(`"Forked: ${prompt.split('\n')[0]}".`);
+    process.exit(0);
+  }
   if (turn.includes('reviewer fails')) {
     process.stderr.write('Warning: MCP server "x" failed to connect\nError: 529 overloaded\n');
     process.exit(1);
@@ -284,6 +295,10 @@ async function runPrompt(id, text) {
   const userId = record(user);
   out({ type: 'message_start', message: user, messageId: userId });
   out({ type: 'message_end', message: user, messageId: userId });
+  if (isContinueDirective(text)) {
+    streamAssistant('Carrying on where I left off.');
+    return endTurn(id, firstMessage, 'completed');
+  }
   if (/mystery/.test(text)) out({ type: 'mystery_frame', payload: 42 });
   if (/notice/.test(text)) {
     out({ type: 'notice', level: 'info', message: 'xd://: github (12 tools); linear (8 tools)', source: 'xdev' });
@@ -322,10 +337,15 @@ async function runPrompt(id, text) {
   } else {
     streamAssistant(`You said: **${text}**\n\n- one\n- two`, /think/.test(text) ? 'Weighing what to say.' : null, undefined, /long/.test(text) ? longUsage : usage);
   }
+  endTurn(id, firstMessage, /interrupt/.test(text) ? 'aborted' : 'completed');
+}
+
+/** @param {string | undefined} id @param {number} firstMessage @param {'completed' | 'aborted'} status */
+function endTurn(id, firstMessage, status) {
   out({ type: 'turn_end', message: messages.at(-1), toolResults: [] });
   out({ type: 'extension_ui_request', id: `ui-${Date.now()}-w`, method: 'setWidget', widgetKey: 'autoresearch' }); // omp clears it every turn
   out({ type: 'agent_end', messages: messages.slice(firstMessage), isTerminal: true, yielded: true });
-  out({ type: 'prompt_result', id, agentInvoked: true, status: /interrupt/.test(text) ? 'aborted' : 'completed', sessionSettled: true });
+  out({ type: 'prompt_result', id, agentInvoked: true, status, sessionSettled: true });
   out({ type: 'session_settled' });
 }
 

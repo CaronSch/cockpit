@@ -9,9 +9,10 @@
  * `gh` on PATH (https://cli.github.com; without it, pull requests are not offered). `--cwd` is the
  * directory a new agent window suggests, the home directory unless given.
  * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_GH, COCKPIT_CWD, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
- * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), settings.json,
- * bugbot.json (the Bugbot reviews watched for), decisions/ (each conversation's decision reviews), scratchpads/,
- * attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
+ * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), forks.json
+ * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), decisions/
+ * (each conversation's decision reviews), fork-sources/ (journals forked mid-turn, cut to their last response, while
+ * their fork starts), scratchpads/, attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
  * COCKPIT_IDLE_COMPACT_MIN_TOKENS (from what size idle compaction applies, see
@@ -36,6 +37,8 @@ import { createWorkspaces } from './workspace.js';
 import { loadToken } from './token.js';
 import { loadUnread } from './unread.js';
 import { loadPins } from './pins.js';
+import { createForker, loadForks } from './forks.js';
+import { nameFork } from './fork-title.js';
 import { loadSettings } from './settings.js';
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -72,6 +75,7 @@ const unreadable = (err) => {
 };
 const unread = await loadUnread({ file: join(stateDir, 'unread.json') }).catch(unreadable);
 const pins = await loadPins({ file: join(stateDir, 'pins.json') }).catch(unreadable);
+const forks = await loadForks({ file: join(stateDir, 'forks.json') }).catch(unreadable);
 const settings = await loadSettings({ file: join(stateDir, 'settings.json') }).catch(unreadable);
 const history = createHistory({ root: ompSessions, archive: join(stateDir, 'archive', 'sessions') });
 const sleepAfter = Number(process.env.COCKPIT_SLEEP_AFTER_MS);
@@ -98,8 +102,11 @@ const hub = createHub({
     void history.archive(file).catch((err) => {
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     }),
+  // A rewound conversation goes on under a new id: its forks are still its forks.
+  onRewoundId: (from, to) => void forks.moved(from, to),
   onTurnEnded: decisions.turnEnded,
 });
+const forker = createForker({ hub, forks, scratchDir: join(stateDir, 'fork-sources'), nameFork: (prompt, sourceTitle) => nameFork(prompt, sourceTitle, { ompPath }) });
 const delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
 const bugbotPoll = Number(process.env.COCKPIT_BUGBOT_POLL_MS);
 const github = createGithub({ ghPath });
@@ -121,6 +128,8 @@ try {
     workspaces: createWorkspaces({ dir: join(stateDir, 'workspaces') }),
     unread,
     pins,
+    forks,
+    forker,
     decisions,
     settings,
     github,

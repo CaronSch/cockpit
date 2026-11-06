@@ -28,6 +28,14 @@
   /* Inline code in agent replies: soft periwinkle, about 8:1 on --color-bg. */
   --color-code: oklch(76% 0.11 265);
   --color-selection: color-mix(in oklch, var(--color-code) 30%, transparent);
+  /* Related windows (an agent conversation and its forks, app.js): one colour per family on
+     screen, in hues clear of the accent, unread, danger and code colours. */
+  --color-family-1: oklch(76% 0.14 145);
+  --color-family-2: oklch(76% 0.12 185);
+  --color-family-3: oklch(72% 0.15 300);
+  --color-family-4: oklch(74% 0.16 335);
+  --color-family-5: oklch(82% 0.15 110);
+  --color-family-6: oklch(72% 0.13 355);
 
   /* Type: one monospace face for everything, chrome and conversation alike; hierarchy
      comes from size, weight and colour. `--text-sm` is reading text: the omp transcript,

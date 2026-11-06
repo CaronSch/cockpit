@@ -1,6 +1,6 @@
 import { test, describe, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 import { createHistory } from '../daemon/history.js';
@@ -14,6 +14,8 @@ import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
 import { loadSettings } from '../daemon/settings.js';
 import { loadPins } from '../daemon/pins.js';
+import { createForker, loadForks } from '../daemon/forks.js';
+import { nameFork } from '../daemon/fork-title.js';
 import { createGithub } from '../daemon/github.js';
 import { createDelivery } from '../daemon/deliver.js';
 import { loadBugbot } from '../daemon/bugbot.js';
@@ -36,6 +38,10 @@ let unread;
 let settings;
 /** @type {import('../daemon/pins.js').PinsStore} */
 let pins;
+/** @type {import('../daemon/forks.js').ForksStore} */
+let forks;
+/** @type {import('../daemon/forks.js').Forker} */
+let forker;
 /** @type {import('../daemon/github.js').Github} */
 let github;
 /** @type {import('../daemon/deliver.js').Delivery} */
@@ -156,19 +162,21 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
   unread = await loadUnread({ file: join(cwd, 'state', 'unread.json') });
   settings = await loadSettings({ file: join(cwd, 'state', 'settings.json') });
   pins = await loadPins({ file: join(cwd, 'state', 'pins.json') });
+  forks = await loadForks({ file: join(cwd, 'state', 'forks.json') });
   decisions = createDecisionReviews({
     dir: join(cwd, 'state', 'decisions'),
     on: () => settings.all().decisionReview,
     ask: (turn) => askReviewer(turn, { ompPath: FAKE_OMP }),
   });
-  hub = createHub({ ompPath: FAKE_OMP, unread, onTurnEnded: decisions.turnEnded });
+  hub = createHub({ ompPath: FAKE_OMP, unread, onRewoundId: (from, to) => void forks.moved(from, to), onTurnEnded: decisions.turnEnded });
+  forker = createForker({ hub, forks, scratchDir: join(cwd, 'state', 'fork-sources'), nameFork: (prompt, title) => nameFork(prompt, title, { ompPath: FAKE_OMP }) });
   const history = createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') });
   github = createGithub({ ghPath: FAKE_GH });
   delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
@@ -177,6 +185,8 @@ beforeAll(async () => {
     hub,
     unread,
     pins,
+    forks,
+    forker,
     decisions,
     settings,
     history,
@@ -634,13 +644,102 @@ describe('sessions', () => {
     assert.deepEqual(sentAfterPrompt(await turn(id, 'fix the login bug')), ['fix the login bug', 'get_state', 'get_state']);
   });
 
-  test('a fork is named again by its first prompt, though it has its parent’s name; once', async () => {
-    const journal = join(cwd, 'titled-parent.jsonl');
-    await Bun.write(journal, `${JSON.stringify({ type: 'title', v: 1, title: 'Earlier work' })}\n`);
+  /** A journal holding `messages` (user and assistant texts, alternating), under omp id `id` and `title`. @param {string} name @param {string} id @param {string | null} title @param {string[]} [messages] */
+  async function journalOf(name, id, title, messages = []) {
+    const file = join(cwd, `${name}.jsonl`);
+    const lines = [
+      ...(title ? [{ type: 'title', v: 1, title }] : []),
+      { type: 'session', version: 3, id, timestamp: '2026-10-01T10:00:00.000Z', cwd },
+      ...messages.map((text, i) => ({ type: 'message', message: { role: i % 2 ? 'assistant' : 'user', content: [{ type: 'text', text }], ...(i % 2 ? { stopReason: 'stop' } : {}) } })),
+    ];
+    await Bun.write(file, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`);
+    return file;
+  }
+
+  /** Resolves once the daemon has sent session `id` the prompt `message`. @param {string} id @param {string} message */
+  const sentTo = (id, message) => logged((e) => e.session === id && e.kind === 'sent' && e.command.type === 'prompt' && e.command.message === message);
+
+  test('a fork is named by its own first prompt, not its source’s title; once', async () => {
+    const journal = await journalOf('titled-parent', 'titled-parent', 'Earlier work');
     const id = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, fork: journal } })).json.session.id;
     await waitForStatus(id, 'ready');
-    assert.deepEqual(sentAfterPrompt(await turn(id, 'try the other approach')), ['try the other approach', '/rename', 'get_state', 'get_state']);
-    assert.equal(sentAfterPrompt(await turn(id, 'and test it')).filter((m) => m === '/rename').length, 1, 'asked once');
+    await turn(id, 'try the other approach');
+    await sentTo(id, '/rename Forked: try the other approach');
+    const log = await turn(id, 'and test it');
+    assert.deepEqual(
+      sentAfterPrompt(log).filter((m) => m.startsWith('/rename')),
+      ['/rename Forked: try the other approach'],
+      'the title model’s words, without its quotes and full stop; never omp’s own title, which reads the source’s opening request',
+    );
+    assert.equal((await rpc(id, { type: 'get_state' })).data.sessionName, 'Forked: try the other approach');
+  });
+
+  test('a fork of an untitled conversation is not titled by omp (from its source’s opening), and without the title model, by its first prompt’s first line', async () => {
+    const journal = await journalOf('untitled-parent', 'untitled-parent', null);
+    const id = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, fork: journal } })).json.session.id;
+    await waitForStatus(id, 'ready');
+    await turn(id, 'keep it untitled\nand then more');
+    await sentTo(id, '/rename keep it untitled');
+    const log = await turn(id, 'and test it');
+    assert.deepEqual(sentAfterPrompt(log).filter((m) => m.startsWith('/rename')), ['/rename keep it untitled']);
+  });
+
+  test('a fork given a prompt gets it once ready, and is known as a fork of its source', async () => {
+    const journal = await journalOf('prompted-parent', 'prompted-parent', 'Login work', ['fix the login bug', 'fixed it']);
+    const { status, json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd, fork: journal, prompt: 'go another way' } });
+    assert.equal(status, 201);
+    const id = json.session.id;
+    const ready = await waitForStatus(id, 'ready');
+    await sentTo(id, 'go another way');
+    const forkId = String(ready.ompId);
+    assert.deepEqual(forks.all()[forkId], { parent: 'prompted-parent', title: 'go another way' }, 'titled by its prompt until the model has');
+    await sentTo(id, '/rename Forked: go another way');
+    assert.deepEqual(forks.all()[forkId], { parent: 'prompted-parent', title: 'Forked: go another way' });
+    await rpc(id, { type: 'prompt', message: '/rename Kept by hand' });
+    await logged((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'session_info_update' && e.frame.title === 'Kept by hand');
+    assert.equal(forks.all()[forkId].title, 'Kept by hand', 'renamed by the user: listed so');
+    const refused = await call({ method: 'POST', path: '/api/sessions', body: { cwd, prompt: 'no fork to send it to' } });
+    assert.equal(refused.status, 400, 'a prompt goes with a fork only');
+  });
+
+  test('a conversation forked while its agent works is copied as of its last completed response', async () => {
+    const parent = (await call({ method: 'POST', path: '/api/sessions', body: { cwd } })).json.session.id;
+    await waitForStatus(parent, 'ready');
+    await turn(parent, 'first question');
+    const from = hub.latest();
+    void rpc(parent, { type: 'prompt', message: 'slow, then answer' });
+    // Mid-turn: the prompt and an intermediate reply (asking for a tool) are in the journal.
+    await logged((e) => e.seq > from && e.session === parent && e.kind === 'frame' && e.frame.type === 'message_end' && e.frame.message?.stopReason === 'toolUse');
+    const file = String(hub.get(parent)?.meta().sessionFile);
+    assert.match(await Bun.file(file).text(), /slow, then answer/);
+
+    const id = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, fork: file } })).json.session.id;
+    const ready = await waitForStatus(id, 'ready');
+    const copied = /** @type {any[]} */ ((await rpc(id, { type: 'get_messages' })).data.messages);
+    assert.deepEqual(copied.map((m) => m.role), ['user', 'assistant'], 'the first turn only: the turn under way stays with the source');
+    assert.equal(copied[0].content[0].text, 'first question');
+    assert.equal(copied[1].stopReason, 'stop');
+    assert.equal(forks.all()[String(ready.ompId)].parent, hub.get(parent)?.meta().ompId);
+    await logged((e) => e.seq > from && e.session === parent && e.kind === 'frame' && e.frame.type === 'agent_end');
+    assert.match(await Bun.file(file).text(), /You said: \**slow, then answer/, 'the source’s turn goes on');
+    assert.deepEqual(await readdir(join(cwd, 'state', 'fork-sources')), [], 'the cut copy is gone once the fork is up');
+  });
+
+  test('a rewound conversation keeps its forks under its new id', async () => {
+    const parent = (await call({ method: 'POST', path: '/api/sessions', body: { cwd } })).json.session.id;
+    await waitForStatus(parent, 'ready');
+    await turn(parent, 'first question');
+    await turn(parent, 'second question');
+    const before = String(hub.get(parent)?.meta().ompId);
+    const fork = (await call({ method: 'POST', path: '/api/sessions', body: { cwd, fork: String(hub.get(parent)?.meta().sessionFile) } })).json.session.id;
+    const forkId = String((await waitForStatus(fork, 'ready')).ompId);
+    assert.equal(forks.all()[forkId].parent, before);
+
+    const listed = /** @type {any} */ (await rpc(parent, { type: 'get_branch_messages' })).data.messages;
+    await rpc(parent, { type: 'branch', entryId: listed[1].entryId });
+    const moved = await logged((e) => e.session === parent && e.kind === 'session' && e.meta.ompId !== null && e.meta.ompId !== before);
+    const after = moved.kind === 'session' ? moved.meta.ompId : null;
+    assert.equal(forks.all()[forkId].parent, after);
   });
 
   test('a missing omp binary fails the session with the reason instead of hanging', async () => {
@@ -720,6 +819,8 @@ describe('unread conversations', () => {
       hub: nextHub,
       unread: marks,
       pins,
+      forks,
+      forker: createForker({ hub: nextHub, forks, scratchDir: join(cwd, 'state', 'fork-sources'), nameFork: async () => 'unused' }),
       decisions,
       settings,
       history: createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') }),

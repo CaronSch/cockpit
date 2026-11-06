@@ -18,6 +18,7 @@
 import temml from 'temml';
 import { el } from '../ui/dom.js';
 import { parseMarkdown } from './markdown.js';
+import { renderCode } from './code-copy.js';
 import { tableCopy } from './table-copy.js';
 import { renderVisual } from './visuals.js';
 import { pullOfUrl, splitRefs } from '../github/pr-refs.js';
@@ -76,13 +77,8 @@ function renderBlock(block, options) {
       return withInline(el('p'), block.children, options);
     case 'heading':
       return withInline(el(/** @type {'h3' | 'h4' | 'h5' | 'h6'} */ (`h${Math.min(6, block.level + 2)}`), 'md-heading'), block.children, options);
-    case 'code': {
-      const pre = el('pre', 'md-code');
-      const code = el('code', undefined, block.text);
-      if (block.lang) pre.dataset.lang = block.lang;
-      pre.append(code);
-      return pre;
-    }
+    case 'code':
+      return renderCode(block.text, block.lang);
     case 'table':
       return renderTable(block, options);
     case 'visual':

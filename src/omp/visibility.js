@@ -76,8 +76,12 @@ export function promptsAndResponses(items, streaming) {
 /** Notes that belong to the conversation, not to the work: see the module comment. */
 const NOTE_SOURCES = new Set(['files', 'prompt', 'command']);
 
-/** @param {AssistantItem} item */
-const isResponse = (item) => item.ended && item.stopReason !== 'toolUse';
+/**
+ * Whether an assistant message is a response (see the module comment): the pane's
+ * previous/next response buttons step through the same ones (omp/response-nav.js).
+ * @param {AssistantItem} item
+ */
+export const isResponse = (item) => item.ended && item.stopReason !== 'toolUse';
 
 /**
  * Narration, or a message still streaming, with text to show.

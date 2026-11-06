@@ -17,7 +17,9 @@
  *
  * A rewind (`branch`) moves a session onto a new journal holding the conversation up to the
  * rewind; the one before keeps the path that was set aside. `onRewound` hears of that one
- * once the session reports its new journal, so it can be put away (archived: restorable).
+ * once the session reports its new journal, so it can be put away (archived: restorable), and
+ * `onRewoundId` of the conversation's new id once omp reports it (what is kept under the old one
+ * moves to it).
  */
 import { randomBytes } from 'node:crypto';
 import { daemonNow } from './clock.js';
@@ -44,6 +46,7 @@ import { applyEvent, createTranscript, handsTurnBack } from '../src/omp/transcri
  *   wrote(file: string): boolean,
  *   seen(id: string): void,
  *   idle(id: string): boolean,
+ *   working(id: string): boolean,
  *   since(seq: number): SessionEvent[],
  *   latest(): number,
  *   subscribe(fn: (event: SessionEvent) => void): () => void,
@@ -58,12 +61,12 @@ const SWEEP_MS = 30_000;
  * @param {{
  *   ompPath: string, unread: Pick<UnreadStore, 'awaited'>, now?: () => number, launch?: typeof launchOmp,
  *   sleepAfterMs?: number, idleCompaction?: IdleCompactionOptions & { on(): boolean } | null, onRewound?: (file: string) => void,
- *   onTurnEnded?: (transcript: Transcript) => void,
+ *   onRewoundId?: (from: string, to: string) => void, onTurnEnded?: (transcript: Transcript) => void,
  * }} options `idleCompaction`: compacts while `on()` (the user's setting); none when null.
  *   `onTurnEnded` hears each time a session's agent hands its turn back, with the session as its events tell it.
  * @returns {Hub}
  */
-export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onTurnEnded = () => {} }) {
+export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {} }) {
   const bootId = randomBytes(6).toString('hex');
   /** @type {SessionEvent[]} */
   let log = [];
@@ -72,9 +75,9 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
   const sessions = new Map();
   /**
    * How each session is doing (read from its events, as windows read them), when it last did
-   * anything or was used, when it compacts while idle, and the journal it left in a rewind
-   * until it reports its new one.
-   * @type {Map<string, { transcript: Transcript, usedAt: number, compaction: IdleCompaction, rewoundFrom?: string | null }>}
+   * anything or was used, when it compacts while idle, and the journal and id it left in a
+   * rewind until it reports its new ones.
+   * @type {Map<string, { transcript: Transcript, usedAt: number, compaction: IdleCompaction, rewoundFrom?: string | null, rewoundId?: string | null }>}
    */
   const activity = new Map();
   /** @type {Set<(event: SessionEvent) => void>} */
@@ -91,10 +94,18 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       applyEvent(seen.transcript, event);
       if (idleCompaction) followIdleCompaction(seen.compaction, event, idleCompaction);
       seen.usedAt = event.at;
-      if (event.kind === 'frame' && event.frame.type === 'response' && event.frame.command === 'branch' && event.frame.success) seen.rewoundFrom = file;
-      else if (event.kind === 'session' && seen.rewoundFrom && event.meta.sessionFile !== seen.rewoundFrom) {
-        onRewound(seen.rewoundFrom);
-        seen.rewoundFrom = null;
+      if (event.kind === 'frame' && event.frame.type === 'response' && event.frame.command === 'branch' && event.frame.success) {
+        seen.rewoundFrom = file;
+        seen.rewoundId = seen.transcript.meta?.ompId ?? null;
+      } else if (event.kind === 'session') {
+        if (seen.rewoundFrom && event.meta.sessionFile !== seen.rewoundFrom) {
+          onRewound(seen.rewoundFrom);
+          seen.rewoundFrom = null;
+        }
+        if (seen.rewoundId && event.meta.ompId && event.meta.ompId !== seen.rewoundId) {
+          onRewoundId(seen.rewoundId, event.meta.ompId);
+          seen.rewoundId = null;
+        }
       }
       if (event.kind === 'frame' && event.frame.type === 'agent_end' && handsTurnBack(event.frame)) onTurnEnded(seen.transcript);
       // A session that ended has nothing left to follow.
@@ -151,6 +162,8 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       const seen = activity.get(id);
       return Boolean(session && seen && idleNow(session, seen.transcript));
     },
+    // Its agent is on a turn now.
+    working: (id) => activity.get(id)?.transcript.streaming === true,
     since: (seq) => log.filter((event) => event.seq > seq),
     latest: () => latest,
     subscribe(fn) {

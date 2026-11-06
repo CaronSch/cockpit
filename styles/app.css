@@ -597,6 +597,20 @@ button {
   user-select: none;
 }
 
+/* Windows of related conversations (a conversation and its forks) shown together: their top
+   bars striped and tinted in the family's colour (app.js drawFamilies). */
+.widget[data-family='1'] { --family: var(--color-family-1); }
+.widget[data-family='2'] { --family: var(--color-family-2); }
+.widget[data-family='3'] { --family: var(--color-family-3); }
+.widget[data-family='4'] { --family: var(--color-family-4); }
+.widget[data-family='5'] { --family: var(--color-family-5); }
+.widget[data-family='6'] { --family: var(--color-family-6); }
+
+.widget[data-family] .widget-head {
+  background: color-mix(in oklch, var(--family) 12%, transparent);
+  box-shadow: inset 0 3px 0 var(--family);
+}
+
 .widget-actions {
   flex: none;
   display: flex;

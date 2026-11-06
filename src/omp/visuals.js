@@ -14,6 +14,7 @@
  * drawing that fails shows its source, with the reason.
  */
 import { el } from '../ui/dom.js';
+import { renderCode } from './code-copy.js';
 /** @import { VisualLang } from './markdown.js' */
 
 /** Each library's build, as the daemon serves it (ui-files.js), and the global it sets. */
@@ -185,9 +186,7 @@ export function renderVisual(lang, source) {
       if (lang === 'vega-lite') box.addEventListener('pointerenter', () => void goLive(box, source), { once: true });
     },
     (/** @type {unknown} */ err) => {
-      const pre = el('pre', 'md-code', source);
-      pre.dataset.lang = lang;
-      box.replaceWith(pre, el('p', 'md-visual-error', `Could not draw this ${lang === 'mermaid' ? 'diagram' : 'chart'}: ${err instanceof Error ? err.message : String(err)}`));
+      box.replaceWith(renderCode(source, lang), el('p', 'md-visual-error', `Could not draw this ${lang === 'mermaid' ? 'diagram' : 'chart'}: ${err instanceof Error ? err.message : String(err)}`));
     },
   );
   return box;

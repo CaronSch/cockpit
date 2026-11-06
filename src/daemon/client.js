@@ -6,7 +6,7 @@
  * one that was open all along. When the daemon restarts, its sessions are gone: buffers are cleared and
  * `onReset` listeners fire before any event from the new daemon is delivered.
  *
- * It keeps which conversations are unread (daemon/unread.js) and pinned (daemon/pins.js), the daemon's settings
+ * It keeps which conversations are unread (daemon/unread.js), pinned (daemon/pins.js) and forked from which (daemon/forks.js), the daemon's settings
  * (daemon/settings.js) and its Bugbot watches (daemon/bugbot.js), as the daemon last said: every window reads them here, so all of
  * them, and every page, agree. So are the decision reviews (daemon/decisions.js) of the conversations windows show,
  * asked for when a window first shows one, and again after a reconnect.
@@ -24,6 +24,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
+/** @import { Forks } from '../../daemon/forks.js' */
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @import { Reviews } from '../omp/decisions.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
@@ -60,6 +61,8 @@ export class DaemonError extends Error {
  *   isPinned(ompId: string | null): boolean,
  *   onPins(fn: () => void): () => void,
  *   pin(ompId: string, pinned: boolean): Promise<void>,
+ *   forks(): Forks,
+ *   onForks(fn: () => void): () => void,
  *   decisions(ompId: string | null): Reviews | null,
  *   onDecisions(fn: () => void): () => void,
  *   settings(): DaemonSettings | null,
@@ -79,7 +82,7 @@ export class DaemonError extends Error {
  *   workspace(name: string): Promise<Workspace>,
  *   saveScreen(workspace: string, id: string, tree: Tree, base: number | null, options?: { keepalive?: boolean }): Promise<ScreenSave>,
  *   config(): Promise<DaemonConfig>,
- *   createSession(options: { cwd: string, resume?: string, fork?: string }): Promise<SessionMeta>,
+ *   createSession(options: { cwd: string, resume?: string, fork?: string, prompt?: string }): Promise<SessionMeta>,
  *   seen(session: string): Promise<void>,
  *   end(session: string): Promise<void>,
  *   rpc(session: string, command: Record<string, unknown>): Promise<RpcResponse>,
@@ -153,6 +156,15 @@ export function createDaemonClient(env = {}) {
     pinned = new Set(ids);
     for (const fn of pinsListeners) fn();
   };
+  /** @type {Forks} */
+  let forks = {};
+  /** @type {Set<() => void>} */
+  const forksListeners = new Set();
+  /** @param {Forks} next */
+  const setForks = (next) => {
+    forks = next;
+    for (const fn of forksListeners) fn();
+  };
   /** Null until the daemon first says. @type {DaemonSettings | null} */
   let settings = null;
   /** @type {Set<() => void>} */
@@ -223,6 +235,7 @@ export function createDaemonClient(env = {}) {
     sessionsChanged();
     setUnread(hello.unread);
     setPins(hello.pinned);
+    setForks(hello.forks);
     setSettings(hello.settings);
     setWatches(hello.bugbot);
     // Changes made while this page was away were not heard: ask again.
@@ -243,6 +256,7 @@ export function createDaemonClient(env = {}) {
     }
     if (event.kind === 'unread') return setUnread(event.unread);
     if (event.kind === 'pins') return setPins(event.pinned);
+    if (event.kind === 'forks') return setForks(event.forks);
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'bugbot') return setWatches(event.watches);
     if (event.kind === 'decisions') {
@@ -420,6 +434,12 @@ export function createDaemonClient(env = {}) {
     async pin(ompId, on) {
       await request(`/api/pins/${encodeURIComponent(ompId)}`, { method: on ? 'PUT' : 'DELETE' });
     },
+    /** Which conversation each fork came from, by omp id (daemon/forks.js). */
+    forks: () => forks,
+    onForks(fn) {
+      forksListeners.add(fn);
+      return () => forksListeners.delete(fn);
+    },
     /** Conversation `ompId`'s decision reviews; null until the daemon has said (asking it, if no one has). */
     decisions(ompId) {
       if (ompId === null) return null;
@@ -503,8 +523,8 @@ export function createDaemonClient(env = {}) {
       });
       return config;
     },
-    async createSession({ cwd, resume, fork }) {
-      const body = await request('/api/sessions', { method: 'POST', body: JSON.stringify({ cwd, resume, fork }) });
+    async createSession({ cwd, resume, fork, prompt }) {
+      const body = await request('/api/sessions', { method: 'POST', body: JSON.stringify({ cwd, resume, fork, prompt }) });
       // The stream may have told of the session already, and newer: its answer is the oldest news.
       if (!metas.has(body.session.id)) {
         metas.set(body.session.id, body.session);

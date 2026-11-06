@@ -13,6 +13,7 @@
  */
 import { json } from '../ui/format.js';
 import { todoPhases } from './todos.js';
+import { isContinueDirective } from './message.js';
 /** @import { SessionEvent, SessionMeta } from '../../daemon/wire.js' */
 /** @import { TodoPhase } from './todos.js' */
 
@@ -45,8 +46,12 @@ import { todoPhases } from './todos.js';
 /** @typedef {'info' | 'warning' | 'error' | 'muted'} NoteLevel */
 
 /**
+ * `byAgent` marks a user message the user did not write (another agent's, omp's nudges);
+ * `continues` marks omp's continue directive (a `.` sent from the box, message.js), which is
+ * `byAgent` too and never shown. It stays an item, as omp lists it among the user messages
+ * (rewind.js counts them).
  * @typedef {{ key: string, rev: number }} ItemBase
- * @typedef {ItemBase & { kind: 'user', text: string, images: number, byAgent: boolean, at: number | null }} UserItem
+ * @typedef {ItemBase & { kind: 'user', text: string, images: number, byAgent: boolean, continues: boolean, at: number | null }} UserItem
  * @typedef {ItemBase & {
  *   kind: 'assistant', blocks: Block[], stopReason: string | null, errorMessage: string | null,
  *   model: string | null, ended: boolean, at: number | null,
@@ -675,11 +680,12 @@ function applyMessage(state, message, key, final, at = null) {
       return touch(item);
     }
     case 'user': {
-      const item = upsert(state, key, () => ({ kind: 'user', text: '', images: 0, byAgent: false, at: null }));
+      const item = upsert(state, key, () => ({ kind: 'user', text: '', images: 0, byAgent: false, continues: false, at: null }));
       if (item.kind !== 'user') return unrecognised(state, 'user (id clash)', message);
       item.text = contentText(message.content);
       item.images = Array.isArray(message.content) ? message.content.filter((/** @type {any} */ c) => c?.type === 'image').length : 0;
-      item.byAgent = message.attribution === 'agent' || message.synthetic === true;
+      item.continues = isContinueDirective(item.text);
+      item.byAgent = message.attribution === 'agent' || message.synthetic === true || item.continues;
       // When omp took the prompt (its `timestamp`), the same live and in the journal: what names it.
       item.at = typeof message.timestamp === 'number' ? message.timestamp : null;
       return touch(item);
@@ -981,7 +987,7 @@ function slashCommand(c) {
 }
 
 /** Text of a message `content` (a string or content blocks). @param {unknown} content @returns {string} */
-function contentText(content) {
+export function contentText(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content

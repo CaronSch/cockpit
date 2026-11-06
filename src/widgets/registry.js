@@ -32,6 +32,9 @@ import file from './file.js';
  * `ctx.screen` tells which windows this screen has (with their settings), which one of each
  * type `showWidget` would use, and which one the pointer is over (else the focused one);
  * `ctx.outline(ids)` outlines those windows, until it is called again (with `[]` to stop).
+ * `ctx.setFamily(name)` says which family of related things the window shows (an agent
+ * window: the conversation its forks came from); windows of one family shown together get the
+ * same colour in their top bar. Null: none.
  */
 /** @import { Leaf, LeafParams } from '../layout/grid-model.js' */
 /** @import { DragEndResult } from '../interaction/drag-controller.js' */
@@ -55,6 +58,7 @@ import file from './file.js';
  *   readonly headActions: HTMLElement,
  *   readonly screen: Pick<Atom<ScreenWindows>, 'get' | 'subscribe'>,
  *   outline(ids: readonly string[]): void,
+ *   setFamily(family: string | null): void,
  * }} WidgetContext
  */
 /**
