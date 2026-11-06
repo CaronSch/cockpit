@@ -22,18 +22,7 @@ export function tableCopy(block, table) {
   const menu = el('div', 'omp-menu md-table-copy-menu');
   menu.popover = 'auto';
   copy.popoverTargetElement = menu;
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let reset;
-  /** @param {string} label @param {string} [title] */
-  const report = (label, title = '') => {
-    copy.textContent = label;
-    copy.title = title;
-    clearTimeout(reset);
-    reset = setTimeout(() => {
-      copy.textContent = 'Copy';
-      copy.title = '';
-    }, REPORT_MS);
-  };
+  const report = copyReport(copy);
   /** @type {[string, () => Promise<void>][]} */
   const formats = [
     ['Markdown', async () => navigator.clipboard.writeText(block.source)],
@@ -53,6 +42,25 @@ export function tableCopy(block, table) {
     ),
   );
   return [copy, menu];
+}
+
+/**
+ * Reports a copy on `copy`'s label for a moment: `Copied`, or `Copy failed` with why as its
+ * tooltip, before it reads `Copy` again.
+ * @param {HTMLButtonElement} copy @returns {(label: string, title?: string) => void}
+ */
+export function copyReport(copy) {
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let reset;
+  return (label, title = '') => {
+    copy.textContent = label;
+    copy.title = title;
+    clearTimeout(reset);
+    reset = setTimeout(() => {
+      copy.textContent = 'Copy';
+      copy.title = '';
+    }, REPORT_MS);
+  };
 }
 
 /** @typedef {{ font: string, color: string, background: string }} CellLook */

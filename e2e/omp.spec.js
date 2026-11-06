@@ -312,6 +312,37 @@ test('a markdown table copies as Markdown, as CSV, and as a PNG image of the tab
   expect(Math.abs(image.height / (2 * box.height) - 1)).toBeLessThan(0.35);
 });
 
+test('a code block in a reply copies its code, not its language label, from a button that stays in its corner', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openWorkbench(page);
+  await page.setViewportSize({ width: 480, height: 800 });
+  const pane = await startedPane(page);
+  const code = ['SELECT id, name', `FROM builds WHERE note = '${'a long note that runs past the pane '.repeat(4).trim()}';`].join('\n');
+  await send(pane, ['say: Run this:', '```sql', code, '```'].join('\n'));
+  const block = pane.locator('.omp-assistant').last().locator('.md-code-block');
+  const pre = block.locator('pre[data-lang="sql"]');
+  const copy = block.locator('.md-code-copy');
+  await expect(pre).toContainText('SELECT id, name');
+
+  // Scrolled to the end of its longest line, the code moves under the button, which stays put.
+  const scrolled = await pre.evaluate((node) => {
+    node.scrollLeft = node.scrollWidth;
+    return node.scrollLeft;
+  });
+  expect(scrolled, 'the long line scrolls the code sideways').toBeGreaterThan(0);
+  await pre.hover();
+  await expect(copy).toHaveCSS('opacity', '1');
+  const [corner, button] = [await block.boundingBox(), await copy.boundingBox()];
+  if (!corner || !button) throw new Error('no code block or no Copy button');
+  expect(corner.x + corner.width - (button.x + button.width), 'at the right edge').toBeLessThan(8);
+  expect(button.y - corner.y, 'at the top').toBeLessThan(8);
+
+  await copy.click();
+  await expect(copy).toHaveText('Copied');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(code);
+  await expect(copy).toHaveText('Copy');
+});
+
 test('the message box is set like scratchpad text and starts one line high, placeholder and all', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

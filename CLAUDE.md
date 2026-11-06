@@ -180,7 +180,8 @@ What runs today:
   calls the turn waits on, and the background jobs omp handed them off to (a
   result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Markdown table in a reply has a Copy button (on
-  hover) for Markdown, CSV or a PNG image drawn from its cells. Selected
+  hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
+  (not its language label), pinned to its corner while long lines scroll. Selected
   reply text can be commented on (the comment goes quoted with the next prompt)
   or asked about (omp's `btw` answers in the popup, outside the chat, where
   follow-up questions continue the same topic, one at a time; every question asks
@@ -510,6 +511,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/layout/snap.js` — Magnetic sash behaviour: detents pull the sash onto aligned positions, then minimum sizes clamp the result.
 - `src/main.js` — Bootstrap: starts the app and shows a visible error if it cannot.
 - `src/omp/activity.js` — Which omp events make a session "unread": the agent's final response, when it hands the turn back to the user, or a question it stops to ask them.
+- `src/omp/code-copy.js` — A fenced code block as rendered Markdown shows it, with a Copy button in its top-right corner that copies the code itself (the fence's contents, not its language label).
 - `src/omp/cold.js` — When an agent window dims: its conversation has been quiet past the point at which idle compaction (daemon/idle-compaction.js) compacts a long one, 54 minutes after the last model request, so its prompt cache is about to expire and the next message reads the conversation in full.
 - `src/omp/composer.js` — The agent pane's message box: a draft that starts one line high and grows with its text up to half the pane, cards for what goes with the next message (comments on quoted transcript text, files), and the Send button.
 - `src/omp/decisions.js` — Decisions an agent took without its user: what of a turn the reviewer reads, what it is asked and how its answer becomes at most five one-sentence decisions, and where each review shows in the transcript, kept free of the DOM and of I/O so they can be tested (the daemon runs the reviewer: daemon/decisions.js).

@@ -545,7 +545,7 @@
 
 /* Blocks sit a blank line apart, as in a terminal; a heading stays close to what it heads.
    Inside a list item nothing is spaced, so nested lists hang straight under their parent. */
-.omp-md :where(p, ul, ol, blockquote, pre, hr, .md-heading, .md-table-block) {
+.omp-md :where(p, ul, ol, blockquote, pre, hr, .md-heading, .md-table-block, .md-code-block) {
   margin: 0;
 }
 
@@ -609,6 +609,11 @@
   font-size: var(--text-xs);
 }
 
+/* The scrolling `pre` sits inside, so the Copy control stays in the block's top-right corner. */
+.md-code-block {
+  position: relative;
+}
+
 .md-inline-code {
   color: var(--color-code);
   font: inherit;
@@ -633,8 +638,10 @@
   max-width: 100%;
 }
 
-/* Shown while the table is pointed at or focused, or its menu is open; never part of a text selection. */
-.md-table-copy {
+/* Shown while the table or code block is pointed at or focused, or the table's menu is open;
+   never part of a text selection. */
+.md-table-copy,
+.md-code-copy {
   position: absolute;
   top: 3px;
   right: 3px;
@@ -651,11 +658,14 @@
 
 .md-table-block:hover > .md-table-copy,
 .md-table-block:focus-within > .md-table-copy,
+.md-code-block:hover > .md-code-copy,
+.md-code-block:focus-within > .md-code-copy,
 .md-table-copy:has(+ :popover-open) {
   opacity: 1;
 }
 
 .md-table-copy:hover,
+.md-code-copy:hover,
 .md-table-copy:has(+ :popover-open) {
   border-color: var(--color-accent);
   color: var(--color-text);
