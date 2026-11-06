@@ -250,7 +250,8 @@ What runs today:
   browser's own highlight hidden under it. Snapping (`src/ui/word-snap.js`) leaves a
   selection inside one word alone and takes a long token (a path, a URL) by segment.
   Below those, the daemon's own switches, the same for every browser: *Compact idle
-  conversations* (on) and *Review decisions* (off). With the latter on, every turn an agent
+  conversations* (on), *Review decisions* (off) and *I have ADHD* (off). With *Review
+  decisions* on, every turn an agent
   hands back is read by a one-shot omp (`omp -p` on omp's `smol` role, thinking off, no tools
   or session, in a temporary directory), which reads that turn only (its prompts, the agent's
   replies, thinking and tool calls, not tool output; `@` mentions defused so it opens no file)
@@ -259,7 +260,14 @@ What runs today:
   decisions…" while it runs, the reason if it failed, and nothing when there were none. A
   turn is named by its prompt's `timestamp`, the same live and in the journal, and reviews
   are kept per conversation in `~/.cockpit/decisions/` (`daemon/decisions.js`,
-  `src/omp/decisions.js`).
+  `src/omp/decisions.js`). With *I have ADHD* on, every agent's system prompt carries the
+  rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT; its `SKILL.md` and
+  licence vendored in `daemon/i-have-adhd/`, read by `daemon/adhd.js`) after the
+  workbench's own: replies lead with the next action, number steps, end on one next step,
+  keep lists to five and drop preamble and closers. omp fixes a system prompt as it starts,
+  so the hub puts a session started the other way to sleep as soon as it is idle (at once
+  when the switch changes, at the end of the turn if it is working), and the next message
+  wakes it with the rules (or without them).
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
@@ -592,6 +600,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/sessions.js` — omp conversations, one list, searchable and sortable.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
+- `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
 - `daemon/attachments.js` — Files attached to omp prompts: stored where omp can read them, one folder per day, so a prompt can mention them as `@"<path>"` and omp attaches them itself (images to the model, text inlined; see omp's file mentions).
 - `daemon/bugbot.js` — Bugbot reviews asked for from the pull request window: `bugbot go` is commented on the pull request as the user, and the daemon watches it until Cursor Bugbot's review answers (src/github/bugbot.js), then sends the review, every finding with where it is, to the conversation the window reviews for (deliver.js).
 - `daemon/clock.js` — The daemon's clock for the times it stamps on events and unread marks: Date.now, but never the same value twice and never earlier than the last, so any two stamps are ordered, even within one millisecond.
@@ -644,6 +653,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

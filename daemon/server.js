@@ -374,7 +374,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
       '/api/settings': api({
         PUT: async (req) => {
           const patch = await readJson(req);
-          if (!isSettingsPatch(patch)) throw new HttpError(400, 'expected some of { idleCompaction: boolean, decisionReview: boolean }');
+          if (!isSettingsPatch(patch)) throw new HttpError(400, 'expected some of { idleCompaction: boolean, decisionReview: boolean, adhd: boolean }');
           await settings.set(patch);
           return json(settings.all());
         },

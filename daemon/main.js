@@ -29,6 +29,8 @@ import { askReviewer, createDecisionReviews } from './decisions.js';
 import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
 import { createHub } from './hub.js';
+import { withAdhdRules } from './adhd.js';
+import { APPEND_SYSTEM_PROMPT } from './omp-session.js';
 import { IDLE_COMPACT_AFTER_MS, IDLE_COMPACT_MIN_TOKENS, IDLE_COMPACT_TOKENS_FLOOR } from './idle-compaction.js';
 import { createAttachments } from './attachments.js';
 import { createScratchpads } from './scratchpad.js';
@@ -105,7 +107,11 @@ const hub = createHub({
   // A rewound conversation goes on under a new id: its forks are still its forks.
   onRewoundId: (from, to) => void forks.moved(from, to),
   onTurnEnded: decisions.turnEnded,
+  // "I have ADHD" adds its rules to every agent's system prompt.
+  appendSystemPrompt: () => withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd),
 });
+// Switched, the rules reach a conversation as it next wakes: idle ones go to sleep now.
+settings.subscribe(() => hub.promptChanged());
 const forker = createForker({ hub, forks, scratchDir: join(stateDir, 'fork-sources'), nameFork: (prompt, sourceTitle) => nameFork(prompt, sourceTitle, { ompPath }) });
 const delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
 const bugbotPoll = Number(process.env.COCKPIT_BUGBOT_POLL_MS);

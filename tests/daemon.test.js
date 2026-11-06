@@ -21,6 +21,7 @@ import { createDelivery } from '../daemon/deliver.js';
 import { loadBugbot } from '../daemon/bugbot.js';
 import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
 import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
+import { withAdhdRules } from '../daemon/adhd.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -895,11 +896,11 @@ describe('settings', () => {
     const stream = await openStream();
     const changed = await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false } });
     assert.equal(changed.status, 200);
-    assert.deepEqual(changed.json, { idleCompaction: false, decisionReview: false });
+    assert.deepEqual(changed.json, { idleCompaction: false, decisionReview: false, adhd: false });
     const { events } = await stream.until((events) => events.some((e) => e.kind === 'settings'));
-    assert.deepEqual(events[0].kind === 'hello' && events[0].settings, { idleCompaction: true, decisionReview: false });
-    assert.deepEqual(events.find((e) => e.kind === 'settings'), { kind: 'settings', settings: { idleCompaction: false, decisionReview: false } });
-    assert.deepEqual((await loadSettings({ file: join(cwd, 'state', 'settings.json') })).all(), { idleCompaction: false, decisionReview: false });
+    assert.deepEqual(events[0].kind === 'hello' && events[0].settings, { idleCompaction: true, decisionReview: false, adhd: false });
+    assert.deepEqual(events.find((e) => e.kind === 'settings'), { kind: 'settings', settings: { idleCompaction: false, decisionReview: false, adhd: false } });
+    assert.deepEqual((await loadSettings({ file: join(cwd, 'state', 'settings.json') })).all(), { idleCompaction: false, decisionReview: false, adhd: false });
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: true } })).status, 200);
   });
 
@@ -909,7 +910,7 @@ describe('settings', () => {
     }
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, auth: false })).status, 401);
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, origin: false })).status, 403);
-    assert.deepEqual(settings.all(), { idleCompaction: true, decisionReview: false });
+    assert.deepEqual(settings.all(), { idleCompaction: true, decisionReview: false, adhd: false });
   });
 
   test('a settings file the daemon cannot read stops it rather than being replaced', async () => {
@@ -1168,10 +1169,10 @@ describe('sleep', () => {
   /**
    * A hub of the test's own whose sessions sleep after `after` ms, and a way to wait for one
    * of its sessions to reach a status.
-   * @param {number} after
+   * @param {number} after @param {{ appendSystemPrompt?: () => string }} [options]
    */
-  function sleepyHub(after) {
-    const sleepy = createHub({ ompPath: FAKE_OMP, unread, sleepAfterMs: after });
+  function sleepyHub(after, options = {}) {
+    const sleepy = createHub({ ompPath: FAKE_OMP, unread, sleepAfterMs: after, ...options });
     /** @type {SessionEvent[]} */
     const events = [];
     /** @type {Set<() => void>} */
@@ -1225,6 +1226,51 @@ describe('sleep', () => {
     assert.equal(sleepy.get(id)?.meta().status, 'ready', 'awake all through the turn');
     await reaches(id, 'exited');
     assert.ok(events.length > settled);
+    await sleepy.closeAll();
+  });
+
+  /** What session `id` of `of` has appended to omp's system prompt (the fake reports it). @param {import('../daemon/hub.js').Hub} of @param {string} id */
+  const appendedTo = async (of, id) => (await /** @type {import('../daemon/omp-session.js').OmpSession} */ (of.get(id)).command({ type: 'get_state' }).response).data.appendedPrompt;
+
+  test('switching "I have ADHD" puts idle sessions started the other way to sleep; they wake with the rules', async () => {
+    let adhd = false;
+    const { sleepy, reaches } = sleepyHub(60_000, { appendSystemPrompt: () => withAdhdRules(APPEND_SYSTEM_PROMPT, adhd) });
+    const before = sleepy.create({ cwd, resume: null, fork: null }).id;
+    await reaches(before, 'ready');
+    assert.equal(await appendedTo(sleepy, before), APPEND_SYSTEM_PROMPT);
+    sleepy.promptChanged();
+    await Bun.sleep(200);
+    assert.equal(sleepy.get(before)?.meta().status, 'ready', 'nothing changed: still awake');
+
+    adhd = true;
+    sleepy.promptChanged();
+    await reaches(before, 'exited');
+    const after = sleepy.create({ cwd, resume: null, fork: null }).id;
+    await reaches(after, 'ready');
+    const appended = await appendedTo(sleepy, after);
+    assert.ok(appended.startsWith(`${APPEND_SYSTEM_PROMPT}\n\nADHD MODE ACTIVE.`), 'the workbench’s prompt, then the rules');
+    assert.match(appended, /### 1\. Lead with the next action/);
+    assert.doesNotMatch(appended, /disable-model-invocation/, 'without the skill’s frontmatter');
+    sleepy.promptChanged();
+    await Bun.sleep(200);
+    assert.equal(sleepy.get(after)?.meta().status, 'ready', 'started with the rules: stays awake');
+    await sleepy.closeAll();
+  });
+
+  test('a session working when the switch changes finishes its turn, then sleeps', async () => {
+    let adhd = false;
+    const { sleepy, events, next, reaches } = sleepyHub(60_000, { appendSystemPrompt: () => withAdhdRules(APPEND_SYSTEM_PROMPT, adhd) });
+    const id = sleepy.create({ cwd, resume: null, fork: null }).id;
+    await reaches(id, 'ready');
+    sleepy.get(id)?.command({ type: 'prompt', message: 'slow' });
+    await next((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'agent_start');
+    adhd = true;
+    sleepy.promptChanged();
+    await Bun.sleep(300);
+    assert.equal(sleepy.get(id)?.meta().status, 'ready', 'never cut off mid-turn');
+    const exited = await reaches(id, 'exited');
+    const answered = events.findIndex((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'message_end' && e.frame.message?.stopReason === 'stop');
+    assert.ok(answered >= 0 && answered < events.indexOf(exited), 'asleep once the turn has its answer');
     await sleepy.closeAll();
   });
 });

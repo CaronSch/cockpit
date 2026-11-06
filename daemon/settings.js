@@ -12,12 +12,13 @@ const VERSION = 1;
 
 /**
  * `idleCompaction`: compact long conversations left idle (idle-compaction.js); `decisionReview`:
- * after every turn, list the decisions the agent took without its user (decisions.js).
- * @typedef {{ idleCompaction: boolean, decisionReview: boolean }} DaemonSettings
+ * after every turn, list the decisions the agent took without its user (decisions.js); `adhd`:
+ * agents shape their replies for a reader with ADHD (adhd.js).
+ * @typedef {{ idleCompaction: boolean, decisionReview: boolean, adhd: boolean }} DaemonSettings
  */
 
 /** @type {Readonly<DaemonSettings>} */
-const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false });
+const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false });
 
 /**
  * Whether `value` sets some of the settings: known keys only, each with a value of its type.
