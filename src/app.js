@@ -443,6 +443,18 @@ export async function createApp(root) {
     }).root,
   );
 
+  // Until this machine has what agents need (daemon/settings.js `setupDone`), an empty screen
+  // opens Setup: decided once, as the page first hears the daemon's settings.
+  let setupOffered = false;
+  function offerSetup() {
+    const atDaemon = daemon.settings();
+    if (setupOffered || !atDaemon || !opened.ok) return;
+    setupOffered = true;
+    if (!atDaemon.setupDone && !layoutAtom.get()) addWidget('setup');
+  }
+  daemon.onSettings(offerSetup);
+  offerSetup();
+
   schedule();
   return { api };
 }

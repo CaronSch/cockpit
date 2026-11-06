@@ -30,6 +30,7 @@ import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
 import { createHub } from './hub.js';
 import { withAdhdRules } from './adhd.js';
+import { browserEnv } from './browser.js';
 import { APPEND_SYSTEM_PROMPT } from './omp-session.js';
 import { IDLE_COMPACT_AFTER_MS, IDLE_COMPACT_MIN_TOKENS, IDLE_COMPACT_TOKENS_FLOOR } from './idle-compaction.js';
 import { createAttachments } from './attachments.js';
@@ -42,19 +43,9 @@ import { loadPins } from './pins.js';
 import { createForker, loadForks } from './forks.js';
 import { nameFork } from './fork-title.js';
 import { loadSettings } from './settings.js';
+import { createSetup, ompVersion } from './setup.js';
 
 const ROOT = resolve(import.meta.dir, '..');
-const VERSION_TIMEOUT_MS = 10_000;
-
-/** @param {string} ompPath @returns {Promise<string | null>} */
-async function ompVersion(ompPath) {
-  try {
-    const proc = Bun.spawn([ompPath, '--version'], { stderr: 'ignore', timeout: VERSION_TIMEOUT_MS });
-    return (await new Response(proc.stdout).text()).trim() || null;
-  } catch {
-    return null;
-  }
-}
 
 const { values } = parseArgs({ options: { port: { type: 'string' }, omp: { type: 'string' }, gh: { type: 'string' }, cwd: { type: 'string' } } });
 const port = Number(values.port ?? process.env.COCKPIT_PORT ?? 4777);
@@ -107,11 +98,11 @@ const hub = createHub({
   // A rewound conversation goes on under a new id: its forks are still its forks.
   onRewoundId: (from, to) => void forks.moved(from, to),
   onTurnEnded: decisions.turnEnded,
-  // "I have ADHD" adds its rules to every agent's system prompt.
-  appendSystemPrompt: () => withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd),
+  // "I have ADHD" adds its rules to every agent's system prompt; the browser choice, its environment.
+  launchWith: () => ({ appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd), env: browserEnv(settings.all().browser) }),
 });
-// Switched, the rules reach a conversation as it next wakes: idle ones go to sleep now.
-settings.subscribe(() => hub.promptChanged());
+// Switched, a setting reaches a conversation as it next wakes: idle ones go to sleep now.
+settings.subscribe(() => hub.launchChanged());
 const forker = createForker({ hub, forks, scratchDir: join(stateDir, 'fork-sources'), nameFork: (prompt, sourceTitle) => nameFork(prompt, sourceTitle, { ompPath }) });
 const delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
 const bugbotPoll = Number(process.env.COCKPIT_BUGBOT_POLL_MS);
@@ -123,6 +114,7 @@ const bugbot = await loadBugbot({
   pollMs: bugbotPoll > 0 ? bugbotPoll : BUGBOT_POLL_MS,
 }).catch(unreadable);
 const scratchpadDir = join(stateDir, 'scratchpads');
+const setup = createSetup({ ompPath, ghPath });
 /** @type {ReturnType<typeof createDaemonServer>} */
 let server;
 try {
@@ -141,6 +133,7 @@ try {
     github,
     delivery,
     bugbot,
+    setup,
     token,
     root: ROOT,
     port,
@@ -161,7 +154,9 @@ console.log(`Cockpit daemon on http://127.0.0.1:${port}`);
 console.log(`Open: http://cockpit.localhost:${port}/?token=${token}`);
 // Asked after the server is up: starting omp just to read its version takes most of a second.
 ompVersion(ompPath).then((version) =>
-  console.log(version ? `omp: ${version}` : `omp: not found at "${ompPath}" (sessions will fail to start)`),
+  console.log(
+    version ? `omp: ${version}` : `omp: not found at "${ompPath}": install it (https://omp.sh), then follow Setup in the workbench`,
+  ),
 );
 
 let stopping = false;
@@ -169,6 +164,7 @@ async function shutdown() {
   if (stopping) return process.exit(1); // second Ctrl+C: stop waiting
   stopping = true;
   void server.stop(true);
+  setup.login.cancel();
   await hub.closeAll();
   process.exit(0);
 }

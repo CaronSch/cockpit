@@ -21,10 +21,11 @@
  * `onRewoundId` of the conversation's new id once omp reports it (what is kept under the old one
  * moves to it).
  *
- * Each omp starts with what `appendSystemPrompt` says then, which the daemon's settings change
- * (adhd.js) and omp keeps for the life of the process. A session started with another goes to
- * sleep as soon as it is idle (when the settings change, when its turn ends, or at the next
- * sweep), so the next message wakes its conversation with the prompt as it is now.
+ * Each omp starts with what `launchWith` says then: what it appends to its system prompt and what
+ * it adds to its environment, which the daemon's settings change (adhd.js, browser.js) and omp
+ * keeps for the life of the process. A session started otherwise goes to sleep as soon as it is
+ * idle (when the settings change, when its turn ends, or at the next sweep), so the next message
+ * wakes its conversation as an omp launched now would run it.
  */
 import { randomBytes } from 'node:crypto';
 import { daemonNow } from './clock.js';
@@ -37,7 +38,7 @@ import { withoutSpent } from '../src/omp/event-log.js';
 import { applyEvent, createTranscript, handsTurnBack } from '../src/omp/transcript.js';
 /** @import { SessionEvent, SessionMeta } from './wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
-/** @import { OmpSession, SessionEventBody } from './omp-session.js' */
+/** @import { LaunchWith, OmpSession, SessionEventBody } from './omp-session.js' */
 /** @import { IdleCompaction, IdleCompactionOptions } from './idle-compaction.js' */
 /** @import { UnreadStore } from './unread.js' */
 
@@ -56,7 +57,7 @@ import { applyEvent, createTranscript, handsTurnBack } from '../src/omp/transcri
  *   latest(): number,
  *   subscribe(fn: (event: SessionEvent) => void): () => void,
  *   closeAll(): Promise<void>,
- *   promptChanged(): void,
+ *   launchChanged(): void,
  * }} Hub
  */
 
@@ -68,13 +69,13 @@ const SWEEP_MS = 30_000;
  *   ompPath: string, unread: Pick<UnreadStore, 'awaited'>, now?: () => number, launch?: typeof launchOmp,
  *   sleepAfterMs?: number, idleCompaction?: IdleCompactionOptions & { on(): boolean } | null, onRewound?: (file: string) => void,
  *   onRewoundId?: (from: string, to: string) => void, onTurnEnded?: (transcript: Transcript) => void,
- *   appendSystemPrompt?: () => string,
+ *   launchWith?: () => LaunchWith,
  * }} options `idleCompaction`: compacts while `on()` (the user's setting); none when null.
  *   `onTurnEnded` hears each time a session's agent hands its turn back, with the session as its events tell it.
- *   `appendSystemPrompt` is what an omp launched now has appended to its system prompt.
+ *   `launchWith` is how an omp launched now runs.
  * @returns {Hub}
  */
-export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, appendSystemPrompt = () => APPEND_SYSTEM_PROMPT }) {
+export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, launchWith = () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {} }) }) {
   const bootId = randomBytes(6).toString('hex');
   /** @type {SessionEvent[]} */
   let log = [];
@@ -134,17 +135,19 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
   const metas = () => [...sessions.values()].map((s) => s.meta());
   /** Awake with nothing under way. @param {OmpSession} session @param {Transcript} transcript */
   const idleNow = (session, transcript) => sleepsNow({ meta: session.meta(), transcript, usedAt: 0 }, 0, 0);
-  /** What each session's omp has appended to its system prompt, by session. @type {Map<string, string>} */
+  /** How an omp launched with `launch` runs, as one value to compare. @param {LaunchWith} launch */
+  const launchKey = (launch) => JSON.stringify([launch.appendSystemPrompt, Object.entries(launch.env).sort()]);
+  /** How each session's omp was launched (`launchKey`), by session. @type {Map<string, string>} */
   const launchedWith = new Map();
   /**
-   * Puts session `id` to sleep if it is idle and runs with another system prompt than an omp
-   * launched now would: it wakes with this one.
+   * Puts session `id` to sleep if it is idle and runs otherwise than an omp launched now would:
+   * it wakes as that one.
    * @param {string} id
    */
   function sleepIfOutdated(id) {
     const session = sessions.get(id);
     const seen = activity.get(id);
-    if (session && seen && launchedWith.get(id) !== appendSystemPrompt() && idleNow(session, seen.transcript)) void session.close();
+    if (session && seen && launchedWith.get(id) !== launchKey(launchWith()) && idleNow(session, seen.transcript)) void session.close();
   }
   const sweep = setInterval(() => {
     const at = now();
@@ -170,9 +173,9 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       const id = `s_${randomBytes(4).toString('hex')}`;
       // Followed before launching: the launch reports the session's first events at once.
       activity.set(id, { transcript: createTranscript(), usedAt: now(), compaction: createIdleCompaction() });
-      const prompt = appendSystemPrompt();
-      launchedWith.set(id, prompt);
-      const session = launch({ id, cwd, resume, fork, ompPath, now, appendSystemPrompt: prompt, emit: (body) => emit(id, body) });
+      const how = launchWith();
+      launchedWith.set(id, launchKey(how));
+      const session = launch({ id, cwd, resume, fork, ompPath, now, ...how, emit: (body) => emit(id, body) });
       sessions.set(id, session);
       return session.meta();
     },
@@ -204,8 +207,8 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       clearInterval(sweep);
       await Promise.all([...sessions.values()].map((s) => s.close()));
     },
-    // What `appendSystemPrompt` says may have changed: idle sessions started otherwise sleep now.
-    promptChanged() {
+    // What `launchWith` says may have changed: idle sessions started otherwise sleep now.
+    launchChanged() {
       for (const id of sessions.keys()) sleepIfOutdated(id);
     },
   };

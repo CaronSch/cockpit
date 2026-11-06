@@ -17,6 +17,7 @@ as many as you like, side by side.
 | **Notes** | Markdown notes with inline screenshots and files, kept in `~/.cockpit/scratchpads/`. |
 | **Pull request** | A GitHub pull request beside its agent: description, conversation and diff with line comments. Comment on or ask about highlighted parts and send them to the agent as one review; **Bugbot** sends it Cursor Bugbot's findings. The list colours open and draft pull requests and filters by status and author. |
 | **File** | A Markdown, JSON, text or code file with line numbers, opened from a path in a reply (at the line it names); Markdown shows rendered. |
+| **Setup** | What this machine needs before a first agent, checked live: omp, a model provider (sign in through omp's login from the window), the agents' browser, GitHub's CLI, and the daemon's switches. Opens by itself on a machine not set up yet. |
 
 A pane whose agent finished or asks something while you looked away gets a blue
 border, and its session stays unread (in every window, across reloads and daemon
@@ -24,7 +25,7 @@ restarts, after it stops) until you click or type in a window showing it, or sho
 from Sessions; hovering over the window or scrolling it leaves it unread. The marks are kept in `~/.cockpit/unread.json`. Turn
 on **Notify** in the top bar for a desktop notification as well, while you are not looking at
 that session; clicking it shows the session. When the workbench's files change under an open tab, the top bar offers
-**Reload**. **Config** in the top bar (it opens as you point at it) holds the app's switches, kept per browser: *Only prompts and responses* hides the work in between (thinking and tool calls, keeping what the agent says as it works) in every agent window, and *Animated selection* (on) highlights whole words while you drag over a reply, gliding between them as in Google Docs. Below them are the daemon's, the same in every browser: *Compact idle conversations* (on) compacts a long conversation shortly before its prompt cache expires, *Review decisions* (off) has a small model read each turn and list the decisions the agent took without you, under its reply (one cheap model call per turn), and *I have ADHD* (off) has every agent answer by the rules of [i-have-adhd](https://github.com/ayghri/i-have-adhd): the next action first, steps numbered, lists of five at most, one next step to end on, no preamble or closers (a conversation already running takes it up from its next message). **− 100% +** in the top bar sets the text size (the percentage resets it), kept per
+**Reload**. **Config** in the top bar (it opens as you point at it) holds the app's switches, kept per browser: *Only prompts and responses* hides the work in between (thinking and tool calls, keeping what the agent says as it works) in every agent window, and *Animated selection* (on) highlights whole words while you drag over a reply, gliding between them as in Google Docs. Below them are the daemon's, the same in every browser: *Compact idle conversations* (on) compacts a long conversation shortly before its prompt cache expires, *Review decisions* (off) has a small model read each turn and list the decisions the agent took without you, under its reply (one cheap model call per turn), *I have ADHD* (off) has every agent answer by the rules of [i-have-adhd](https://github.com/ayghri/i-have-adhd): the next action first, steps numbered, lists of five at most, one next step to end on, no preamble or closers, and *Agents’ browser* picks where agents open web pages: *A separate browser* (the default: omp's own Chrome for Testing, with a profile of its own, so an agent never takes over the tab you are reading), *Your Chrome* (omp's browser relay, signed in as you) or *As omp is set up* (`~/.omp/agent/config.yml` decides). A conversation already running takes a change up from its next message. **− 100% +** in the top bar sets the text size (the percentage resets it), kept per
 browser. An agent window whose conversation has been quiet for 54 minutes since its last
 request, the point at which idle compaction would compact it (on or off), dims until you use
 it again: its prompt cache is about to expire.
@@ -41,16 +42,9 @@ digits and dashes; the default is `main`). Windows at two different addresses at
 once (say `127.0.0.1` and `localhost`) do not see which screens the other has
 open.
 
-## Install
+## Getting started
 
-You need two programs:
-
-- **omp**, a standalone program installed on its own. It is **not** a
-  dependency of this repo; the daemon runs the `omp` on your `PATH`.
-
-  ```bash
-  curl -fsSL https://omp.sh/install | sh   # or: brew install can1357/tap/omp
-  ```
+### 1. Install the programs
 
 - **[Bun](https://bun.sh)** 1.3.14 or later, which runs the daemon and tests.
 
@@ -58,24 +52,49 @@ You need two programs:
   curl -fsSL https://bun.sh/install | bash
   ```
 
-Pull request windows also need GitHub's **[gh](https://cli.github.com)**, signed in (`gh auth login`);
-without it, everything else works.
+- **omp**, the coding agent every Agent window runs. It is **not** a dependency of this
+  repo; the daemon runs the `omp` on your `PATH`.
 
-## Quick start
+  ```bash
+  curl -fsSL https://omp.sh/install | sh   # or: brew install can1357/tap/omp
+  ```
+
+- Optional: GitHub's **[gh](https://cli.github.com)**, signed in (`gh auth login`), for pull
+  request windows. Without it, everything else works.
+
+### 2. Start the daemon
 
 ```bash
+git clone https://github.com/CaronSch/cockpit && cd cockpit
 bun install   # dev tools and git hooks
 bun start     # daemon on http://cockpit.localhost:4777
 ```
 
-1. Open the URL `bun start` prints **once**. It carries an access token, which
-   the browser keeps as a cookie. Cookies and browser storage belong to one
-   address, so the first visit at a new one (say `cockpit.localhost` after
-   `127.0.0.1`, which still works) needs that printed URL once more.
-2. **＋ Widget → Agent**, pick a directory (folders are suggested as you type, from
-   your home folder; Tab completes), start chatting.
-3. To connect a model provider (Anthropic/Claude, for example), press
-   **Accounts** in the window's title bar (omp's `/login`).
+Open the URL `bun start` prints **once**. It carries an access token, which the browser
+keeps as a cookie. Cookies and browser storage belong to one address, so the first visit at a
+new one (say `cockpit.localhost` after `127.0.0.1`, which still works) needs that printed URL
+once more.
+
+### 3. Follow Setup
+
+On a machine that has not been set up, the first screen opens the **Setup** window. Each step
+says whether it is done; **Check again** after fixing one in a terminal.
+
+1. **omp**: found, and its version; if not, the command to install it.
+2. **A model provider**: agents need one, and omp cannot start a session without one.
+   **Sign in…** runs omp's own `omp login` from the window: pick a provider by number (Claude
+   Pro/Max, ChatGPT, GitHub Copilot…), finish signing in in the browser tab it opens, and answer
+   any code it asks for in the window. Or set an API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`…)
+   in the shell that runs `bun start`, and restart it.
+3. **Agents’ browser**: where agents open web pages (see Config above). The default keeps
+   them out of your own Chrome.
+4. **GitHub** (optional): whether `gh` is signed in.
+5. **Preferences**: the daemon's switches from Config.
+
+Once omp runs with a model, **Start an agent** opens an Agent window: pick a directory (folders
+are suggested as you type, from your home folder; Tab completes) and start chatting. From then on
+new screens start empty; **＋ Widget → Setup** opens it again. Another provider can be added
+later from an agent window's **Accounts** (omp's `/login`).
 
 The daemon listens on loopback only and refuses requests from other sites.
 
@@ -84,7 +103,7 @@ The daemon listens on loopback only and refuses requests from other sites.
 | `--port <n>` / `COCKPIT_PORT` | `4777` |
 | `--omp <path>` / `COCKPIT_OMP` | `omp` on `PATH` |
 | `--cwd <dir>` / `COCKPIT_CWD` (the directory a new agent window suggests) | your home directory |
-| `COCKPIT_STATE_DIR` (token, notes, attachments, workspaces) | `~/.cockpit` |
+| `COCKPIT_STATE_DIR` (token, settings, notes, attachments, workspaces) | `~/.cockpit` |
 | `COCKPIT_OMP_SESSIONS` (omp's session files) | `~/.omp/agent/sessions` |
 
 Pass flags through with `bun start --port 4800 --cwd ~/code/app`.

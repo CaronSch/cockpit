@@ -28,7 +28,14 @@
  *                                      under way included (see `decisions.js`); 404 for an id that is not one
  *   PUT    /api/settings               Partial<DaemonSettings> → DaemonSettings: the daemon's settings
  *                                      changed (see `settings.js`); 400 for anything but known keys
- *                                      with values of their type
+ *                                      with values they may take
+ *   GET    /api/setup                  → SetupStatus: whether omp runs, has a model provider signed
+ *                                      in, and `gh` is signed in (see `setup.js`; takes seconds)
+ *   POST   /api/setup/login            { provider? } → 202 { login: LoginState }: `omp login` started,
+ *                                      for that provider or to pick one; 409 while one runs
+ *   POST   /api/setup/login/input      { line } → 204: the line typed at the login's prompt; 409 when
+ *                                      none runs
+ *   DELETE /api/setup/login            → 204: the running login, if any, ended
  *   GET    /api/sessions               → { sessions: SessionMeta[] }
  *   POST   /api/sessions               { cwd, resume? | fork?, prompt? } → 201 { session: SessionMeta }
  *                                      (`cwd` relative to home, `~/…` or absolute; `resume`
@@ -95,15 +102,17 @@
  * Errors are `{ error: string }` with a 4xx/5xx status. The stream's SSE ids are
  * `<bootId>:<seq>`, so a reconnect resumes after the last event it saw; the first message
  * on every connection is a `hello` carrying the current boot id, the newest event's seq (the
- * events up to it that follow are a replay), session list, unread conversations, forks and UI version. `scratchpad`, `history`, `unread`, `pins`, `forks` and `decisions` events carry no id and are
- * not replayed: a reconnecting page reads GET /api/scratchpads/:id, GET /api/history and GET /api/decisions/:ompId instead,
- * and its `hello` carries the unread conversations, pins and forks.
+ * events up to it that follow are a replay), session list, unread conversations, forks, settings, Bugbot watches, the
+ * Setup window's login and UI version. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
+ * `bugbot` and `login` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
+ * GET /api/history and GET /api/decisions/:ompId instead, and its `hello` carries the rest.
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
 /** @import { Unread } from './unread.js' */
 /** @import { Pinned } from './pins.js' */
 /** @import { Forks } from './forks.js' */
 /** @import { DaemonSettings } from './settings.js' */
+/** @import { LoginState } from './setup.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
 
 /** @typedef {'starting' | 'ready' | 'exited' | 'failed'} SessionStatus */
@@ -184,8 +193,9 @@
  * conversations with news their user has not read: when each became unread, by omp id.
  * `pinned` holds the pinned conversations' omp ids; `forks` every fork: the conversation it
  * came from and its title (see `forks.js`). `settings` are the daemon's (see `settings.js`).
- * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], ui: string }} HelloEvent
+ * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`); `login` the Setup window's
+ * `omp login`, null if none ran since the daemon started (see `setup.js`).
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], login: LoginState | null, ui: string }} HelloEvent
  */
 
 /** A scratchpad's text; `rev` names this exact text (a hash of it). @typedef {{ text: string, rev: string }} Scratchpad */
@@ -206,7 +216,9 @@
 
 /** Sent to every page after a Bugbot watch started or changed, with all of them. @typedef {{ kind: 'bugbot', watches: BugbotWatch[] }} BugbotEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
+/** Sent to every page as the Setup window's `omp login` starts, prints, is answered or ends. @typedef {{ kind: 'login', login: LoginState | null }} LoginEvent */
+
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | LoginEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle
