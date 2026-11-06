@@ -4,6 +4,8 @@
  * JSONL protocol with frame shapes recorded from omp 18.12.3, and answers prompts by keyword.
  *
  * - default: streams "You said: <prompt>" (assistant message_start arrives pre-filled, as omp's does)
+ * - omp's continue directive (src/omp/message.js): replies "Carrying on where I left off."
+ *   without reading it for the keywords below (it says "ask", "interrupted" and "notice")
  * - run in a folder whose name has "slow-start": takes 1.5 s to come up
  * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
@@ -62,6 +64,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { isContinueDirective } from '../../src/omp/message.js';
 
 /** Shaped like a real omp reply: a heading, a table too wide for a narrow pane, then long list lines. */
 const WIDE_TABLE_REPLY = [
@@ -284,6 +287,10 @@ async function runPrompt(id, text) {
   const userId = record(user);
   out({ type: 'message_start', message: user, messageId: userId });
   out({ type: 'message_end', message: user, messageId: userId });
+  if (isContinueDirective(text)) {
+    streamAssistant('Carrying on where I left off.');
+    return endTurn(id, firstMessage, 'completed');
+  }
   if (/mystery/.test(text)) out({ type: 'mystery_frame', payload: 42 });
   if (/notice/.test(text)) {
     out({ type: 'notice', level: 'info', message: 'xd://: github (12 tools); linear (8 tools)', source: 'xdev' });
@@ -322,10 +329,15 @@ async function runPrompt(id, text) {
   } else {
     streamAssistant(`You said: **${text}**\n\n- one\n- two`, /think/.test(text) ? 'Weighing what to say.' : null, undefined, /long/.test(text) ? longUsage : usage);
   }
+  endTurn(id, firstMessage, /interrupt/.test(text) ? 'aborted' : 'completed');
+}
+
+/** @param {string | undefined} id @param {number} firstMessage @param {'completed' | 'aborted'} status */
+function endTurn(id, firstMessage, status) {
   out({ type: 'turn_end', message: messages.at(-1), toolResults: [] });
   out({ type: 'extension_ui_request', id: `ui-${Date.now()}-w`, method: 'setWidget', widgetKey: 'autoresearch' }); // omp clears it every turn
   out({ type: 'agent_end', messages: messages.slice(firstMessage), isTerminal: true, yielded: true });
-  out({ type: 'prompt_result', id, agentInvoked: true, status: /interrupt/.test(text) ? 'aborted' : 'completed', sessionSettled: true });
+  out({ type: 'prompt_result', id, agentInvoked: true, status, sessionSettled: true });
   out({ type: 'session_settled' });
 }
 

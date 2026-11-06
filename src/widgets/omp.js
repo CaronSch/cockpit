@@ -30,7 +30,7 @@ import { addNote, applyEvent, conversationName, createTranscript, needsLogin, se
 import { renderItem, renderReview } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
-import { composeAsk, composeFollowUp, isCommand, shellCommand } from '../omp/message.js';
+import { composeAsk, composeFollowUp, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
@@ -866,13 +866,16 @@ function createPane(body, ctx, daemon) {
       hideSuggestions();
       if (rewindTo && !(await applyRewind(rewindTo))) return taken.restore();
       const shell = shellCommand(text);
+      // A bare `.` goes as omp's continue directive, a steer like any message while a turn
+      // runs: the agent carries on with what it was doing instead of answering a prompt.
+      const message = outgoingPrompt(text);
       /** @type {Record<string, unknown>} */
       const request =
         shell !== null
           ? { type: 'bash', command: shell }
           : state.streaming
-            ? { type: 'prompt', message: text, streamingBehavior: 'steer' }
-            : { type: 'prompt', message: text };
+            ? { type: 'prompt', message, streamingBehavior: 'steer' }
+            : { type: 'prompt', message };
       void rpc(request).then((res) => {
         // Give it all back if omp refused it and nothing new has been written since.
         if ((!res || !res.success) && !leaving) taken.restore();
@@ -885,7 +888,7 @@ function createPane(body, ctx, daemon) {
       if (!res?.success) return;
       /** @type {Array<{ text?: unknown }>} */
       const restored = [...(res.data?.steering ?? []), ...(res.data?.followUp ?? [])];
-      const texts = restored.map((m) => str(m?.text)).filter((t) => t !== null);
+      const texts = restored.map((m) => str(m?.text)).filter((t) => t !== null).map((t) => (isContinueDirective(t) ? '.' : t));
       if (texts.length) {
         composer.setText([...texts, draft.value].filter(Boolean).join('\n\n'));
         draft.focus();
@@ -1216,7 +1219,8 @@ function createPane(body, ctx, daemon) {
         drawnOnlyResponses = onlyResponses;
         clearDrawn();
       }
-      const shown = onlyResponses ? promptsAndResponses(state.items, state.streaming) : { items: state.items, working: null };
+      // omp's continue directive (a `.` sent) is never shown, in either view.
+      const shown = onlyResponses ? promptsAndResponses(state.items, state.streaming) : { items: state.items.filter((i) => i.kind !== 'user' || !i.continues), working: null };
       const live = new Set();
       const itemCtx = { tools: state.tools, open: openDetails };
       /** @type {Array<{ key: string, rev: number | string, render: () => HTMLElement }>} */
@@ -1293,9 +1297,11 @@ function createPane(body, ctx, daemon) {
       /** @param {string} text @param {'steering' | 'followUp'} which */
       const chip = (text, which) => {
         const c = el('span', `omp-chip is-${which}`);
-        c.append(el('span', 'omp-chip-kind', which === 'steering' ? 'steer' : 'next'), el('span', 'omp-chip-text', text));
+        // A queued continue reads as the `.` it was sent as, not omp's directive.
+        const shown = isContinueDirective(text) ? '. (continue)' : text;
+        c.append(el('span', 'omp-chip-kind', which === 'steering' ? 'steer' : 'next'), el('span', 'omp-chip-text', shown));
         const remove = button('omp-chip-remove', '×');
-        remove.setAttribute('aria-label', `Remove queued message: ${text}`);
+        remove.setAttribute('aria-label', `Remove queued message: ${shown}`);
         remove.addEventListener('click', () => void rpc({ type: 'remove_queued_message', message: text, queue: which }));
         c.append(remove);
         return c;

@@ -5,7 +5,7 @@ import { createPromptHistory, sentPrompts } from '../src/omp/prompt-history.js';
 
 let key = 0;
 /** @param {string} text @param {boolean} [byAgent] @returns {Item} */
-const user = (text, byAgent = false) => ({ key: `k${++key}`, rev: 1, kind: 'user', text, images: 0, byAgent, at: null });
+const user = (text, byAgent = false) => ({ key: `k${++key}`, rev: 1, kind: 'user', text, images: 0, byAgent, continues: false, at: null });
 /** @param {string} command @param {'bash' | 'python'} [language] @returns {Item} */
 const shell = (command, language = 'bash') => ({
   key: `k${++key}`,

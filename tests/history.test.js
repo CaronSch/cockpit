@@ -4,6 +4,7 @@ import { appendFile, mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeF
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHistory } from '../daemon/history.js';
+import { CONTINUE_DIRECTIVE } from '../src/omp/message.js';
 
 /** @param {unknown[]} entries */
 const journal = (entries) => `${entries.map((e) => JSON.stringify(e)).join('\n')}\n`;
@@ -69,6 +70,15 @@ describe('session history', () => {
     const [hit] = await history.list('where did we deploy staging?');
     assert.deepEqual(hit.match, { snippet: 'deploy staging', terms: ['deploy', 'stag'] });
     assert.equal((await history.list('')).every((s) => s.match === undefined), true, 'a listing has no matches');
+  });
+
+  test('a `.` sent (omp’s continue directive) is no prompt: not the first, not counted, not searched', async () => {
+    await writeFile(join(root, '-p-beta', '2026-10-04_ddd.jsonl'), journal([header('ddd', '/p/beta'), user(CONTINUE_DIRECTIVE), assistant('carrying on'), user('ship it'), user(CONTINUE_DIRECTIVE)]));
+    const history = createHistory({ root, archive });
+    const d = (await history.list()).find((s) => s.id === 'ddd');
+    assert.equal(d?.firstPrompt, 'ship it');
+    assert.equal(d?.prompts, 1);
+    assert.deepEqual((await history.list('unfinished work resume intent')).map((s) => s.id), []);
   });
 
   test('a journal that grew since the last listing is read again', async () => {
