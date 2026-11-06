@@ -120,6 +120,24 @@
   margin: 0;
 }
 
+/* Recent directories under the field: the strip keeps one button's height while it waits for
+   them (or has none), so the centred form does not move as they arrive. */
+.omp-recent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: calc(1lh + 6px);
+  font-size: var(--text-xs);
+}
+
+.omp-recent-dir {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+
 /* ── Session layout ─────────────────────────────────── */
 .omp-session {
   position: relative;

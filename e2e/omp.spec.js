@@ -527,6 +527,29 @@ test('Enter in the Directory field starts omp in the folder typed, even while it
   await expect(pane.locator('textarea')).toBeVisible();
 });
 
+test('a new agent window offers the directories of recent conversations; a click starts the agent there', async ({ page }) => {
+  const project = mkdtempSync(join(E2E_HOME, 'recent-'));
+  await openWorkbench(page);
+  const first = await startedPane(page, project);
+  await send(first, 'hello');
+  await expect(first.getByText('You said: hello')).toBeVisible();
+
+  const pane = await addOmpPane(page);
+  const field = pane.locator('input');
+  const recent = pane.getByRole('group', { name: 'Recent directories' });
+  const pick = recent.getByRole('button', { name: `~/${basename(project)}` });
+  await expect(pick).toHaveAttribute('title', project);
+  await expect(field, 'the list arrives without taking the focus').toBeFocused();
+  await expect(field).toHaveValue(E2E_HOME);
+
+  const created = page.waitForResponse((r) => r.url().endsWith('/api/sessions') && r.request().method() === 'POST');
+  await pick.click();
+  expect((await (await created).json()).session.cwd).toBe(project);
+  await expect(pane.locator('textarea')).toBeFocused();
+  await expect(pane.getByText('Fake Model')).toBeVisible();
+  await expect(pane.locator('.omp-cwd')).toHaveAttribute('title', project);
+});
+
 test('@ suggests files from the session directory; Tab, arrows, Enter and clicks complete them into mentions', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'ac-e2e-mentions-'));
   const project = join(root, 'proj');
