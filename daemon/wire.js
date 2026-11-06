@@ -30,10 +30,12 @@
  *                                      changed (see `settings.js`); 400 for anything but known keys
  *                                      with values of their type
  *   GET    /api/sessions               → { sessions: SessionMeta[] }
- *   POST   /api/sessions               { cwd, resume? | fork? } → 201 { session: SessionMeta }
+ *   POST   /api/sessions               { cwd, resume? | fork?, prompt? } → 201 { session: SessionMeta }
  *                                      (`cwd` relative to home, `~/…` or absolute; `resume`
  *                                      continues a journal, `fork` starts a new session from a
- *                                      copy of one; either must be an existing file). Resuming
+ *                                      copy of one, as of its last completed response while its
+ *                                      agent is working, and sends it `prompt` once it is ready
+ *                                      (see `forks.js`); either must be an existing file). Resuming
  *                                      a journal a running session writes answers 200 with that
  *                                      session instead: two omps never write one journal; an
  *                                      archived one is refused (409), as it is only to read
@@ -93,13 +95,14 @@
  * Errors are `{ error: string }` with a 4xx/5xx status. The stream's SSE ids are
  * `<bootId>:<seq>`, so a reconnect resumes after the last event it saw; the first message
  * on every connection is a `hello` carrying the current boot id, the newest event's seq (the
- * events up to it that follow are a replay), session list, unread conversations and UI version. `scratchpad`, `history`, `unread` and `decisions` events carry no id and are
+ * events up to it that follow are a replay), session list, unread conversations, forks and UI version. `scratchpad`, `history`, `unread`, `pins`, `forks` and `decisions` events carry no id and are
  * not replayed: a reconnecting page reads GET /api/scratchpads/:id, GET /api/history and GET /api/decisions/:ompId instead,
- * and its `hello` carries the unread conversations.
+ * and its `hello` carries the unread conversations, pins and forks.
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
 /** @import { Unread } from './unread.js' */
 /** @import { Pinned } from './pins.js' */
+/** @import { Forks } from './forks.js' */
 /** @import { DaemonSettings } from './settings.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
 
@@ -179,9 +182,10 @@
  * `ui` is the version of the UI files being served (see `ui-files.js`): a page that loaded
  * other files is running older code than the daemon now serves. `unread` holds the
  * conversations with news their user has not read: when each became unread, by omp id.
- * `pinned` holds the pinned conversations' omp ids. `settings` are the daemon's (see `settings.js`).
+ * `pinned` holds the pinned conversations' omp ids; `forks` every fork: the conversation it
+ * came from and its title (see `forks.js`). `settings` are the daemon's (see `settings.js`).
  * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, settings: DaemonSettings, bugbot: BugbotWatch[], ui: string }} HelloEvent
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], ui: string }} HelloEvent
  */
 
 /** A scratchpad's text; `rev` names this exact text (a hash of it). @typedef {{ text: string, rev: string }} Scratchpad */
@@ -194,13 +198,15 @@
 
 /** Sent to every page after a conversation was pinned or unpinned, with all the pins. @typedef {{ kind: 'pins', pinned: Pinned }} PinsEvent */
 
+/** Sent to every page after a fork was started, titled or moved (a rewind), with every fork. @typedef {{ kind: 'forks', forks: Forks }} ForksEvent */
+
 /** Sent to every page after a conversation's decision reviews changed (one started or ended), with all of them. @typedef {{ kind: 'decisions', ompId: string, reviews: Reviews }} DecisionsEvent */
 
 /** Sent to every page after the daemon's settings changed, with all of them. @typedef {{ kind: 'settings', settings: DaemonSettings }} SettingsEvent */
 
 /** Sent to every page after a Bugbot watch started or changed, with all of them. @typedef {{ kind: 'bugbot', watches: BugbotWatch[] }} BugbotEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | DecisionsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

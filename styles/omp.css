@@ -322,7 +322,7 @@
   box-shadow: var(--shadow-lift);
 }
 
-/* A menu from the window's top bar (Accounts): under its button, at the window's right end. */
+/* A menu from the window's top bar (Forks, PRs, Accounts): under its button, at the window's right end. */
 .omp-head-menu:popover-open {
   position-area: bottom span-left;
   width: auto;
@@ -357,6 +357,13 @@
 
 .omp-menu-item.is-current {
   color: var(--color-accent);
+}
+
+/* Why a menu lists nothing (Forks: how to start one), wrapped rather than widening the menu. */
+.omp-menu-empty {
+  max-width: 32ch;
+  margin: 0;
+  padding: 4px 6px;
 }
 
 .omp-working {

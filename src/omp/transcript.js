@@ -987,7 +987,7 @@ function slashCommand(c) {
 }
 
 /** Text of a message `content` (a string or content blocks). @param {unknown} content @returns {string} */
-function contentText(content) {
+export function contentText(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content

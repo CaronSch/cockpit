@@ -1,7 +1,7 @@
 /**
  * Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted
- * parts of earlier replies, the draft, then files), `!` shell commands, and side questions
- * about a quote.
+ * parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a
+ * prompt for a new fork of the conversation), and side questions about a quote.
  *
  * A comment goes first as a Markdown quote of the text it is about, followed by the comment,
  * the way a reply quotes an email; the model and the transcript both read it naturally.
@@ -66,6 +66,17 @@ export function composeMessage(draft, comments, files = []) {
 
 /** Commands (`/model`, `!ls`) go to omp as typed; comments and files wait for the next prompt. @param {string} draft */
 export const isCommand = (draft) => /^[/!]/.test(draft.trim());
+
+/**
+ * The prompt a `/fork <prompt>` draft gives a new fork of the conversation ('' for a bare
+ * `/fork`), or null when the draft is not one. The workbench's own command, never sent to omp
+ * (whose `/fork` is its terminal UI's).
+ * @param {string} draft
+ */
+export function forkPrompt(draft) {
+  const match = /^\/fork(?:\s+([\s\S]*))?$/.exec(draft.trim());
+  return match ? (match[1] ?? '').trim() : null;
+}
 
 /**
  * The shell command a `!cmd` draft runs ('' for a bare `!`), or null when the draft is not one.

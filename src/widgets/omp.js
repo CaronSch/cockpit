@@ -30,7 +30,7 @@ import { addNote, applyEvent, conversationName, createTranscript, needsLogin, se
 import { renderItem, renderReview } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
-import { composeAsk, composeFollowUp, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
+import { composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
@@ -49,20 +49,22 @@ import { turnProgress } from '../omp/todos.js';
 import { elapsed, runningWork } from '../omp/running-work.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
 import { branchEntry, pointKey, rewindPoint } from '../omp/rewind.js';
-import { conversationKey, isRunning, listConversations } from '../sessions/running.js';
+import { conversationKey, isRunning, listConversations, showConversation } from '../sessions/running.js';
 import { recentDirs } from '../omp/recent-dirs.js';
+import { familyOf, relatives } from '../omp/fork-family.js';
 import { readDraft, writeDraft } from '../omp/drafts.js';
 import { focusOnClick } from '../ui/click-focus.js';
 import { settings } from '../ui/settings.js';
 /** @import { WidgetContext } from './registry.js' */
-/** @import { RpcResponse, SessionEvent } from '../../daemon/wire.js' */
+/** @import { LeafParams } from '../layout/grid-model.js' */
+/** @import { RpcResponse, SessionEvent, SessionMeta } from '../../daemon/wire.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { SlashCommand } from '../omp/transcript.js' */
 
 /**
  * `fork` is a journal to fork into a new conversation as soon as the window is placed (set by
- * another pane's Fork); it is cleared once the fork runs, so it is never taken twice. `prompt`
- * is cleared as it is sent.
+ * another pane's Send, dragged); it is cleared once the fork runs, so it is never taken twice.
+ * `prompt` is the message the fork is sent once it is up (by the daemon), cleared with `fork`.
  * @typedef {{ session: string | null, cwd: string | null, sessionFile: string | null, name: string | null, fork: string | null, prompt: string | null }} OmpParams
  */
 /** @typedef {{ label: string, detail?: string, current?: boolean, pick: () => void, drag?: (event: PointerEvent, close: () => void) => void }} MenuEntry */
@@ -73,9 +75,12 @@ const BOTTOM_SLACK_PX = 24;
 /** ⌘ on Apple's keyboards, Ctrl elsewhere: the modifier of the previous/next response keys. */
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const REFUSED = 'The daemon refused this page.';
-const FORK_TITLE = 'Fork: continue a copy of this conversation in a new window';
+const FORKS_TITLE = 'Forks of this conversation, and the one it was forked from: click one to show it beside this window, or drag it where you want it';
+const NO_FORKS = 'No forks yet. /fork <prompt> starts one in the background; dragging Send onto the grid starts one beside.';
 const NOTHING_TO_FORK = 'Nothing to fork yet: the conversation is saved once the agent has replied';
 const SEND_TITLE = 'Drag onto the grid to send this in a fork of the conversation instead';
+/** The workbench's own command, in the suggestions beside omp's (`/fork` is omp's terminal UI's only). @type {SlashCommand} */
+const FORK_COMMAND = { name: 'fork', aliases: [], hint: '<prompt>', description: 'Fork this conversation in the background and send the fork this prompt (listed under Forks)' };
 
 /**
  * Whether the page is going away: its requests are cut off then, which says nothing of whether
@@ -163,6 +168,8 @@ function createPane(body, ctx, daemon) {
   const offUnread = daemon.onUnread(() => schedule());
   // Decision reviews (daemon/decisions.js) arrive after the turn, for any conversation.
   const offDecisions = daemon.onDecisions(() => schedule());
+  // Forks started or moved (daemon/forks.js): the Forks count, and which windows are related.
+  const offForks = daemon.onForks(() => schedule());
   let pointerInside = false;
   /** The user's last click, keystroke or move of focus was in this window. */
   let inside = false;
@@ -389,7 +396,11 @@ function createPane(body, ctx, daemon) {
     return [form];
   }
 
-  /** Forks `params.fork` right away; on failure offers to retry or start fresh. */
+  /**
+   * Forks `params.fork` right away, with the message dragged off another pane's Send for the
+   * daemon to send once the fork is up (daemon/forks.js); on failure offers to retry or start
+   * fresh (the message then waits in the new conversation's box).
+   */
   function forkScreen() {
     const { fork, cwd } = params();
     const box = el('div', 'omp-center');
@@ -402,11 +413,12 @@ function createPane(body, ctx, daemon) {
       status.className = 'omp-muted';
       status.textContent = 'Forking session…';
       actions.hidden = true;
+      const { prompt } = params();
       daemon
-        .createSession({ cwd: cwd ?? '~', fork })
+        .createSession({ cwd: cwd ?? '~', fork, ...(prompt ? { prompt } : {}) })
         .then((meta) => {
           // A fork's own journal is not known until omp reports it; update() saves it then.
-          ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: meta.sessionFile, fork: null });
+          ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: meta.sessionFile, fork: null, prompt: null });
           schedule();
         })
         .catch((err) => {
@@ -503,7 +515,9 @@ function createPane(body, ctx, daemon) {
     const errorBadge = el('span', 'omp-badge-error', 'error');
     const spacer = el('span', 'omp-spacer');
     const newBtn = toolButton('New', 'Start a new conversation in this window (Sessions keeps this one)');
-    const forkBtn = toolButton('Fork', FORK_TITLE);
+    // The conversation's forks and the one it was forked from; forks start from `/fork <prompt>`
+    // (in the background) or by dragging Send onto the grid (in a new window).
+    const forksBtn = toolButton('Forks', FORKS_TITLE);
     const prsBtn = toolButton('PRs', 'Pull requests of this repository: click one to review it beside this conversation, or drag it where you want it');
     prsBtn.hidden = true; // until GitHub says the directory is in a repository
     // Model providers and accounts omp can use: connect another, or switch.
@@ -517,7 +531,7 @@ function createPane(body, ctx, daemon) {
     const prevBtn = navButton('↑', `Previous response (${navKey}↑)`, () => toResponse('previous'));
     const nextBtn = navButton('↓', `Next response (${navKey}↓)`, () => toResponse('next'));
     // The conversation's own controls go in the window's top bar, for as long as it is shown.
-    ctx.headActions.replaceChildren(prevBtn, nextBtn, newBtn, forkBtn, prsBtn, accountsBtn, stopBtn);
+    ctx.headActions.replaceChildren(prevBtn, nextBtn, newBtn, forksBtn, prsBtn, accountsBtn, stopBtn);
 
     const strip = el('div', 'omp-strip');
     const loginStrip = el('div', 'omp-login');
@@ -838,6 +852,9 @@ function createPane(body, ctx, daemon) {
     }
 
     async function send() {
+      // `/fork <prompt>` is the workbench's: a fork of this conversation, in the background.
+      const forking = forkPrompt(draft.value);
+      if (forking !== null) return forkInBackground(forking);
       // `/command` and `!shell` go as typed; comments and attachments wait for the next prompt.
       const command = isCommand(draft.value);
       // A bare `!` names no command: leave it in the box rather than run nothing.
@@ -882,6 +899,36 @@ function createPane(body, ctx, daemon) {
       });
     }
 
+    /**
+     * `/fork <prompt>`: starts a fork of this conversation that gets `prompt` (with the comment
+     * and file cards) once it is up, without a window of its own; Forks lists it, and a desktop
+     * notification (if on) tells when it is done. The daemon forks a working conversation as of
+     * its last completed response.
+     * @param {string} prompt
+     */
+    async function forkInBackground(prompt) {
+      hideSuggestions();
+      if (!forkable()) {
+        addNote(state, 'error', 'fork', `Not forked. ${NOTHING_TO_FORK}.`);
+        return schedule();
+      }
+      await composer.settled();
+      const outgoing = composer.compose({ withCards: true, draft: () => prompt });
+      if (!outgoing.message) {
+        addNote(state, 'error', 'fork', 'Not forked: say what the fork should do, as in /fork try the other approach.');
+        return schedule();
+      }
+      const taken = outgoing.take();
+      try {
+        await daemon.createSession({ cwd: cwd() || '~', fork: /** @type {string} */ (file), prompt: outgoing.message });
+        addNote(state, 'info', 'fork', 'Forked in the background with that prompt: Forks lists it.');
+      } catch (err) {
+        if (!leaving) taken.restore();
+        addNote(state, 'error', 'fork', `Not forked: ${errorMessage(err)}`);
+      }
+      schedule();
+    }
+
     async function stop() {
       if (!ready() || !state.streaming) return;
       const res = await rpc({ type: 'abort_and_restore_queue' });
@@ -899,7 +946,7 @@ function createPane(body, ctx, daemon) {
     /**
      * Gives `anchor` a popover menu of what `load` lists, loaded afresh each time it opens.
      * @param {HTMLButtonElement} anchor @param {() => Promise<MenuEntry[]>} load
-     * @param {{ filter?: boolean, className?: string }} [options] `className` places it (a top-bar menu)
+     * @param {{ filter?: boolean, className?: string, empty?: string }} [options] `className` places it (a top-bar menu); `empty` says why nothing is listed
      */
     function attachMenu(anchor, load, options = {}) {
       const menu = el('div', `omp-menu${options.className ? ` ${options.className}` : ''}`);
@@ -936,7 +983,7 @@ function createPane(body, ctx, daemon) {
                     return item;
                   }),
               );
-              if (!list.childElementCount) list.append(el('p', 'omp-muted', 'Nothing to choose.'));
+              if (!list.childElementCount) list.append(el('p', 'omp-muted omp-menu-empty', q ? 'Nothing to choose.' : (options.empty ?? 'Nothing to choose.')));
             };
             menu.replaceChildren();
             if (options.filter) {
@@ -1067,10 +1114,58 @@ function createPane(body, ctx, daemon) {
     }
 
     stopBtn.addEventListener('click', () => void stop());
-    // The copy is omp's own (`--fork`): a new conversation in a new window; this one carries on.
-    forkBtn.addEventListener('click', () => {
-      if (forkable()) ctx.addWidget('omp', { fork: file, cwd: cwd() || null, session: null, sessionFile: null, name: params().name });
-    });
+
+    // ── forks (daemon/forks.js): the conversation this one was forked from, and its own ──
+    /** Shows a conversation beside this window, or points at the window already showing it. @param {LeafParams} shown */
+    function openRelative(shown) {
+      const open = ctx.screen
+        .get()
+        .windows.find((w) => w.widget === 'omp' && ((shown.sessionFile && w.params?.sessionFile === shown.sessionFile) || (shown.session && w.params?.session === shown.session)));
+      if (open) {
+        ctx.outline([open.id]);
+        setTimeout(() => ctx.outline([]), 1500);
+        return;
+      }
+      ctx.openBeside('omp', shown);
+    }
+    attachMenu(
+      forksBtn,
+      async () => {
+        const forks = daemon.forks();
+        const { parent, children } = relatives(forks, ompId());
+        if (!parent && !children.length) return [];
+        const past = new Map((await daemon.history()).map((s) => [s.id, s]));
+        /** @type {Map<string, SessionMeta>} */
+        const awake = new Map(daemon.sessions().flatMap((m) => (m.ompId && isRunning(m) ? [[m.ompId, m]] : [])));
+        /** @param {string} id @param {string} relation @returns {MenuEntry[]} */
+        const entry = (id, relation) => {
+          const listed = past.get(id) ?? null;
+          const meta = awake.get(id) ?? null;
+          if (!listed && !meta) return []; // deleted or archived since
+          // A fork by the title the daemon keeps for it: its journal's is its source's until
+          // its first prompt has named it.
+          const name = Object.hasOwn(forks, id) ? (forks[id].title ?? 'Fork, not named yet') : (listed?.title ?? listed?.firstPrompt ?? null);
+          const label = name ?? 'Untitled';
+          const shown = showConversation({ file: listed?.file ?? null, meta, cwd: listed?.cwd ?? null, name: Object.hasOwn(forks, id) ? forks[id].title : name });
+          const unread = daemon.unreadSince(id) !== null;
+          return [
+            {
+              label,
+              detail: [relation, meta ? (meta.status === 'starting' ? 'starting' : 'awake') : null, unread ? 'unread' : null].filter(Boolean).join(' · '),
+              // Shown on purpose, as from Sessions: that reads it.
+              pick: () => {
+                openRelative(shown);
+                const since = daemon.unreadSince(id);
+                if (since !== null) daemon.markRead(id, since).catch(() => {});
+              },
+              drag: (e, close) => ctx.dragWidget('omp', shown, e, { label, onEnd: ({ dropped }) => dropped && close() }),
+            },
+          ];
+        };
+        return [...(parent ? entry(parent, 'forked from') : []), ...children.flatMap((child) => entry(child, 'fork'))];
+      },
+      { className: 'omp-head-menu', empty: NO_FORKS },
+    );
     newBtn.addEventListener('click', () => {
       // The setup screen starts it, in this conversation's directory unless the user picks another.
       ctx.setParams({ session: null, cwd: cwd() || null, sessionFile: null, name: null, fork: null, prompt: null });
@@ -1121,7 +1216,9 @@ function createPane(body, ctx, daemon) {
       const q = match[1].toLowerCase();
       const starts = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().startsWith(q));
       const contains = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().includes(q));
-      const commands = [...state.commands.filter(starts), ...state.commands.filter((c) => !starts(c) && contains(c))].slice(0, MAX_SUGGESTIONS);
+      // `/fork` is the workbench's own (send()): omp's is its terminal UI's only.
+      const all = [FORK_COMMAND, ...state.commands.filter((c) => c.name !== 'fork')];
+      const commands = [...all.filter(starts), ...all.filter((c) => !starts(c) && contains(c))].slice(0, MAX_SUGGESTIONS);
       suggestions.show(
         commands.map((c) => {
           const cells = [el('span', 'omp-suggestion-name', `/${c.name}`)];
@@ -1170,12 +1267,14 @@ function createPane(body, ctx, daemon) {
     });
     sendBtn.addEventListener('click', () => void send());
     // Dragging Send sends the message in a fork instead: a new window, placed where it is
-    // dropped, continuing a copy of this conversation. This box lets go of it once it is placed.
+    // dropped, continuing a copy of this conversation (named anew by its first prompt, by the
+    // daemon). This box lets go of it once it is placed.
     sendBtn.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || sendBtn.disabled || !forkable()) return;
-      const outgoing = composer.compose({ withCards: !isCommand(draft.value) });
+      const forking = forkPrompt(draft.value);
+      const outgoing = forking !== null ? composer.compose({ withCards: true, draft: () => forking }) : composer.compose({ withCards: !isCommand(draft.value) });
       const line = outgoing.message.replace(/\s+/g, ' ').trim();
-      ctx.dragWidget('omp', { fork: file, cwd: cwd() || null, session: null, sessionFile: null, name: params().name, prompt: outgoing.message || null }, e, {
+      ctx.dragWidget('omp', { fork: file, cwd: cwd() || null, session: null, sessionFile: null, name: null, prompt: outgoing.message || null }, e, {
         label: line ? `Fork: ${line.length > 40 ? `${line.slice(0, 39)}…` : line}` : 'Fork',
         onEnd: ({ dropped }) => {
           if (!dropped) return;
@@ -1436,8 +1535,11 @@ function createPane(body, ctx, daemon) {
       // Only an awake session knows whether its model needs an account; the menus wake it.
       signInBtn.hidden = !live || !needsLogin(state);
       stopBtn.disabled = !live || !state.streaming;
-      forkBtn.disabled = !forkable();
-      forkBtn.title = forkable() ? FORK_TITLE : NOTHING_TO_FORK;
+      // Its forks counted; related windows on the screen coloured alike (app.js).
+      const forks = daemon.forks();
+      const { children } = relatives(forks, ompId());
+      setText(forksBtn, children.length ? `Forks ${children.length}` : 'Forks');
+      ctx.setFamily(familyOf(forks, ompId()));
     }
 
     function drawComposer() {
@@ -1454,16 +1556,16 @@ function createPane(body, ctx, daemon) {
     }
 
     /**
-     * Sends the message this window was forked with (dragged off another pane's Send), once:
-     * the param is cleared as it goes. A session that is not that fork after all (the fork
-     * failed and a fresh one was started) gets it in the box, unsent.
+     * Puts the message this window was to be forked with (dragged off another pane's Send) in
+     * the box, unsent, once: the param is cleared as it goes. A fork gets it from the daemon
+     * (forkScreen); a window holding it still is one whose fork failed, and the user started a
+     * fresh conversation instead.
      */
-    function sendCarried() {
+    function fillCarried() {
       const { prompt } = params();
       if (!prompt) return;
       ctx.setParams({ prompt: null });
       composer.setText(prompt);
-      if (meta()?.fork) void send();
     }
 
     /** Redraws the window when it is due to dim. @type {ReturnType<typeof setTimeout> | undefined} */
@@ -1487,7 +1589,7 @@ function createPane(body, ctx, daemon) {
       reseedWaiters = waiting.filter((w) => ready() && state.rewinds === w.after);
       for (const w of waiting) if (!reseedWaiters.includes(w)) w.resolve();
       // A ready session holds its earlier history already (the daemon fetched it first).
-      if (ready()) sendCarried();
+      if (ready()) fillCarried();
       // The journal names the conversation, and the name labels the window: both are saved
       // with it. omp reports a new conversation's journal as it starts (and another on /new).
       const reported = meta()?.sessionFile;
@@ -1558,6 +1660,7 @@ function createPane(body, ctx, daemon) {
         unsubscribe();
         if (runningTimer) clearInterval(runningTimer);
         ctx.headActions.replaceChildren();
+        ctx.setFamily(null);
         ctx.headActions.removeEventListener('keydown', onNavKey);
         resizes.disconnect();
         composer.destroy();
@@ -1597,6 +1700,7 @@ function createPane(body, ctx, daemon) {
       offReset();
       offUnread();
       offDecisions();
+      offForks();
       document.removeEventListener('pointerdown', pressed, { capture: true });
       document.removeEventListener('keydown', pressed, { capture: true });
       document.removeEventListener('focusin', focused, { capture: true });

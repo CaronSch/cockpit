@@ -75,6 +75,24 @@ async function send(pane, text) {
   await pane.locator('textarea').press('Enter');
 }
 
+/**
+ * Forks `pane`'s conversation into a new window by dragging its Send onto the grid's left
+ * edge, with whatever is in its box as the fork's first message; returns the fork's window.
+ * @param {Page} page @param {import('@playwright/test').Locator} pane
+ */
+async function forkByDrag(page, pane) {
+  const grid = await page.locator('#grid').boundingBox();
+  const sendBtn = await pane.getByRole('button', { name: 'Send', exact: true }).boundingBox();
+  if (!grid || !sendBtn) throw new Error('not laid out');
+  return paneAddedBy(page, async () => {
+    await page.mouse.move(sendBtn.x + sendBtn.width / 2, sendBtn.y + sendBtn.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grid.x + 10, grid.y + grid.height / 2, { steps: 12 });
+    await expect(page.locator('.drop-indicator')).toHaveClass(/is-visible/);
+    await page.mouse.up();
+  });
+}
+
 /** The next command of `type` the page sends to omp. @param {Page} page @param {string} type */
 const rpcSent = (page, type) => page.waitForRequest((r) => r.url().endsWith('/rpc') && r.postDataJSON()?.type === type);
 
@@ -921,14 +939,14 @@ test('the top bar sizes all text up and down, resets it, and keeps it across a r
   await level.click();
 });
 
-test('the response arrows, New, Fork, Accounts and Stop sit in the window’s top bar; pressing them never drags the window, its title still does', async ({ page }) => {
+test('the response arrows, New, Forks, Accounts and Stop sit in the window’s top bar; pressing them never drags the window, its title still does', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   const head = pane.locator('.widget-head');
   const toolbar = pane.locator('.omp-toolbar');
   // PRs shows only in a GitHub repository, which the test project is not.
-  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Fork', 'Accounts', 'Stop']);
-  for (const name of ['New', 'Fork', 'Accounts', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
+  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Forks', 'Accounts', 'Stop']);
+  for (const name of ['New', 'Forks', 'Accounts', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
   await expect(head.getByRole('button', { name: 'More actions' }), 'no menu of the rest: there is no rest').toHaveCount(0);
 
   // Stop is live while a turn runs.
@@ -1609,15 +1627,17 @@ test('two panes run separate sessions side by side', async ({ page }) => {
   await expect(right.getByText('left only')).toHaveCount(0);
 });
 
-test('Fork continues a copy of the conversation in a new pane, as a session of its own', async ({ page }) => {
+test('a fork continues a copy of the conversation in a window of its own, as a session of its own', async ({ page }) => {
   const workspace = await openWorkbench(page);
   const source = await startedPane(page);
-  const fork = source.getByRole('button', { name: 'Fork', exact: true });
-  await expect(fork, 'omp has saved nothing yet').toBeDisabled();
+  // omp saves a conversation once the agent has replied: until then there is nothing to fork.
+  await send(source, '/fork too early');
+  await expect(source.locator('.omp-note.is-error')).toContainText('Nothing to fork yet');
+  await expect(source.locator('textarea'), 'given back').toHaveValue('/fork too early');
   await send(source, 'shared start');
   await expect(source.locator('.omp-assistant').last()).toContainText('You said: shared start');
 
-  const forked = await paneAddedBy(page, () => fork.click());
+  const forked = await forkByDrag(page, source); // an empty box: a fork with no message yet
   await expect(forked.locator('.omp-user .omp-md')).toHaveText([/shared start$/]);
   await expect(forked.locator('.omp-assistant')).toHaveText([/You said: shared start/]);
   await expect(forked.getByText('Fake Model')).toBeVisible();
@@ -1638,16 +1658,15 @@ test('Fork continues a copy of the conversation in a new pane, as a session of i
   expect(mine.fork).toBeNull();
 });
 
-test('a fork reached for while its omp is still starting goes on once it is up', async ({ page }) => {
+test('a fork sent a message while its omp is still starting gets it once it is up', async ({ page }) => {
   await openWorkbench(page);
   const source = await startedPane(page, mkdtempSync(join(tmpdir(), 'ac-e2e-slow-start-')));
   await send(source, 'shared start');
   await expect(source.locator('.omp-assistant').last()).toContainText('You said: shared start');
-  const forked = await paneAddedBy(page, () => source.getByRole('button', { name: 'Fork', exact: true }).click());
-  await forked.locator('textarea').click();
-  await expect(forked.getByText('idle')).toBeVisible({ timeout: 5000 });
-  await send(forked, 'fork only');
-  await expect(forked.locator('.omp-assistant').last()).toContainText('You said: fork only');
+  await source.locator('textarea').fill('fork only');
+  const forked = await forkByDrag(page, source);
+  await expect(forked.locator('.omp-assistant').last()).toContainText('You said: fork only', { timeout: 10_000 });
+  await expect(forked.locator('.omp-user .omp-md')).toHaveText([/shared start$/, /fork only$/]);
 });
 
 test('windows only render: the daemon asks omp for the state and a fork’s history, never the page', async ({ page }) => {
@@ -1665,10 +1684,75 @@ test('windows only render: the daemon asks omp for the state and a fork’s hist
   await source.locator('.omp-menu:popover-open').getByRole('button', { name: 'high', exact: true }).click();
   await expect(thinking).toHaveText(/high/);
 
-  const forked = await paneAddedBy(page, () => source.getByRole('button', { name: 'Fork', exact: true }).click());
+  const forked = await forkByDrag(page, source);
   await expect(forked.locator('.omp-assistant')).toHaveText([/You said: shared start/]);
   await expect(forked.getByText('Fake Model')).toBeVisible();
   expect(asked).toEqual(['prompt', 'get_available_thinking_levels', 'set_thinking_level']);
+});
+
+test('/fork forks in the background, off the last response; Forks lists the fork by its own name, and the two windows share a colour', async ({ page }) => {
+  await openWorkbench(page);
+  const source = await startedPane(page);
+  await send(source, 'shared start');
+  await expect(source.locator('.omp-assistant').last()).toContainText('You said: shared start');
+  const forksBtn = source.getByRole('button', { name: 'Forks', exact: true });
+  await forksBtn.click();
+  await expect(source.locator('.omp-menu:popover-open'), 'how to start one').toContainText('/fork <prompt>');
+  await page.keyboard.press('Escape');
+
+  // Suggested beside omp's commands, and not sent to omp: the workbench forks.
+  await source.locator('textarea').fill('/fo');
+  await expect(page.locator('.omp-suggestion-name', { hasText: '/fork' })).toBeVisible();
+  await send(source, '/fork');
+  await expect(source.locator('.omp-note.is-error')).toContainText('say what the fork should do');
+
+  // Forked while the agent works on another prompt (its prompt and a first reply saved): the
+  // fork starts from the last completed response.
+  await send(source, 'slow, then answer');
+  await expect(source.getByText('Let me check first.')).toBeVisible();
+  await expect(source.locator('.omp-activity')).toHaveText('working');
+  await send(source, '/fork try the other approach');
+  await expect(source.locator('.omp-note.is-info')).toContainText('Forked in the background');
+  await expect(source.locator('textarea')).toHaveValue('');
+  await expect(page.locator('.widget[data-widget="omp"]'), 'no window of its own').toHaveCount(1);
+  const forks1 = source.getByRole('button', { name: 'Forks 1', exact: true });
+  await expect(forks1).toBeVisible();
+  await expect(source.locator('.omp-assistant').last()).toContainText('You said: slow, then answer', { timeout: 10_000 });
+
+  // Named by its own first prompt (the title model's words), not its source's name, and unread
+  // (its turn ended unseen). The menu lists what it found as it opened: opened again until then.
+  const menu = source.locator('.omp-menu:popover-open');
+  const item = menu.getByRole('button', { name: /Forked: try the other approach/ });
+  await expect(async () => {
+    if (await menu.count()) await forks1.click();
+    await forks1.click();
+    await expect(item.locator('.omp-muted')).toHaveText('fork · awake · unread', { timeout: 1000 });
+  }).toPass({ timeout: 10_000 });
+  const forked = await paneAddedBy(page, () => item.click());
+  await expect(forked.locator('.omp-user .omp-md')).toHaveText([/shared start$/, /try the other approach$/]);
+  await expect(forked.locator('.omp-assistant').last()).toContainText('You said: try the other approach');
+  await expect(forked, 'shown on purpose: read, as from Sessions').toHaveAttribute('data-unread', 'false');
+  await expect(forked.locator('.widget-label')).toHaveText('Forked: try the other approach');
+  await expect(source.locator('.widget-label')).not.toHaveText('Forked: try the other approach');
+  // The source never sees the fork's prompt, nor the fork the source's turn under way.
+  await expect(source.locator('.omp-user .omp-md')).toHaveText([/shared start$/, /slow, then answer$/]);
+
+  // Related: the same colour in both top bars, and each lists the other.
+  await expect(source).toHaveAttribute('data-family', /^[1-6]$/);
+  const family = /** @type {string} */ (await source.getAttribute('data-family'));
+  await expect(forked).toHaveAttribute('data-family', family);
+  await forked.getByRole('button', { name: 'Forks', exact: true }).click();
+  await expect(forked.locator('.omp-menu:popover-open .omp-menu-item')).toHaveText([/forked from/]);
+  await forked.locator('.omp-menu:popover-open .omp-menu-item').click();
+  await expect(source, 'shown already: pointed at, not opened twice').toHaveClass(/is-outlined/);
+  await expect(page.locator('.widget[data-widget="omp"]')).toHaveCount(2);
+
+  // Each window comes back with its own conversation, related as before.
+  await page.reload();
+  await expect(forked.locator('.omp-user .omp-md')).toHaveText([/shared start$/, /try the other approach$/]);
+  await expect(source.locator('.omp-user .omp-md')).toHaveText([/shared start$/, /slow, then answer$/]);
+  await expect(source).toHaveAttribute('data-family', family);
+  await expect(forked).toHaveAttribute('data-family', family);
 });
 
 test('dragging Send sends the message in a fork placed where it is dropped, and empties this box', async ({ page }) => {
@@ -1683,7 +1767,7 @@ test('dragging Send sends the message in a fork placed where it is dropped, and 
   if (!grid || !button) throw new Error('not laid out');
   const onSend = { x: button.x + button.width / 2, y: button.y + button.height / 2 };
 
-  // Dropped on the grid's left edge: the fork goes left of this pane, not beside it as Fork's would.
+  // Dropped on the grid's left edge: the fork goes left of this pane, not beside it.
   await draft.fill('fork only');
   const forked = await paneAddedBy(page, async () => {
     await page.mouse.move(onSend.x, onSend.y);
@@ -1697,7 +1781,7 @@ test('dragging Send sends the message in a fork placed where it is dropped, and 
   await expect(draft).toHaveValue('');
   const [mine, theirs] = [await forked.boundingBox(), await source.boundingBox()];
   expect(mine && theirs && mine.x < theirs.x).toBe(true);
-  // Sent once: the window drops the message as it sends it, so a reload does not send it again.
+  // Sent once: the window drops the message once the fork has it, so a reload does not send it again.
   await expect.poll(async () => (await savedParams(page, workspace, forked))?.prompt).toBeNull();
   await page.reload();
   const again = page.locator(`.widget[data-id="${await forked.getAttribute('data-id')}"]`);

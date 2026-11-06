@@ -57,7 +57,9 @@
  * With `-p` it is the decision reviewer instead (daemon/decisions.js): it answers the message
  * (its last argument, the turn) and exits, as `omp -p` does. A turn containing "decide" gets
  * two decisions, one with a list mark the daemon takes off; one containing "reviewer fails"
- * fails as a provider error would; any other, NONE.
+ * fails as a provider error would; any other, NONE. Asked to title a fork (daemon/fork-title.js's
+ * system prompt), it answers `"Forked: <the fork's first prompt>".` (quoted and closed, as a
+ * model might), or fails for a prompt containing "untitled".
  */
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -88,6 +90,12 @@ if (args.includes('--version')) {
 }
 if (args.includes('-p')) {
   const turn = args.at(-1) ?? '';
+  if (args[args.indexOf('--system-prompt') + 1]?.startsWith('You title a fork')) {
+    const prompt = turn.split('First message in the fork:\n')[1] ?? '';
+    if (prompt.includes('untitled')) process.exit(1);
+    console.log(`"Forked: ${prompt.split('\n')[0]}".`);
+    process.exit(0);
+  }
   if (turn.includes('reviewer fails')) {
     process.stderr.write('Warning: MCP server "x" failed to connect\nError: 529 overloaded\n');
     process.exit(1);

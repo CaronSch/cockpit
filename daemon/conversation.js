@@ -22,8 +22,8 @@ const epoch = (timestamp) => {
   return Number.isFinite(at) ? at : 0;
 };
 
-/** The entries of the path the conversation is on, oldest first. @param {Record<string, any>[]} entries */
-function currentPath(entries) {
+/** The entries of the path the conversation is on, oldest first. @template {Record<string, any>} E @param {E[]} entries @returns {E[]} */
+export function currentPath(entries) {
   const linked = entries.filter((e) => typeof e.id === 'string');
   if (!linked.length) return entries;
   const byId = new Map(linked.map((e) => [e.id, e]));

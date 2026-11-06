@@ -27,6 +27,7 @@ import { CONTENT_TYPES, INDEX_FILE, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @typedef {ReturnType<typeof import('./workspace.js').createWorkspaces>} Workspaces */
 /** @import { Unread, UnreadStore } from './unread.js' */
 /** @import { Pinned, PinsStore } from './pins.js' */
+/** @import { Forker, Forks, ForksStore } from './forks.js' */
 /** @import { DaemonSettings, SettingsStore } from './settings.js' */
 /** @import { Github } from './github.js' */
 /** @import { Delivery } from './deliver.js' */
@@ -182,9 +183,9 @@ function errorResponse(err) {
 
 /**
  * Starts serving on `127.0.0.1:port` (0 picks a free port); throws if the port is taken.
- * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, token: string, root: string, config: DaemonConfig, port: number }} options
+ * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, token: string, root: string, config: DaemonConfig, port: number }} options
  */
-export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, decisions, settings, github, delivery, bugbot, token, root, config, port }) {
+export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, token, root, config, port }) {
   const rootDir = resolve(root);
   const indexFile = resolve(rootDir, INDEX_FILE);
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -216,17 +217,18 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
       start(controller) {
         const write = (/** @type {string} */ chunk) => controller.enqueue(chunk);
         write('retry: 1000\n\n');
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), settings: settings.all(), bugbot: bugbot.all(), ui })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), ui })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of hub.since(lastSeenSeq(req.headers.get('last-event-id'), hub.bootId))) send(event);
         const unsubscribe = hub.subscribe(send);
-        // No id: scratchpad, history, unread, pins, decisions, settings and bugbot events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, forks, decisions, settings and bugbot events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
         const offHistory = history.watch(() => write(`data: ${JSON.stringify({ kind: 'history' })}\n\n`));
         const offUnread = unread.subscribe((/** @type {Unread} */ marks) => write(`data: ${JSON.stringify({ kind: 'unread', unread: marks })}\n\n`));
         const offPins = pins.subscribe((/** @type {Pinned} */ pinned) => write(`data: ${JSON.stringify({ kind: 'pins', pinned })}\n\n`));
+        const offForks = forks.subscribe((/** @type {Forks} */ all) => write(`data: ${JSON.stringify({ kind: 'forks', forks: all })}\n\n`));
         const offDecisions = decisions.subscribe((/** @type {string} */ ompId, /** @type {Reviews} */ reviews) =>
           write(`data: ${JSON.stringify({ kind: 'decisions', ompId, reviews })}\n\n`),
         );
@@ -240,6 +242,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           offHistory();
           offUnread();
           offPins();
+          offForks();
           offDecisions();
           offSettings();
           offBugbot();
@@ -430,12 +433,14 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           const body = await readJson(req);
           const cwd = await existingPath(body?.cwd, 'directory', 'cwd');
           if (body?.resume != null && body?.fork != null) throw new HttpError(400, 'resume and fork cannot be combined');
+          if (body?.prompt != null && (body?.fork == null || typeof body.prompt !== 'string')) throw new HttpError(400, 'a prompt goes with a fork, as a string');
           const resume = body?.resume == null ? null : await existingPath(body.resume, 'file', 'resume');
           const fork = body?.fork == null ? null : await existingPath(body.fork, 'file', 'fork');
           if (resume && history.isArchived(resume)) throw new HttpError(409, 'the conversation is archived: restore it to carry it on');
           const running = resume && hub.writing(resume);
           if (running) return json({ session: running });
-          return json({ session: hub.create({ cwd, resume, fork }) }, 201);
+          if (fork) return json({ session: await forker.fork({ cwd, file: fork, prompt: body?.prompt ?? null }) }, 201);
+          return json({ session: hub.create({ cwd, resume, fork: null }) }, 201);
         },
       }),
       '/api/sessions/:id': api({
