@@ -7,7 +7,7 @@
  * names its repository (`-R owner/name`, `api repos/owner/name/…`) reads the one checked out at
  * `$FAKE_GH_ROOT/owner/name`, as `gh` finds any repository on GitHub, and fails as `gh` does for
  * one that does not exist. `repo list owner` lists the repositories checked out under
- * `$FAKE_GH_ROOT/owner/`.
+ * `$FAKE_GH_ROOT/owner/`. `api user --jq .login` names the account signed in: `$FAKE_GH_USER`.
  *
  * `.fake-gh.json`: `{ repo: 'owner/name', description?, pushedAt?, pulls: [Pull-like objects,
  * with `diff` and `reviewComments` in GitHub's REST shape], bugbot?: { afterMs, body, comments } }`. Commenting
@@ -59,6 +59,13 @@ if (args[0] === 'repo' && args[1] === 'list') {
   const listed = names.map((name) => JSON.parse(readFileSync(join(dir, name, '.fake-gh.json'), 'utf8')));
   const fields = (option('--json') ?? 'nameWithOwner').split(',');
   print(listed.map((s) => Object.fromEntries(fields.map((f) => [f, { nameWithOwner: s.repo, description: s.description ?? '', pushedAt: s.pushedAt ?? '' }[f]]))));
+  process.exit(0);
+}
+// Who is signed in (Setup's check, daemon/setup.js): `$FAKE_GH_USER`, `octocat` unless set; set empty, nobody.
+if (args[0] === 'api' && args[1] === 'user') {
+  const user = process.env.FAKE_GH_USER ?? 'octocat';
+  if (!user) fail('To get started with GitHub CLI, please run:  gh auth login');
+  process.stdout.write(`${user}\n`);
   process.exit(0);
 }
 // The repository named, else the one the directory is in.

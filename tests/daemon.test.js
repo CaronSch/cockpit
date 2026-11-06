@@ -22,6 +22,8 @@ import { loadBugbot } from '../daemon/bugbot.js';
 import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
 import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 import { withAdhdRules } from '../daemon/adhd.js';
+import { browserEnv } from '../daemon/browser.js';
+import { createSetup } from '../daemon/setup.js';
 /** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -51,6 +53,8 @@ let delivery;
 let bugbot;
 /** @type {import('../daemon/decisions.js').DecisionReviews} */
 let decisions;
+/** @type {import('../daemon/setup.js').Setup} */
+let setup;
 let port = 0;
 let cwd = '';
 
@@ -163,7 +167,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'login' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -182,6 +186,8 @@ beforeAll(async () => {
   github = createGithub({ ghPath: FAKE_GH });
   delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
   bugbot = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 100 });
+  // Setup's fake omp keeps who is signed in in a file of the suite's own, with nobody to start with.
+  setup = createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, env: { ...process.env, FAKE_OMP_AUTH: join(cwd, 'fake-omp-auth') } });
   server = createDaemonServer({
     hub,
     unread,
@@ -194,6 +200,7 @@ beforeAll(async () => {
     github,
     delivery,
     bugbot,
+    setup,
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
@@ -831,6 +838,7 @@ describe('unread conversations', () => {
       github,
       delivery,
       bugbot,
+      setup,
       token: TOKEN,
       root: ROOT,
       config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000 },
@@ -892,31 +900,109 @@ describe('pins', () => {
 });
 
 describe('settings', () => {
+  const DEFAULTS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: false });
+
   test('every page hears them first thing and after each change, which the next daemon starts with', async () => {
     const stream = await openStream();
-    const changed = await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false } });
+    const changed = await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false, browser: 'relay' } });
     assert.equal(changed.status, 200);
-    assert.deepEqual(changed.json, { idleCompaction: false, decisionReview: false, adhd: false });
+    const after = { ...DEFAULTS, idleCompaction: false, browser: 'relay' };
+    assert.deepEqual(changed.json, after);
     const { events } = await stream.until((events) => events.some((e) => e.kind === 'settings'));
-    assert.deepEqual(events[0].kind === 'hello' && events[0].settings, { idleCompaction: true, decisionReview: false, adhd: false });
-    assert.deepEqual(events.find((e) => e.kind === 'settings'), { kind: 'settings', settings: { idleCompaction: false, decisionReview: false, adhd: false } });
-    assert.deepEqual((await loadSettings({ file: join(cwd, 'state', 'settings.json') })).all(), { idleCompaction: false, decisionReview: false, adhd: false });
-    assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: true } })).status, 200);
+    assert.deepEqual(events[0].kind === 'hello' && events[0].settings, DEFAULTS);
+    assert.deepEqual(events.find((e) => e.kind === 'settings'), { kind: 'settings', settings: after });
+    assert.deepEqual((await loadSettings({ file: join(cwd, 'state', 'settings.json') })).all(), after);
+    assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: true, browser: 'isolated' } })).status, 200);
   });
 
-  test('only known settings with values of their type are taken; like every API route they need the token and Origin', async () => {
-    for (const body of [{ idleCompaction: 'no' }, { sleepy: true }, [true], null]) {
+  test('only known settings with values they may take are taken; like every API route they need the token and Origin', async () => {
+    for (const body of [{ idleCompaction: 'no' }, { sleepy: true }, { browser: 'firefox' }, { browser: true }, { setupDone: 'yes' }, [true], null]) {
       assert.equal((await call({ method: 'PUT', path: '/api/settings', body })).status, 400, JSON.stringify(body));
     }
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, auth: false })).status, 401);
     assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { idleCompaction: false }, origin: false })).status, 403);
-    assert.deepEqual(settings.all(), { idleCompaction: true, decisionReview: false, adhd: false });
+    assert.deepEqual(settings.all(), DEFAULTS);
   });
 
   test('a settings file the daemon cannot read stops it rather than being replaced', async () => {
     const file = join(cwd, 'bad-settings.json');
-    await Bun.write(file, '{"version":1,"settings":{"idleCompaction":"off"}}');
-    await assert.rejects(loadSettings({ file }), /not a settings file/);
+    for (const text of ['{"version":1,"settings":{"idleCompaction":"off"}}', '{"version":1,"settings":{"browser":"firefox"}}']) {
+      await Bun.write(file, text);
+      await assert.rejects(loadSettings({ file }), /not a settings file/);
+    }
+  });
+});
+
+describe('setup', () => {
+  /** Reads the stream until the login's state passes `done`. @param {Awaited<ReturnType<typeof openStream>>} stream @param {(login: import('../daemon/setup.js').LoginState) => boolean} done */
+  async function loginUntil(stream, done) {
+    const { events } = await stream.until((events) => events.some((e) => e.kind === 'login' && e.login !== null && done(e.login)));
+    const found = events.findLast((e) => e.kind === 'login');
+    return /** @type {import('../daemon/setup.js').LoginState} */ (found?.kind === 'login' && found.login);
+  }
+
+  test('a machine without a model sign-in is not ready; omp login, answered from the page, signs it in', async () => {
+    const before = await call({ path: '/api/setup' });
+    assert.equal(before.status, 200);
+    assert.deepEqual(before.json, {
+      omp: { ok: true, detail: 'omp/fake' },
+      models: { ok: false, detail: 'No model provider signed in' },
+      gh: { ok: true, detail: 'Signed in as octocat' },
+    });
+
+    const stream = await openStream();
+    const started = await call({ method: 'POST', path: '/api/setup/login', body: {} });
+    assert.equal(started.status, 202);
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login', body: {} })).status, 409, 'one login at a time');
+    const picking = await loginUntil(stream, (login) => login.output.includes('Enter number'));
+    assert.match(picking.output, /1\. Fake Cloud/);
+    assert.equal(picking.running, true);
+
+    const coding = await openStream();
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login/input', body: { line: '1' } })).status, 204);
+    const asked = await loginUntil(coding, (login) => login.output.includes('Paste the authorization code'));
+    assert.match(asked.output, /Enter number \(1-2\): 1\n/, 'the answer shows where it was typed, as a terminal echoes it');
+    assert.match(asked.output, /https:\/\/login\.fake\.example\/fake-cloud/);
+
+    const ending = await openStream();
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login/input', body: { line: 'good' } })).status, 204);
+    const ended = await loginUntil(ending, (login) => !login.running);
+    assert.equal(ended.exitCode, 0);
+    assert.match(ended.output, /Logged in to Fake Cloud/);
+
+    const after = await call({ path: '/api/setup' });
+    assert.deepEqual(after.json.models, { ok: true, detail: 'fake-cloud (2 models)' });
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login/input', body: { line: 'late' } })).status, 409, 'no login runs now');
+  });
+
+  test('a login that fails says so, and a page that connects later hears how it ended', async () => {
+    const stream = await openStream();
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login', body: { provider: 'keyed' } })).status, 202);
+    await loginUntil(stream, (login) => login.output.includes('Paste the authorization code'));
+    const ending = await openStream();
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login/input', body: { line: 'wrong' } })).status, 204);
+    const ended = await loginUntil(ending, (login) => !login.running);
+    assert.equal(ended.exitCode, 1);
+    assert.match(ended.output, /Login failed: invalid authorization code/);
+    const { events } = await (await openStream()).until((events) => events.some((e) => e.kind === 'hello'));
+    assert.deepEqual(events[0].kind === 'hello' && events[0].login, ended);
+  });
+
+  test('a provider that is not an id, an answer of two lines, or a request without the token is refused', async () => {
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login', body: { provider: '--help' } })).status, 400);
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login', body: { provider: 3 } })).status, 400);
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login/input', body: { line: 'a\nb' } })).status, 400);
+    assert.equal((await call({ path: '/api/setup', auth: false })).status, 401);
+    assert.equal((await call({ method: 'POST', path: '/api/setup/login', body: {}, origin: false })).status, 403);
+  });
+
+  test('without omp, Setup says so, and the model step waits for it', async () => {
+    const missing = createSetup({ ompPath: join(cwd, 'no-such-omp'), ghPath: join(cwd, 'no-such-gh') });
+    assert.deepEqual(await missing.check(), {
+      omp: { ok: false, detail: `omp not found ("${join(cwd, 'no-such-omp')}")` },
+      models: { ok: false, detail: 'Needs omp' },
+      gh: { ok: false, detail: `GitHub CLI not installed ("${join(cwd, 'no-such-gh')}")` },
+    });
   });
 });
 
@@ -1169,7 +1255,7 @@ describe('sleep', () => {
   /**
    * A hub of the test's own whose sessions sleep after `after` ms, and a way to wait for one
    * of its sessions to reach a status.
-   * @param {number} after @param {{ appendSystemPrompt?: () => string }} [options]
+   * @param {number} after @param {{ launchWith?: () => import('../daemon/omp-session.js').LaunchWith }} [options]
    */
   function sleepyHub(after, options = {}) {
     const sleepy = createHub({ ompPath: FAKE_OMP, unread, sleepAfterMs: after, ...options });
@@ -1229,21 +1315,25 @@ describe('sleep', () => {
     await sleepy.closeAll();
   });
 
-  /** What session `id` of `of` has appended to omp's system prompt (the fake reports it). @param {import('../daemon/hub.js').Hub} of @param {string} id */
-  const appendedTo = async (of, id) => (await /** @type {import('../daemon/omp-session.js').OmpSession} */ (of.get(id)).command({ type: 'get_state' }).response).data.appendedPrompt;
+  /** What session `id` of `of` reports of how it was launched (the fake reports it). @param {import('../daemon/hub.js').Hub} of @param {string} id */
+  const stateOf = async (of, id) => (await /** @type {import('../daemon/omp-session.js').OmpSession} */ (of.get(id)).command({ type: 'get_state' }).response).data;
+  /** What session `id` of `of` has appended to omp's system prompt. @param {import('../daemon/hub.js').Hub} of @param {string} id */
+  const appendedTo = async (of, id) => (await stateOf(of, id)).appendedPrompt;
+  /** @param {boolean} adhd */
+  const withRules = (adhd) => ({ appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, adhd), env: {} });
 
   test('switching "I have ADHD" puts idle sessions started the other way to sleep; they wake with the rules', async () => {
     let adhd = false;
-    const { sleepy, reaches } = sleepyHub(60_000, { appendSystemPrompt: () => withAdhdRules(APPEND_SYSTEM_PROMPT, adhd) });
+    const { sleepy, reaches } = sleepyHub(60_000, { launchWith: () => withRules(adhd) });
     const before = sleepy.create({ cwd, resume: null, fork: null }).id;
     await reaches(before, 'ready');
     assert.equal(await appendedTo(sleepy, before), APPEND_SYSTEM_PROMPT);
-    sleepy.promptChanged();
+    sleepy.launchChanged();
     await Bun.sleep(200);
     assert.equal(sleepy.get(before)?.meta().status, 'ready', 'nothing changed: still awake');
 
     adhd = true;
-    sleepy.promptChanged();
+    sleepy.launchChanged();
     await reaches(before, 'exited');
     const after = sleepy.create({ cwd, resume: null, fork: null }).id;
     await reaches(after, 'ready');
@@ -1251,7 +1341,7 @@ describe('sleep', () => {
     assert.ok(appended.startsWith(`${APPEND_SYSTEM_PROMPT}\n\nADHD MODE ACTIVE.`), 'the workbench’s prompt, then the rules');
     assert.match(appended, /### 1\. Lead with the next action/);
     assert.doesNotMatch(appended, /disable-model-invocation/, 'without the skill’s frontmatter');
-    sleepy.promptChanged();
+    sleepy.launchChanged();
     await Bun.sleep(200);
     assert.equal(sleepy.get(after)?.meta().status, 'ready', 'started with the rules: stays awake');
     await sleepy.closeAll();
@@ -1259,18 +1349,42 @@ describe('sleep', () => {
 
   test('a session working when the switch changes finishes its turn, then sleeps', async () => {
     let adhd = false;
-    const { sleepy, events, next, reaches } = sleepyHub(60_000, { appendSystemPrompt: () => withAdhdRules(APPEND_SYSTEM_PROMPT, adhd) });
+    const { sleepy, events, next, reaches } = sleepyHub(60_000, { launchWith: () => withRules(adhd) });
     const id = sleepy.create({ cwd, resume: null, fork: null }).id;
     await reaches(id, 'ready');
     sleepy.get(id)?.command({ type: 'prompt', message: 'slow' });
     await next((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'agent_start');
     adhd = true;
-    sleepy.promptChanged();
+    sleepy.launchChanged();
     await Bun.sleep(300);
     assert.equal(sleepy.get(id)?.meta().status, 'ready', 'never cut off mid-turn');
     const exited = await reaches(id, 'exited');
     const answered = events.findIndex((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'message_end' && e.frame.message?.stopReason === 'stop');
     assert.ok(answered >= 0 && answered < events.indexOf(exited), 'asleep once the turn has its answer');
+    await sleepy.closeAll();
+  });
+
+  test('omp runs with the browser chosen; switching it puts idle sessions to sleep, and they wake with the new one', async () => {
+    /** @type {import('../daemon/browser.js').BrowserChoice} */
+    let browser = 'isolated';
+    const { sleepy, reaches } = sleepyHub(60_000, { launchWith: () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: browserEnv(browser) }) });
+    const before = sleepy.create({ cwd, resume: null, fork: null }).id;
+    await reaches(before, 'ready');
+    assert.deepEqual((await stateOf(sleepy, before)).browserEnv, { PI_BROWSER_RELAY: '0', PI_BROWSER_CMUX: '0', PI_BROWSER_TERN: '0' }, 'relay, cmux and Tern off');
+
+    browser = 'relay';
+    sleepy.launchChanged();
+    await reaches(before, 'exited');
+    const relayed = sleepy.create({ cwd, resume: null, fork: null }).id;
+    await reaches(relayed, 'ready');
+    assert.deepEqual((await stateOf(sleepy, relayed)).browserEnv, { PI_BROWSER_RELAY: '1' });
+
+    browser = 'omp';
+    sleepy.launchChanged();
+    await reaches(relayed, 'exited');
+    const own = sleepy.create({ cwd, resume: null, fork: null }).id;
+    await reaches(own, 'ready');
+    assert.deepEqual((await stateOf(sleepy, own)).browserEnv, {}, 'omp’s own settings: nothing set');
     await sleepy.closeAll();
   });
 });

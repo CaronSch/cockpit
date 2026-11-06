@@ -62,9 +62,14 @@
  * fails as a provider error would; any other, NONE. Asked to title a fork (daemon/fork-title.js's
  * system prompt), it answers `"Forked: <the fork's first prompt>".` (quoted and closed, as a
  * model might), or fails for a prompt containing "untitled".
+ *
+ * `models --json` and `login [provider]` stand in for omp's own, as Setup runs them
+ * (daemon/setup.js): the models of the providers signed in (see `signedIn`), and a terminal login
+ * that picks a provider by number, prints its sign-in URL and asks for a code ("good" signs in).
+ * `get_state` also reports the `PI_BROWSER_*` variables the daemon set (daemon/browser.js).
  */
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -88,6 +93,47 @@ const WIDE_TABLE_REPLY = [
 const args = process.argv.slice(2);
 if (args.includes('--version')) {
   console.log('omp/fake');
+  process.exit(0);
+}
+/**
+ * The providers `models` and `login` (daemon/setup.js) find signed in: those listed, one a line,
+ * in the file `$FAKE_OMP_AUTH` names (none while it does not exist), else `keyed`.
+ */
+const authFile = process.env.FAKE_OMP_AUTH;
+const signedIn = () => (authFile ? (existsSync(authFile) ? readFileSync(authFile, 'utf8').split('\n').filter(Boolean) : []) : ['keyed']);
+if (args[0] === 'models' && args.includes('--json')) {
+  console.log(JSON.stringify({ models: signedIn().flatMap((provider) => [`${provider}-model`, `${provider}-small`].map((id) => ({ provider, kind: 'chat', id, selector: `${provider}/${id}`, name: id }))) }));
+  process.exit(0);
+}
+if (args[0] === 'login') {
+  // As omp's terminal login: a numbered pick (unless a provider is named), the sign-in URL, and,
+  // as a paste-code provider asks, the code: "good" signs in, anything else fails.
+  const providers = [
+    { id: 'fake-cloud', name: 'Fake Cloud' },
+    { id: 'keyed', name: 'Keyed' },
+  ];
+  const lines = createInterface({ input: process.stdin })[Symbol.asyncIterator]();
+  /** @param {string} question */
+  const ask = async (question) => {
+    process.stdout.write(question);
+    return String((await lines.next()).value ?? '').trim();
+  };
+  /** @param {string} message @returns {never} */
+  const failLogin = (message) => {
+    process.stderr.write(`Login failed: ${message}\n`);
+    process.exit(1);
+  };
+  let provider = providers.find((p) => p.id === args[1]);
+  if (args[1] && !provider) failLogin(`Unknown OAuth provider '${args[1]}'. Run \`omp login\` to pick one.`);
+  if (!provider) {
+    process.stdout.write(`Select a provider:\n\n${providers.map((p, i) => `  ${i + 1}. ${p.name}\n`).join('')}\n`);
+    const choice = await ask(`Enter number (1-${providers.length}): `);
+    provider = providers[Number.parseInt(choice, 10) - 1] ?? failLogin(`Invalid selection: ${choice}`);
+  }
+  process.stdout.write(`\nOpen this URL in your browser:\nhttps://login.fake.example/${provider.id}\n\n`);
+  if ((await ask('Paste the authorization code (or full redirect URL): ')) !== 'good') failLogin('invalid authorization code');
+  if (authFile) writeFileSync(authFile, `${[...new Set([...signedIn(), provider.id])].join('\n')}\n`);
+  process.stdout.write(`\nLogged in to ${provider.name}\n`);
   process.exit(0);
 }
 if (args.includes('-p')) {
@@ -476,6 +522,7 @@ lines.on('line', (line) => {
         sessionId,
         ...(sessionName ? { sessionName } : {}),
         ...(appendedPrompt ? { appendedPrompt } : {}), // the fake's own: what the daemon appended
+        browserEnv: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.startsWith('PI_BROWSER_'))), // the fake's own too
         autoCompactionEnabled: true,
         queuedMessageCount: 0,
         hasPendingAsyncWork: false,

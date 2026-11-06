@@ -1,0 +1,116 @@
+/* Setup window: the steps a new machine goes through, each saying how it stands. */
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 46rem;
+  font: var(--text-sm) / 1.5 var(--font-mono);
+}
+
+.setup p {
+  margin: 0;
+}
+
+.setup-lead,
+.setup-about {
+  color: var(--color-text-dim);
+}
+
+.setup-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.setup-step-title {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.setup-state {
+  font-weight: normal;
+  color: var(--color-text-faint);
+}
+
+.setup-step[data-state='ok'] .setup-state {
+  color: var(--color-accent);
+}
+
+.setup-step[data-state='missing'] .setup-state {
+  color: var(--color-danger);
+}
+
+.setup-todo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-line-strong);
+}
+
+/* A command to type, coloured as a reply's inline code; one click selects all of it. */
+.setup-command {
+  color: var(--color-code);
+  user-select: all;
+}
+
+.setup-login {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.setup-login-status {
+  color: var(--color-text-dim);
+}
+
+.setup-login-output {
+  max-height: 16rem;
+  margin: 0;
+  padding: var(--space-2);
+  overflow: auto;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  background: var(--color-surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.setup-login-form {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.setup-login-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.setup-prefs,
+.setup .config-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* The Config menu's rows, at the window's own width. */
+.setup .config-group {
+  border-top: 0;
+  padding: 0;
+}
+
+.setup .config-legend {
+  display: none; /* the step's own heading names it */
+}
+
+.setup-actions {
+  display: flex;
+  gap: var(--space-2);
+}

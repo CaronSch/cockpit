@@ -7,7 +7,7 @@
  */
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,6 +29,21 @@ process.env.COCKPIT_E2E_DIR ??= mkdtempSync(join(tmpdir(), 'cockpit-e2e-'));
 
 export const E2E_PORT = Number(process.env.COCKPIT_E2E_PORT);
 export const E2E_STATE_DIR = join(process.env.COCKPIT_E2E_DIR, 'state');
+
+/**
+ * Marks the daemon keeping its state in `stateDir` as set up (its `setupDone`), unless it has
+ * settings already: an empty screen then stays empty, as the specs expect, instead of opening
+ * Setup (setup.spec.js starts daemons of its own, `fresh`).
+ * @param {string} stateDir
+ */
+export function markSetUp(stateDir) {
+  const file = join(stateDir, 'settings.json');
+  if (existsSync(file)) return;
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(file, JSON.stringify({ version: 1, settings: { setupDone: true } }));
+}
+markSetUp(E2E_STATE_DIR);
+
 /**
  * The e2e daemon's home directory (its `HOME`), so what it lists and suggests from home is the
  * test's own: the omp spec lays out folders here.
@@ -103,11 +118,12 @@ export async function rpcAnswer(request) {
 /**
  * A daemon of a test's own, beside the shared one, for a test that restarts it: the real
  * daemon with the fake omp and fake gh, keeping its state in `stateDir` and reading journals from
- * `sessionsDir`, with `env` added to its environment. Resolves once it answers; `stop()` ends
- * it as Ctrl+C does.
- * @param {{ port: number, stateDir: string, sessionsDir: string, env?: Record<string, string> }} options
+ * `sessionsDir`, with `env` added to its environment. Its state is marked set up unless `fresh`.
+ * Resolves once it answers; `stop()` ends it as Ctrl+C does.
+ * @param {{ port: number, stateDir: string, sessionsDir: string, env?: Record<string, string>, fresh?: boolean }} options
  */
-export async function startDaemon({ port, stateDir, sessionsDir, env = {} }) {
+export async function startDaemon({ port, stateDir, sessionsDir, env = {}, fresh = false }) {
+  if (!fresh) markSetUp(stateDir);
   const child = spawn('bun', ['daemon/main.js', '--port', String(port), '--omp', 'tests/fixtures/fake-omp.js', '--gh', 'tests/fixtures/fake-gh.js'], {
     env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, FAKE_GH_ROOT: E2E_GH_ROOT, ...env },
     stdio: 'ignore',
