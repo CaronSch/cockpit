@@ -28,6 +28,8 @@
  * - contains "long": the reply's usage is that of a 250K-token conversation read from a
  *   one-hour prompt cache entry (`cttl.ephemeral1h`), as Anthropic's are reported
  * - `compact`: answers with a summary in omp 18.12.6's `CompactionResult` shape (from its source)
+ * - contains "style": says whether its system prompt carries the rules "I have ADHD" adds
+ *   (daemon/adhd.js): "Writing in ADHD mode." or "Writing as usual."
  * - `/rename [title]`: like omp's builtin, names the session (with no title, from the first
  *   prompt that says something: "hi" alone is too little to name a session by; that
  *   outcome follows the answer, as omp's background title generation does)
@@ -334,6 +336,8 @@ async function runPrompt(id, text) {
     streamAssistant(WIDE_TABLE_REPLY);
   } else if (/table/.test(text)) {
     streamAssistant('Here it is:\n| When | What happens | Code |\n|---|---|---|\n| Now | Stuff happened | `tracked.rs:67` |');
+  } else if (/style/.test(text)) {
+    streamAssistant(appendedPrompt?.includes('ADHD MODE ACTIVE') ? 'Writing in ADHD mode.' : 'Writing as usual.');
   } else {
     streamAssistant(`You said: **${text}**\n\n- one\n- two`, /think/.test(text) ? 'Weighing what to say.' : null, undefined, /long/.test(text) ? longUsage : usage);
   }

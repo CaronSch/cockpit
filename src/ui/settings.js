@@ -49,6 +49,11 @@ const DAEMON_SETTINGS = [
     label: 'Review decisions',
     detail: 'After every turn, a small model lists up to five decisions the agent took without you, under its reply (a cheap model call per turn); for every browser',
   },
+  {
+    key: 'adhd',
+    label: 'I have ADHD',
+    detail: 'Agents answer for a reader with ADHD (github.com/ayghri/i-have-adhd): the next action first, numbered steps, short lists, no preamble or closers. A running conversation takes it up from its next message; for every browser',
+  },
 ];
 
 /** @typedef {Record<SettingKey, boolean>} Settings */

@@ -39,7 +39,8 @@ export const SETUP_COMMANDS = Object.freeze([
  * the agent's text, while its thinking and tool calls sit in collapsed cards or are hidden, so
  * the agent is asked to say what it is doing as it goes (Claude Code's own wording), and told
  * what the window can show (diagrams, charts, images). It takes the place of any APPEND_SYSTEM.md the
- * user has: omp reads one or the other.
+ * user has: omp reads one or the other. With "I have ADHD" on, that project's rules follow it
+ * (adhd.js); they give way to it where they disagree (their "a rule fights the harness").
  */
 export const APPEND_SYSTEM_PROMPT =
   "Your text output is what the user reads between tool calls; they usually can't see your thinking or the raw tool results. Write it for a teammate who stepped away and is catching up, not for a log file: they don't know the codenames or shorthand you created along the way, and they didn't watch your process unfold. Before your first tool call, say in a sentence what you're about to do; while working, give brief updates when you find something load-bearing or change direction.\n\n" +
@@ -92,14 +93,16 @@ export class SessionNotRunning extends Error {}
 
 /**
  * `resume` continues a journal; `fork` starts a new one from a copy of it (omp's `--fork`
- * only reads the source). At most one of them is set.
+ * only reads the source). At most one of them is set. `appendSystemPrompt` is appended to
+ * omp's system prompt for the life of the process: the workbench's own, with whatever the
+ * daemon's settings add (adhd.js).
  * @param {{
  *   id: string, cwd: string, resume: string | null, fork: string | null, ompPath: string,
- *   emit: (body: SessionEventBody) => void, now?: () => number,
+ *   emit: (body: SessionEventBody) => void, now?: () => number, appendSystemPrompt?: string,
  * }} options
  * @returns {OmpSession}
  */
-export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now }) {
+export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now, appendSystemPrompt = APPEND_SYSTEM_PROMPT }) {
   const startedAt = now();
   /** @type {SessionMeta} */
   let meta = { id, cwd, resume, fork, sessionFile: resume, status: 'starting', pid: null, exitCode: null, error: null, startedAt, ompId: null };
@@ -126,7 +129,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   let child = null;
   try {
     const from = resume ? ['--resume', resume] : fork ? ['--fork', fork] : [];
-    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--append-system-prompt', APPEND_SYSTEM_PROMPT, ...from], {
+    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--append-system-prompt', appendSystemPrompt, ...from], {
       cwd,
       stdin: 'pipe',
       stdout: 'pipe',
