@@ -1828,6 +1828,31 @@ test('Up and Down in the message box step through what was sent, as in a shell',
   await expect(draft).toHaveValue('my draft');
 });
 
+test('a message of just "." continues silently: no prompt shows for it, nor comes back with Up, even after a reload', async ({ page }) => {
+  await openWorkbench(page);
+  const pane = await startedPane(page);
+  await send(pane, 'first');
+  await expect(pane.locator('.omp-assistant').last()).toContainText('You said: first');
+  await send(pane, '.');
+  // The fake answers omp's continue directive, not a "." prompt.
+  await expect(pane.locator('.omp-assistant').last()).toContainText('Carrying on where I left off.');
+  await expect(prompts(pane)).toHaveText(['first']);
+  const draft = pane.locator('textarea');
+  await expect(draft).toHaveValue('');
+  await draft.press('ArrowUp');
+  await expect(draft).toHaveValue('first');
+  await draft.press('ArrowUp');
+  await expect(draft, 'nothing older').toHaveValue('first');
+  await draft.fill('');
+
+  await page.reload();
+  const again = page.locator('.widget[data-widget="omp"]');
+  await expect(again.locator('.omp-assistant').last()).toContainText('Carrying on where I left off.');
+  await expect(prompts(again)).toHaveText(['first']);
+  await again.locator('textarea').press('ArrowUp');
+  await expect(again.locator('textarea')).toHaveValue('first');
+});
+
 test('while the agent works through its todo list, the toolbar shows how far it is', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);

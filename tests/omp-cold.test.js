@@ -4,7 +4,7 @@ import { coldAt } from '../src/omp/cold.js';
 /** @import { Item } from '../src/omp/transcript.js' */
 
 /** @param {number | null} at @param {boolean} [byAgent] @returns {Item} */
-const prompt = (at, byAgent = false) => ({ key: `u${at}`, rev: 0, kind: 'user', text: '', images: 0, byAgent, at });
+const prompt = (at, byAgent = false) => ({ key: `u${at}`, rev: 0, kind: 'user', text: '', images: 0, byAgent, continues: false, at });
 /** @param {number | null} at @returns {Item} */
 const reply = (at) => ({ key: `a${at}`, rev: 0, kind: 'assistant', blocks: [], stopReason: 'stop', errorMessage: null, model: null, ended: true, at });
 /** @param {Item[]} items @param {{ streaming?: boolean, dialogs?: any[] }} [rest] */

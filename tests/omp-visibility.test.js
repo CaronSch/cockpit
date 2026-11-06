@@ -1,6 +1,7 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
-import { applyEvent, createTranscript } from '../src/omp/transcript.js';
+import { applyEvent, createTranscript, seedConversation } from '../src/omp/transcript.js';
+import { CONTINUE_DIRECTIVE } from '../src/omp/message.js';
 import { promptsAndResponses } from '../src/omp/visibility.js';
 /** @import { SessionEvent } from '../daemon/wire.js' */
 /** @import { Item, Transcript } from '../src/omp/transcript.js' */
@@ -224,6 +225,17 @@ describe('only prompts and responses', () => {
       'assistant: A cat.',
       'assistant: The job passed.',
     ]);
+  });
+
+  test('a `.` sent (omp’s continue directive) is no prompt, live or from a journal; the reply it brings shows', () => {
+    const live = run([agentStart, ...prompt('fix it'), ...assistant([text('Half done.')], 'stop'), agentEnd, agentStart, ...prompt(CONTINUE_DIRECTIVE), ...assistant([text('All done.')], 'stop'), agentEnd]);
+    assert.deepEqual(view(live).shown, ['user: fix it', 'assistant: Half done.', 'assistant: All done.']);
+    const asleep = createTranscript();
+    const said = (/** @type {string} */ t) => ({ role: 'assistant', content: [text(t)], stopReason: 'stop', timestamp: 1 });
+    const asked = (/** @type {string} */ t) => ({ role: 'user', content: [text(t)], attribution: 'user', timestamp: 1 });
+    const journal = [asked('fix it'), said('Half done.'), asked(CONTINUE_DIRECTIVE), said('All done.')];
+    seedConversation(asleep, { messages: journal, title: null, model: null, thinkingLevel: null });
+    assert.deepEqual(view(asleep).shown, ['user: fix it', 'assistant: Half done.', 'assistant: All done.']);
   });
 
   test('a final reply keeps its place before a later shell run in the same turn', () => {

@@ -172,7 +172,12 @@ What runs today:
   reloads; a line starting with `!` runs
   as a shell command in the session's directory, at once even mid-turn, and while
   the draft is one the box turns into a shell line (accent-coloured, `$ shell · <dir>`,
-  Run instead of Send, the cards shown as waiting for the next prompt). While a
+  Run instead of Send, the cards shown as waiting for the next prompt). A message of just
+  `.` (no comment cards or files) continues silently, as in omp's own editor: the pane sends
+  omp's continue directive instead (`src/omp/message.js`; a steer while a turn runs), and
+  since omp's RPC cannot send it hidden, every view recognises it by its text and shows no
+  prompt for it (transcript, live or from a journal, Up's history, the conversation's name,
+  Rewind, Sessions' first prompt, count and search), a queued one as `. (continue)`. While a
   turn runs, the toolbar shows how far the agent is through its todo list (tasks
   done of tasks, the current one on hover), read from omp's `todo` results; work
   without a list shows none. A Running line above the message box lists the shells
