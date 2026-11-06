@@ -196,6 +196,11 @@
   border-color: var(--color-accent);
 }
 
+/* The previous/next response arrows in the top bar, before New: narrow. */
+.omp-nav-btn {
+  padding-inline: 4px;
+}
+
 .omp-activity {
   color: var(--color-text-faint);
 }
