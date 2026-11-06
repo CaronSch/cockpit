@@ -1,36 +1,48 @@
 /**
- * The daemon's settings: switches for what the daemon does, so every page sees and changes
- * the same ones (a page's own look is kept per browser: src/ui/settings.js). They are picked
- * in the Config menu and kept in one small file in the state directory.
+ * The daemon's settings: what the daemon does, so every page sees and changes the same ones (a
+ * page's own look is kept per browser: src/ui/settings.js). They are picked in Setup and the
+ * Config menu and kept in one small file in the state directory.
  *
  * `<file>` (state-file.js): `{ version: 1, settings: { [key]: value } }`; a key it lacks has
  * its default.
  */
+import { BROWSER_CHOICES } from './browser.js';
 import { loadStateFile } from './state-file.js';
+/** @import { BrowserChoice } from './browser.js' */
 
 const VERSION = 1;
 
 /**
  * `idleCompaction`: compact long conversations left idle (idle-compaction.js); `decisionReview`:
  * after every turn, list the decisions the agent took without its user (decisions.js); `adhd`:
- * agents shape their replies for a reader with ADHD (adhd.js).
- * @typedef {{ idleCompaction: boolean, decisionReview: boolean, adhd: boolean }} DaemonSettings
+ * agents shape their replies for a reader with ADHD (adhd.js); `browser`: which browser agents
+ * drive (browser.js); `setupDone`: the user has been through Setup, so an empty screen no longer
+ * opens it.
+ * @typedef {{ idleCompaction: boolean, decisionReview: boolean, adhd: boolean, browser: BrowserChoice, setupDone: boolean }} DaemonSettings
  */
 
 /** @type {Readonly<DaemonSettings>} */
-const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false });
+const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: false });
+
+/** Whether each setting may take a value. @type {Readonly<Record<keyof DaemonSettings, (value: unknown) => boolean>>} */
+const VALID = Object.freeze({
+  idleCompaction: (value) => typeof value === 'boolean',
+  decisionReview: (value) => typeof value === 'boolean',
+  adhd: (value) => typeof value === 'boolean',
+  browser: (value) => BROWSER_CHOICES.includes(/** @type {BrowserChoice} */ (value)),
+  setupDone: (value) => typeof value === 'boolean',
+});
 
 /**
- * Whether `value` sets some of the settings: known keys only, each with a value of its type.
+ * Whether `value` sets some of the settings: known keys only, each with a value it may take.
  * @param {any} value parsed untrusted JSON @returns {value is Partial<DaemonSettings>}
  */
 export function isSettingsPatch(value) {
-  const known = /** @type {Record<string, unknown>} */ (DEFAULT_SETTINGS);
   return (
     value !== null &&
     typeof value === 'object' &&
     !Array.isArray(value) &&
-    Object.entries(value).every(([key, set]) => Object.hasOwn(known, key) && typeof set === typeof known[key])
+    Object.entries(value).every(([key, set]) => Object.hasOwn(VALID, key) && VALID[/** @type {keyof DaemonSettings} */ (key)](set))
   );
 }
 

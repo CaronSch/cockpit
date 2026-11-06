@@ -12,6 +12,7 @@ import { isSettingsPatch } from './settings.js';
 import { TextFileRefused, listDirectory, readTextFile, resolvePath, writeTextFile } from './files.js';
 import { DeliveryRefused } from './deliver.js';
 import { GithubError } from './github.js';
+import { LoginRefused } from './setup.js';
 import { REPO } from '../src/github/pr-refs.js';
 import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
@@ -33,6 +34,7 @@ import { CONTENT_TYPES, INDEX_FILE, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Delivery } from './deliver.js' */
 /** @import { BugbotStore } from './bugbot.js' */
 /** @import { DecisionReviews } from './decisions.js' */
+/** @import { LoginState, Setup } from './setup.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
 /** @typedef {(req: BunRequest, server: Server<undefined>) => Response | Promise<Response>} Handler */
 
@@ -170,7 +172,7 @@ function lastSeenSeq(header, bootId) {
 /** @param {unknown} err */
 function errorResponse(err) {
   const status =
-    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused
+    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused
       ? err.status
       : err instanceof SessionNotRunning
         ? 409
@@ -183,9 +185,9 @@ function errorResponse(err) {
 
 /**
  * Starts serving on `127.0.0.1:port` (0 picks a free port); throws if the port is taken.
- * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, token: string, root: string, config: DaemonConfig, port: number }} options
+ * @param {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, setup: Setup, token: string, root: string, config: DaemonConfig, port: number }} options
  */
-export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, token, root, config, port }) {
+export function createDaemonServer({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, setup, token, root, config, port }) {
   const rootDir = resolve(root);
   const indexFile = resolve(rootDir, INDEX_FILE);
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -217,11 +219,11 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
       start(controller) {
         const write = (/** @type {string} */ chunk) => controller.enqueue(chunk);
         write('retry: 1000\n\n');
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), ui })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), login: setup.login.state(), ui })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of hub.since(lastSeenSeq(req.headers.get('last-event-id'), hub.bootId))) send(event);
         const unsubscribe = hub.subscribe(send);
-        // No id: scratchpad, history, unread, pins, forks, decisions, settings and bugbot events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, forks, decisions, settings, bugbot and login events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
@@ -234,6 +236,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
         );
         const offSettings = settings.subscribe((/** @type {DaemonSettings} */ all) => write(`data: ${JSON.stringify({ kind: 'settings', settings: all })}\n\n`));
         const offBugbot = bugbot.subscribe((/** @type {readonly BugbotWatch[]} */ watches) => write(`data: ${JSON.stringify({ kind: 'bugbot', watches })}\n\n`));
+        const offLogin = setup.login.subscribe((/** @type {LoginState | null} */ login) => write(`data: ${JSON.stringify({ kind: 'login', login })}\n\n`));
         const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
         stop = () => {
           clearInterval(heartbeat);
@@ -246,6 +249,7 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
           offDecisions();
           offSettings();
           offBugbot();
+          offLogin();
         };
       },
       cancel: () => stop(),
@@ -374,9 +378,31 @@ export function createDaemonServer({ hub, history, scratchpads, attachments, wor
       '/api/settings': api({
         PUT: async (req) => {
           const patch = await readJson(req);
-          if (!isSettingsPatch(patch)) throw new HttpError(400, 'expected some of { idleCompaction: boolean, decisionReview: boolean, adhd: boolean }');
+          if (!isSettingsPatch(patch)) throw new HttpError(400, "expected some of { idleCompaction: boolean, decisionReview: boolean, adhd: boolean, browser: 'isolated' | 'relay' | 'omp', setupDone: boolean }");
           await settings.set(patch);
           return json(settings.all());
+        },
+      }),
+      '/api/setup': api({ GET: async () => json(await setup.check()) }),
+      '/api/setup/login': api({
+        POST: async (req) => {
+          const body = await readJson(req);
+          const provider = body?.provider ?? null;
+          if (provider !== null && typeof provider !== 'string') throw new HttpError(400, 'expected { provider?: string }');
+          setup.login.start(provider);
+          return json({ login: setup.login.state() }, 202);
+        },
+        DELETE: async () => {
+          setup.login.cancel();
+          return noContent();
+        },
+      }),
+      '/api/setup/login/input': api({
+        POST: async (req) => {
+          const body = await readJson(req);
+          if (typeof body?.line !== 'string' || body.line.includes('\n')) throw new HttpError(400, 'expected { line: string } (one line)');
+          setup.login.input(body.line);
+          return noContent();
         },
       }),
       '/api/scratchpads': api({ GET: async () => json({ pads: await scratchpads.list() }) }),

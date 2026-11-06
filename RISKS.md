@@ -194,6 +194,20 @@ is newer. The daemon prints its version at start.
   `main.ts` (print mode, `--system-prompt`, `@role` model patterns) and `session/messages.ts`,
   then update `decisions.js` and the fake's `-p`.
 
+- **Setup and the agents' browser lean on omp's CLI and environment.** `daemon/setup.js` reads
+  `omp models --json` (a `models` list whose entries carry `provider` and `kind: 'chat'`, only
+  for providers with credentials) and drives `omp login` over a pipe: its numbered provider
+  list, `Enter number (1-N):`, and the code prompt some providers ask, each answered with a line
+  on stdin, as omp 18.10.3's `cli/oauth-terminal.ts` reads them. `daemon/browser.js` sets
+  `PI_BROWSER_RELAY`, `PI_BROWSER_CMUX` and `PI_BROWSER_TERN`, which override omp's
+  `browser.relay`, `browser.cmux` and `browser.tern` settings (`tools/browser/relay/kind.ts`,
+  `cmux/rpc.ts`, `tern/kind.ts`); a new way for omp to reach the user's browser is not covered.
+  A change shows up as Setup saying no provider is signed in while agents start, a login that
+  waits forever for an answer the window never shows, or agents driving the user's Chrome
+  with *A separate browser* chosen. *Response:* re-read `cli/models-cli.ts`,
+  `cli/login-cli.ts`, `cli/oauth-terminal.ts` and `tools/browser.ts` (`resolveBrowserKind`),
+  then update `setup.js`, `browser.js` and the fake's `models` and `login`.
+
 ## When `gh` is upgraded past 2.92, or Cursor changes Bugbot
 
 - **Pull requests lean on `gh`'s output.** `daemon/github.js` reads `gh pr list`/`pr view

@@ -48,7 +48,8 @@ Planned capabilities:
   launches each omp session as `omp --mode rpc-ui` in the chosen directory
   (`Bun.spawn`), owning those processes, with `--append-system-prompt` asking the
   agent for progress updates as it works, in Claude Code's wording, and telling it
-  what the window renders, inviting visuals (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has). omp is the `omp` on PATH unless `--omp`
+  what the window renders, inviting visuals (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has),
+  and with the `PI_BROWSER_*` variables the Agents’ browser setting picks (`daemon/browser.js`). omp is the `omp` on PATH unless `--omp`
   says otherwise. Prefer Bun's own APIs where they make the code smaller.
   The workbench is self-contained: it shows agents it launched and does not attach
   to sessions started in other terminals. Later it also samples process trees,
@@ -267,7 +268,27 @@ What runs today:
   keep lists to five and drop preamble and closers. omp fixes a system prompt as it starts,
   so the hub puts a session started the other way to sleep as soon as it is idle (at once
   when the switch changes, at the end of the turn if it is working), and the next message
-  wakes it with the rules (or without them).
+  wakes it with the rules (or without them). Last, *Agents’ browser*: where an agent's `browser`
+  tool opens pages. *A separate browser* (the default) launches every omp with
+  `PI_BROWSER_RELAY=0`, `PI_BROWSER_CMUX=0` and `PI_BROWSER_TERN=0`, so it uses omp's own Chrome
+  for Testing with a profile of its own, never the user's Chrome tab (omp's relay adopts the
+  visible one) nor the cmux window a daemon started from cmux would pass on; *Your Chrome* sets
+  `PI_BROWSER_RELAY=1`; *As omp is set up* sets nothing (`daemon/browser.js`). A running
+  conversation takes a change up as it does the ADHD switch: the hub compares how each omp was
+  launched (`launchWith`: its prompt and environment) with how one would be now.
+- The Setup window (the `setup` widget): what a machine starting afresh needs before a first
+  agent, checked by the daemon whenever the window asks (`GET /api/setup`, `daemon/setup.js`):
+  omp runs (`omp --version`), omp has models from a provider it is signed in to (`omp models
+  --json`), and `gh` is signed in (`gh api user`); then the Agents’ browser choice and the
+  daemon's switches, the same controls as Config's (`src/ui/settings.js` exports them). Without
+  any provider `omp --mode rpc-ui` exits at start, so an agent window cannot sign in from a
+  session of its own: **Sign in…** has the daemon run omp's terminal login, `omp login`, which
+  lists providers by number, opens the provider's page in the default browser and finishes on
+  its local callback (or asks for a code); its output streams to every page (`login` events,
+  kept in `hello`) and the window sends what is typed as lines, one login at a time. Once
+  omp and a provider check out, the daemon's `setupDone` is set; until then the first empty
+  screen a page opens gets a Setup window (`src/app.js` `offerSetup`), and the palette opens
+  one any time. **Start an agent** opens an agent window beside it.
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
@@ -598,10 +619,12 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
 - `src/widgets/sessions.js` — omp conversations, one list, searchable and sortable.
+- `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, and the daemon's switches.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
 - `daemon/attachments.js` — Files attached to omp prompts: stored where omp can read them, one folder per day, so a prompt can mention them as `@"<path>"` and omp attaches them itself (images to the model, text inlined; see omp's file mentions).
+- `daemon/browser.js` — Which browser agents drive (settings.js `browser`, picked in Setup or Config): a separate one of omp's own by default, so an agent testing a page never takes over the tab its user is reading.
 - `daemon/bugbot.js` — Bugbot reviews asked for from the pull request window: `bugbot go` is commented on the pull request as the user, and the daemon watches it until Cursor Bugbot's review answers (src/github/bugbot.js), then sends the review, every finding with where it is, to the conversation the window reviews for (deliver.js).
 - `daemon/clock.js` — The daemon's clock for the times it stamps on events and unread marks: Date.now, but never the same value twice and never earlier than the last, so any two stamps are ordered, even within one millisecond.
 - `daemon/conversation.js` — A conversation read from its journal, for a window to show while no omp process holds it: the messages omp's `get_messages` would answer with once resumed, so the transcript seeds from either the same way, and what the journal records about the session around them.
@@ -622,7 +645,8 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/scratchpad.js` — Scratchpads: plain Markdown files the daemon keeps, one per pad, with pasted screenshots and files stored beside them.
 - `daemon/search.js` — Ranked search over conversations: a question in plain words ("in which session did we find that Binance bundle exclusivity dropped…") finds the conversations that talk about it.
 - `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), all behind the loopback guard.
-- `daemon/settings.js` — The daemon's settings: switches for what the daemon does, so every page sees and changes the same ones (a page's own look is kept per browser: src/ui/settings.js).
+- `daemon/settings.js` — The daemon's settings: what the daemon does, so every page sees and changes the same ones (a page's own look is kept per browser: src/ui/settings.js).
+- `daemon/setup.js` — Setup (the Setup window, src/widgets/setup.js): what this machine needs before a first agent can start, checked whenever the window asks, and omp's own `omp login` run for the window, so a model provider can be signed in to from the browser.
 - `daemon/sleep.js` — When the daemon puts a session to sleep: ends its omp process, as nobody needs it running.
 - `daemon/state-file.js` — A value the daemon keeps in one small JSON file in the state directory (unread marks, pins, settings): read once as the daemon starts, written whole after every change (write-then-rename, one write at a time, so a crash mid-write leaves the old value, never half of the new one), and every change heard by its subscribers.
 - `daemon/token.js` — The daemon's access token: random, created once, kept owner-only in the state directory so a browser stays signed in across daemon restarts.
@@ -639,6 +663,7 @@ particular, move a capability into "Current state" when it ships.
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
 - `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
 - `file` — File: Read and edit a text file (Markdown, CSV, JSON, text, code); a path in an agent’s reply opens one with a click
+- `setup` — Setup: What Cockpit needs on this machine (omp, a model sign-in, GitHub) and which browser agents use
 
 ### Scripts
 
@@ -653,6 +678,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/setup.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

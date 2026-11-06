@@ -27,6 +27,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { Forks } from '../../daemon/forks.js' */
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @import { Reviews } from '../omp/decisions.js' */
+/** @import { LoginState, SetupStatus } from '../../daemon/setup.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
 /** @typedef {{ ok: true, rev: number | null } | { ok: false, current: Screen | null }} ScreenSave */
 
@@ -99,6 +100,12 @@ export class DaemonError extends Error {
  *   bugbot(): readonly BugbotWatch[],
  *   onBugbot(fn: () => void): () => void,
  *   askBugbot(request: { repo: string, number: number, target: ConversationTarget }): Promise<BugbotWatch>,
+ *   setup(): Promise<SetupStatus>,
+ *   login(): LoginState | null,
+ *   onLogin(fn: () => void): () => void,
+ *   startLogin(provider?: string): Promise<void>,
+ *   answerLogin(line: string): Promise<void>,
+ *   cancelLogin(): Promise<void>,
  * }} DaemonClient
  */
 
@@ -183,6 +190,15 @@ export function createDaemonClient(env = {}) {
     watches = next;
     for (const fn of bugbotListeners) fn();
   };
+  /** @type {LoginState | null} */
+  let login = null;
+  /** @type {Set<() => void>} */
+  const loginListeners = new Set();
+  /** @param {LoginState | null} next */
+  const setLogin = (next) => {
+    login = next;
+    for (const fn of loginListeners) fn();
+  };
   /** The decision reviews of the conversations asked about, by omp id. @type {Map<string, Reviews>} */
   const decisions = new Map();
   /** Conversations whose reviews are being asked for. @type {Set<string>} */
@@ -238,6 +254,7 @@ export function createDaemonClient(env = {}) {
     setForks(hello.forks);
     setSettings(hello.settings);
     setWatches(hello.bugbot);
+    setLogin(hello.login);
     // Changes made while this page was away were not heard: ask again.
     decisions.clear();
     decisionsChanged();
@@ -259,6 +276,7 @@ export function createDaemonClient(env = {}) {
     if (event.kind === 'forks') return setForks(event.forks);
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'bugbot') return setWatches(event.watches);
+    if (event.kind === 'login') return setLogin(event.login);
     if (event.kind === 'decisions') {
       decisions.set(event.ompId, event.reviews);
       return decisionsChanged();
@@ -564,6 +582,22 @@ export function createDaemonClient(env = {}) {
       return () => bugbotListeners.delete(fn);
     },
     askBugbot: ({ repo, number, target }) => request('/api/github/bugbot', { method: 'POST', body: JSON.stringify({ repo, number, target }) }),
+    setup: () => request('/api/setup'),
+    login: () => login,
+    onLogin(fn) {
+      loginListeners.add(fn);
+      return () => loginListeners.delete(fn);
+    },
+    // The login's output and end arrive on the stream, for every page.
+    async startLogin(provider) {
+      await request('/api/setup/login', { method: 'POST', body: JSON.stringify(provider ? { provider } : {}) });
+    },
+    async answerLogin(line) {
+      await request('/api/setup/login/input', { method: 'POST', body: JSON.stringify({ line }) });
+    },
+    async cancelLogin() {
+      await request('/api/setup/login', { method: 'DELETE' });
+    },
   };
 }
 

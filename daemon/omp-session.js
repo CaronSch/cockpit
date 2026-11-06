@@ -92,17 +92,22 @@ export class SessionNotRunning extends Error {}
  */
 
 /**
+ * How an omp is launched, for the life of the process: `appendSystemPrompt` is appended to its
+ * system prompt (the workbench's own, with whatever the daemon's settings add: adhd.js), and
+ * `env` is added to the daemon's environment for it (browser.js).
+ * @typedef {{ appendSystemPrompt: string, env: Readonly<Record<string, string>> }} LaunchWith
+ */
+
+/**
  * `resume` continues a journal; `fork` starts a new one from a copy of it (omp's `--fork`
- * only reads the source). At most one of them is set. `appendSystemPrompt` is appended to
- * omp's system prompt for the life of the process: the workbench's own, with whatever the
- * daemon's settings add (adhd.js).
+ * only reads the source). At most one of them is set.
  * @param {{
  *   id: string, cwd: string, resume: string | null, fork: string | null, ompPath: string,
- *   emit: (body: SessionEventBody) => void, now?: () => number, appendSystemPrompt?: string,
- * }} options
+ *   emit: (body: SessionEventBody) => void, now?: () => number,
+ * } & Partial<LaunchWith>} options
  * @returns {OmpSession}
  */
-export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now, appendSystemPrompt = APPEND_SYSTEM_PROMPT }) {
+export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now, appendSystemPrompt = APPEND_SYSTEM_PROMPT, env = {} }) {
   const startedAt = now();
   /** @type {SessionMeta} */
   let meta = { id, cwd, resume, fork, sessionFile: resume, status: 'starting', pid: null, exitCode: null, error: null, startedAt, ompId: null };
@@ -131,6 +136,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     const from = resume ? ['--resume', resume] : fork ? ['--fork', fork] : [];
     child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--append-system-prompt', appendSystemPrompt, ...from], {
       cwd,
+      env: { ...process.env, ...env },
       stdin: 'pipe',
       stdout: 'pipe',
       stderr: 'pipe',
