@@ -92,8 +92,14 @@ class HttpError extends Error {
   }
 }
 
+/** The answers `json` built: bodies already in memory, the only ones `compressed` gzips. @type {WeakSet<Response>} */
+const builtJson = new WeakSet();
 /** @param {unknown} body @param {number} [status] */
-const json = (body, status = 200) => Response.json(body, { status, headers: BASE_HEADERS });
+const json = (body, status = 200) => {
+  const res = Response.json(body, { status, headers: BASE_HEADERS });
+  builtJson.add(res);
+  return res;
+};
 /** @param {string} text @param {number} status */
 const text = (text, status) => new Response(text, { status, headers: { ...BASE_HEADERS, 'content-type': 'text/plain; charset=utf-8' } });
 const noContent = () => new Response(null, { status: 204, headers: BASE_HEADERS });
@@ -202,12 +208,14 @@ function followed(params) {
 }
 
 /**
- * `res` gzipped when it is JSON of `GZIP_FROM_BYTES` or more and the request accepts gzip. The
- * body goes to the compressor a chunk at a time, so a large one never holds up the daemon.
+ * `res` gzipped when the daemon built it as JSON (`json`), it holds `GZIP_FROM_BYTES` or more and
+ * the request accepts gzip. Never a file served as it is read (`/api/file` streams a `.json` as
+ * `application/json`): reading that whole first would let one huge file hold the daemon's memory.
+ * The body goes to the compressor a chunk at a time, so a large one never holds up the daemon.
  * @param {Request} req @param {Response} res @returns {Promise<Response>}
  */
 async function compressed(req, res) {
-  if (!res.headers.get('content-type')?.startsWith('application/json') || !/\bgzip\b/.test(req.headers.get('accept-encoding') ?? '')) return res;
+  if (!builtJson.has(res) || !/\bgzip\b/.test(req.headers.get('accept-encoding') ?? '')) return res;
   const bytes = await res.bytes();
   const headers = new Headers(res.headers);
   if (bytes.length < GZIP_FROM_BYTES) return new Response(bytes, { status: res.status, headers });

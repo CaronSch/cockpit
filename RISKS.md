@@ -299,6 +299,11 @@ is newer. The daemon prints its version at start.
   into the tailnet from another account is not the owner and is refused, but Funnel
   would carry no identity at all. *Response:* real authentication per person, TLS, and
   per-user isolation of sessions and telemetry; never put the daemon behind Funnel.
+- **An open stream outlives its whois verdict.** The gate runs once per request, and the event
+  stream is one long request: a device that stops being the owner's (tagged, or reassigned)
+  while a page is open keeps hearing until it disconnects; its new requests are refused within
+  the verdict's minute. Removing a device from the tailnet ends its streams with its route.
+  *Response:* run the gate again on the stream's heartbeat and close the stream when it refuses.
 - **The telemetry store holds secrets.** Prompts, file contents, env values and
   tool output are stored in plain text, with the same trust as omp's own
   `~/.omp` session files. *Response:* redaction before storage or display to
@@ -328,13 +333,25 @@ is newer. The daemon prints its version at start.
   up as Phone access stuck in its error, or every phone request refused. *Response:*
   compare the real output with the fake's and update both.
 
-## When the tailnet has HTTPS certificates
+## When the phone opens Phone access without its Tailscale tunnel up
 
+- **Plain HTTP off the tunnel can be spoofed, and the page's cache poisoned.** The phone's
+  address is a tailnet one (`http://100.x.y.z:<port>/phone`); with Tailscale off on the phone,
+  the browser sends that request to whatever network it is on. A hostile Wi-Fi can answer as the
+  daemon: it gets the token cookie (not `Secure`: there is no HTTPS), and can leave its own
+  long-cached copies of `/phone` and its scripts, which the browser runs later on the real
+  daemon's origin, signed in. The token alone is of no use to it (loopback needs a shell on the
+  Mac; the tailnet, one of the owner's devices); the poisoned script is, since agents run
+  commands. This bites now, whenever the phone page is opened with the tunnel down. *Response
+  for now:* the README asks for Tailscale's always-on VPN on the phone, blocking connections
+  without it, so the tailnet address never leaves the tunnel. *Response:* HTTPS (below), whose
+  certificate a spoofing network cannot show.
 - **The phone page is not a secure context.** It is plain HTTP to a tailnet address
   (the tunnel encrypts it), so the browser offers it no clipboard API, notifications,
   service worker or home-screen app; the phone page hides Copy for that reason.
-  *Response:* serve through Tailscale Serve over HTTPS (its identity headers come from
-  the same `whois`), then offer Copy, push notifications and installing the page.
+  *Response:* once the tailnet has HTTPS certificates, serve through Tailscale Serve over
+  HTTPS (its identity headers come from the same `whois`), then offer Copy, push
+  notifications and installing the page.
 
 ## When the Mac restarts while away from it
 

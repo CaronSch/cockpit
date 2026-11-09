@@ -2238,4 +2238,19 @@ describe('compression', () => {
     assert.equal(small.headers.get('content-encoding'), null);
     assert.equal((await small.json()).home, cwd);
   });
+
+  test('a data file a reply shows is streamed as it is read, never gzipped (it would be read whole first)', async () => {
+    const file = join(cwd, 'chart-data.json');
+    const body = JSON.stringify({ values: Array.from({ length: 20_000 }, (_, i) => ({ x: i, y: i * 2 })) });
+    assert.ok(body.length > 128 * 1024);
+    await Bun.write(file, body);
+    const res = await fetch(`http://127.0.0.1:${port}/api/file?path=${encodeURIComponent(file)}`, {
+      headers: { cookie: `ac_token=${TOKEN}`, 'accept-encoding': 'gzip' },
+      decompress: false,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/json');
+    assert.equal(res.headers.get('content-encoding'), null);
+    assert.equal(await res.text(), body);
+  });
 });

@@ -52,7 +52,10 @@ No server is involved: the phone talks to the daemon over your tailnet, and only
 is awake and `bun start` runs. The daemon answers there only devices signed in to Tailscale as
 the Mac's owner (it asks `tailscale whois` about each connection), and only with its token, which
 the QR code carries. The page is plain HTTP inside Tailscale's encrypted tunnel, so the browser
-treats it as insecure: Copy buttons and notifications are not offered there.
+treats it as insecure: Copy buttons and notifications are not offered there. Outside the tunnel
+that address means nothing, and a hostile Wi-Fi could answer for it, so keep Tailscale always on
+on the phone: in Android's VPN settings, turn on **Always-on VPN** and **Block connections without
+VPN** for Tailscale.
 
 ## Getting started
 

@@ -29,6 +29,17 @@ const VERDICT_TTL_MS = 60_000;
 const STATUS_TIMEOUT_MS = 10_000;
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
 
+/**
+ * Whether `address` is in 100.64.0.0/10, where Tailscale gives every node its IPv4: the only
+ * peers whois can name, so the only ones worth a lookup.
+ * @param {string} address
+ */
+export function isTailnetAddress(address) {
+  if (!IPV4.test(address)) return false;
+  const [a, b] = address.split('.').map(Number);
+  return a === 100 && b >= 64 && b <= 127;
+}
+
 /** The environment the Tailscale CLI runs in. @typedef {Record<string, string | undefined>} Env */
 /** The Mac on its tailnet: its address, its MagicDNS name (empty without one) and its owner's login. @typedef {{ ipv4: string, dnsName: string, login: string }} Tailnet */
 
@@ -149,10 +160,14 @@ export function createRemoteAccess({ tailscale, port, token, settings, serve, en
   function admit(req, server) {
     const address = server.requestIP(req)?.address;
     if (!address || !live) return Promise.resolve(false);
+    // A peer outside the tailnet's range (a LAN host routing to this address) costs no lookup and
+    // no cache entry; the listener's own address is the Mac itself.
+    if (address !== live.tailnet.ipv4 && !isTailnetAddress(address)) return Promise.resolve(false);
     const owner = live.tailnet.login;
     const at = now();
     const known = verdicts.get(address);
     if (known && at - known.at < VERDICT_TTL_MS) return known.allowed;
+    for (const [key, old] of verdicts) if (at - old.at >= VERDICT_TTL_MS) verdicts.delete(key);
     const allowed = whois(tailscale, env, address, whoisTimeoutMs).then((peer) => peer !== null && peer.login === owner && !peer.tagged);
     verdicts.set(address, { at, allowed });
     return allowed;
