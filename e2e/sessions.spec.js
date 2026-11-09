@@ -328,6 +328,26 @@ test('a click shows a conversation in a new agent window when there is none, the
   await expect(page.locator('.widget[data-widget="sessions"]'), 'the list stays').toHaveCount(1);
 });
 
+test('a message sent as soon as a conversation shows, before its journal has been read, goes to that conversation', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  // The journal read held back, as a long journal's takes a while: the box is used before it lands.
+  /** @type {() => void} */
+  let release = () => {};
+  const held = new Promise((resolve) => (release = () => resolve(undefined)));
+  await page.route(/\/api\/conversation\?/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await row(window, 'Fix the login flow').click();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  await pane.locator('textarea').fill('carry on');
+  await pane.locator('textarea').press('Enter');
+  release();
+  await expect(pane.locator('.omp-assistant').last()).toContainText('You said: carry on');
+  await expect(pane.locator('.omp-user .omp-md'), 'resumed, not started afresh').toHaveText(['fix the login bug', 'now add tests', 'carry on'], { useInnerText: true });
+  expect(await shownConversation(page, pane)).toBe(fileOf('login'));
+});
+
 test('what is typed in a conversation waits there while the window shows another, and across a reload', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await row(window, 'Fix the login flow').click();
