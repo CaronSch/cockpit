@@ -15,6 +15,11 @@
  * its conversation becomes unread (`unread.js`) until the user reads it, whether or not a
  * window was open on it.
  *
+ * How each awake session is doing (`SessionActivity`: working, asking, its running work and its
+ * name) is summed up after each of its events and told to `onActivity` listeners whenever it
+ * changes (null once the session ended), so a page can list every session without following
+ * all their events.
+ *
  * A rewind (`branch`) moves a session onto a new journal holding the conversation up to the
  * rewind; the one before keeps the path that was set aside. `onRewound` hears of that one
  * once the session reports its new journal, so it can be put away (archived: restorable), and
@@ -35,8 +40,9 @@ import { SLEEP_AFTER_MS, sleepsNow } from './sleep.js';
 import { OMP_ID } from './unread.js';
 import { awaitsUser } from '../src/omp/activity.js';
 import { withoutSpent } from '../src/omp/event-log.js';
-import { applyEvent, createTranscript, handsTurnBack } from '../src/omp/transcript.js';
-/** @import { SessionEvent, SessionMeta } from './wire.js' */
+import { applyEvent, conversationName, createTranscript, handsTurnBack } from '../src/omp/transcript.js';
+import { runningWork } from '../src/omp/running-work.js';
+/** @import { SessionActivity, SessionEvent, SessionMeta } from './wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
 /** @import { LaunchWith, OmpSession, SessionEventBody } from './omp-session.js' */
 /** @import { IdleCompaction, IdleCompactionOptions } from './idle-compaction.js' */
@@ -56,6 +62,8 @@ import { applyEvent, createTranscript, handsTurnBack } from '../src/omp/transcri
  *   since(seq: number): SessionEvent[],
  *   latest(): number,
  *   subscribe(fn: (event: SessionEvent) => void): () => void,
+ *   activity(): Record<string, SessionActivity>,
+ *   onActivity(fn: (session: string, activity: SessionActivity | null) => void): () => void,
  *   closeAll(): Promise<void>,
  *   launchChanged(): void,
  * }} Hub
@@ -63,6 +71,17 @@ import { applyEvent, createTranscript, handsTurnBack } from '../src/omp/transcri
 
 /** How often the hub looks for sessions to put to sleep or compact, at most: idle compaction lapses a minute late. */
 const SWEEP_MS = 30_000;
+
+/** How a session is doing, as its transcript tells it. @param {Transcript} transcript @returns {SessionActivity} */
+const summarize = (transcript) => ({
+  working: transcript.streaming,
+  asking: transcript.dialogs.length > 0,
+  work: runningWork(transcript).length,
+  name: conversationName(transcript),
+});
+
+/** @param {SessionActivity} a @param {SessionActivity} b */
+const sameActivity = (a, b) => a.working === b.working && a.asking === b.asking && a.work === b.work && a.name === b.name;
 
 /**
  * @param {{
@@ -86,11 +105,13 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
    * How each session is doing (read from its events, as windows read them), when it last did
    * anything or was used, when it compacts while idle, and the journal and id it left in a
    * rewind until it reports its new ones.
-   * @type {Map<string, { transcript: Transcript, usedAt: number, compaction: IdleCompaction, rewoundFrom?: string | null, rewoundId?: string | null }>}
+   * @type {Map<string, { transcript: Transcript, usedAt: number, compaction: IdleCompaction, summary?: SessionActivity, rewoundFrom?: string | null, rewoundId?: string | null }>}
    */
   const activity = new Map();
   /** @type {Set<(event: SessionEvent) => void>} */
   const listeners = new Set();
+  /** @type {Set<(session: string, activity: SessionActivity | null) => void>} */
+  const activityListeners = new Set();
 
   /** @param {string} session @param {SessionEventBody} body */
   function emit(session, body) {
@@ -98,6 +119,8 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
     log.push(event);
     log = withoutSpent(log, event);
     const seen = activity.get(session);
+    /** How the session's activity changed with this event: undefined if it did not. @type {SessionActivity | null | undefined} */
+    let changed;
     if (seen) {
       const file = seen.transcript.meta?.sessionFile ?? null;
       applyEvent(seen.transcript, event);
@@ -125,9 +148,14 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       if (status === 'exited' || status === 'failed') {
         activity.delete(session);
         launchedWith.delete(session);
+        changed = null;
+      } else {
+        const summary = summarize(seen.transcript);
+        if (!seen.summary || !sameActivity(seen.summary, summary)) changed = seen.summary = summary;
       }
     }
     for (const fn of listeners) fn(event);
+    if (changed !== undefined) for (const fn of activityListeners) fn(session, changed);
     const ompId = seen?.transcript.meta?.ompId;
     if (ompId && OMP_ID.test(ompId) && awaitsUser(event)) void unread.awaited(ompId, event.at);
   }
@@ -202,6 +230,11 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
     subscribe(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);
+    },
+    activity: () => Object.fromEntries([...activity].flatMap(([id, seen]) => (seen.summary ? [[id, seen.summary]] : []))),
+    onActivity(fn) {
+      activityListeners.add(fn);
+      return () => activityListeners.delete(fn);
     },
     async closeAll() {
       clearInterval(sweep);

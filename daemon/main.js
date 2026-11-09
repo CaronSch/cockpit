@@ -1,14 +1,17 @@
 #!/usr/bin/env bun
 /**
- * Daemon entry point (`bun start`): serves the workbench on loopback and runs the omp
- * processes it shows.
+ * Daemon entry point (`bun start`): serves the workbench on loopback (and, with Phone access on,
+ * to the owner's tailnet devices: remote.js) and runs the omp processes it shows.
  *
  *   bun daemon/main.js [--port 4777] [--omp <path to omp>] [--gh <path to gh>] [--cwd <dir>]
+ *                      [--tailscale <path to tailscale>] [--remote-port <n>]
  *
  * omp defaults to the `omp` on PATH (install it from https://omp.sh), and the GitHub CLI to the
  * `gh` on PATH (https://cli.github.com; without it, pull requests are not offered). `--cwd` is the
- * directory a new agent window suggests, the home directory unless given.
- * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_GH, COCKPIT_CWD, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
+ * directory a new agent window suggests, the home directory unless given. Phone access runs the
+ * `tailscale` on PATH unless `--tailscale` says otherwise, and listens on the Mac's Tailscale
+ * address at `--remote-port`, the daemon's port unless given.
+ * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_GH, COCKPIT_CWD, COCKPIT_TAILSCALE, COCKPIT_REMOTE_PORT, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
  * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), forks.json
  * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), decisions/
  * (each conversation's decision reviews), fork-sources/ (journals forked mid-turn, cut to their last response, while
@@ -35,7 +38,8 @@ import { APPEND_SYSTEM_PROMPT } from './omp-session.js';
 import { IDLE_COMPACT_AFTER_MS, IDLE_COMPACT_MIN_TOKENS, IDLE_COMPACT_TOKENS_FLOOR } from './idle-compaction.js';
 import { createAttachments } from './attachments.js';
 import { createScratchpads } from './scratchpad.js';
-import { createDaemonServer } from './server.js';
+import { createDaemon, loopbackListener } from './server.js';
+import { createRemoteAccess } from './remote.js';
 import { createWorkspaces } from './workspace.js';
 import { loadToken } from './token.js';
 import { loadUnread } from './unread.js';
@@ -47,7 +51,9 @@ import { createSetup, ompVersion } from './setup.js';
 
 const ROOT = resolve(import.meta.dir, '..');
 
-const { values } = parseArgs({ options: { port: { type: 'string' }, omp: { type: 'string' }, gh: { type: 'string' }, cwd: { type: 'string' } } });
+const { values } = parseArgs({
+  options: { port: { type: 'string' }, omp: { type: 'string' }, gh: { type: 'string' }, cwd: { type: 'string' }, tailscale: { type: 'string' }, 'remote-port': { type: 'string' } },
+});
 const port = Number(values.port ?? process.env.COCKPIT_PORT ?? 4777);
 const ompOption = values.omp ?? process.env.COCKPIT_OMP ?? 'omp';
 // A path (not a bare command name) must not depend on each session's cwd.
@@ -55,6 +61,9 @@ const ompPath = ompOption.includes('/') ? resolve(ompOption) : ompOption;
 const ghOption = values.gh ?? process.env.COCKPIT_GH ?? 'gh';
 // gh runs in the directory of the repository asked about: a path must not depend on it.
 const ghPath = ghOption.includes('/') ? resolve(ghOption) : ghOption;
+const tailscaleOption = values.tailscale ?? process.env.COCKPIT_TAILSCALE ?? 'tailscale';
+const tailscalePath = tailscaleOption.includes('/') ? resolve(tailscaleOption) : tailscaleOption;
+const remotePort = Number(values['remote-port'] ?? process.env.COCKPIT_REMOTE_PORT ?? port);
 const defaultCwd = resolve(values.cwd ?? process.env.COCKPIT_CWD ?? homedir());
 const stateDir = process.env.COCKPIT_STATE_DIR ?? join(homedir(), '.cockpit');
 const ompSessions =
@@ -115,35 +124,43 @@ const bugbot = await loadBugbot({
 }).catch(unreadable);
 const scratchpadDir = join(stateDir, 'scratchpads');
 const setup = createSetup({ ompPath, ghPath });
-/** @type {ReturnType<typeof createDaemonServer>} */
+// Phone access serves the same routes on the tailnet: `daemon` is there by the time it is switched on.
+const remote = createRemoteAccess({ tailscale: tailscalePath, port: remotePort, token, settings, serve: (listener) => daemon.serve(listener) });
+remote.subscribe((state) => {
+  const info = remote.info();
+  if (state.state === 'on') console.log(`Phone: ${info.url} (only ${info.login}'s devices)`);
+  else if (state.state === 'error') console.error(`[daemon] Phone access: ${state.error}`);
+});
+const daemon = createDaemon({
+  hub,
+  history,
+  scratchpads: createScratchpads({ dir: scratchpadDir }),
+  attachments: createAttachments({ dir: join(stateDir, 'attachments') }),
+  workspaces: createWorkspaces({ dir: join(stateDir, 'workspaces') }),
+  unread,
+  pins,
+  forks,
+  forker,
+  decisions,
+  settings,
+  github,
+  delivery,
+  bugbot,
+  setup,
+  remote,
+  token,
+  root: ROOT,
+  config: {
+    defaultCwd,
+    home: homedir(),
+    scratchpadDir,
+    idleCompactAfterMs,
+  },
+});
+/** @type {ReturnType<typeof daemon.serve>} */
 let server;
 try {
-  server = createDaemonServer({
-    hub,
-    history,
-    scratchpads: createScratchpads({ dir: scratchpadDir }),
-    attachments: createAttachments({ dir: join(stateDir, 'attachments') }),
-    workspaces: createWorkspaces({ dir: join(stateDir, 'workspaces') }),
-    unread,
-    pins,
-    forks,
-    forker,
-    decisions,
-    settings,
-    github,
-    delivery,
-    bugbot,
-    setup,
-    token,
-    root: ROOT,
-    port,
-    config: {
-      defaultCwd,
-      home: homedir(),
-      scratchpadDir,
-      idleCompactAfterMs,
-    },
-  });
+  server = daemon.serve(loopbackListener(port));
 } catch (err) {
   const code = /** @type {{ code?: string }} */ (err).code;
   console.error(code === 'EADDRINUSE' ? `[daemon] port ${port} is in use; pass --port <n>` : `[daemon] ${err}`);
@@ -164,6 +181,7 @@ async function shutdown() {
   if (stopping) return process.exit(1); // second Ctrl+C: stop waiting
   stopping = true;
   void server.stop(true);
+  void remote.stop();
   setup.login.cancel();
   await hub.closeAll();
   process.exit(0);

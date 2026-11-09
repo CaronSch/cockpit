@@ -7,9 +7,15 @@
  * `onReset` listeners fire before any event from the new daemon is delivered.
  *
  * It keeps which conversations are unread (daemon/unread.js), pinned (daemon/pins.js) and forked from which (daemon/forks.js), the daemon's settings
- * (daemon/settings.js) and its Bugbot watches (daemon/bugbot.js), as the daemon last said: every window reads them here, so all of
+ * (daemon/settings.js), its Bugbot watches (daemon/bugbot.js), how each awake session is doing (`activity`) and whether
+ * Phone access is on (`remote`), as the daemon last said: every window reads them here, so all of
  * them, and every page, agree. So are the decision reviews (daemon/decisions.js) of the conversations windows show,
  * asked for when a window first shows one, and again after a reconnect.
+ *
+ * A scoped client (the phone's, `useScopedDaemon`) hears only the sessions its windows subscribed
+ * to since the page loaded, besides every session's status: subscribing to another reopens the
+ * stream with how far it got in each (`?follow=<id>:<seq>,…`), so the daemon sends only what
+ * is new to it, and nothing is delivered twice.
  *
  * `replayed` tells events the daemon replays on (re)connecting, which happened before this
  * page heard of them, from those happening now: the replay is everything up to the `hello`'s
@@ -20,7 +26,7 @@
  * being, or become again, those.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RepoList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionEvent, SessionMeta, StreamEvent, TextFile, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TextFile, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -106,6 +112,11 @@ export class DaemonError extends Error {
  *   startLogin(provider?: string): Promise<void>,
  *   answerLogin(line: string): Promise<void>,
  *   cancelLogin(): Promise<void>,
+ *   activity(session: string): SessionActivity | null,
+ *   onActivity(fn: () => void): () => void,
+ *   remote(): RemoteState | null,
+ *   onRemote(fn: () => void): () => void,
+ *   remoteInfo(): Promise<RemoteInfo>,
  * }} DaemonClient
  */
 
@@ -113,9 +124,10 @@ export class DaemonError extends Error {
 
 /**
  * @param {Partial<ClientEnv>} [env]
+ * @param {{ scoped?: boolean }} [options] scoped: hear only the sessions subscribed to (see above)
  * @returns {DaemonClient}
  */
-export function createDaemonClient(env = {}) {
+export function createDaemonClient(env = {}, { scoped = false } = {}) {
   const { fetch: doFetch, EventSource: Source, setTimeout: later } = {
     fetch: globalThis.fetch.bind(globalThis),
     EventSource: globalThis.EventSource,
@@ -135,6 +147,16 @@ export function createDaemonClient(env = {}) {
   const metas = new Map();
   /** @type {Map<string, Set<(event: SessionEvent) => void>>} */
   const subscribers = new Map();
+  /**
+   * Scoped: the sessions followed, each with the seq of the last of its events received (0
+   * before any): where the stream picks it up when reopened. Never shrinks before a reload.
+   * @type {Map<string, number>}
+   */
+  const cursors = new Map();
+  /** The stream open now, if any. @type {EventSource | null} */
+  let source = null;
+  /** A reopen is due at the end of this task, for the sessions subscribed to in it. */
+  let reopening = false;
   /** @type {Set<(status: ConnectionStatus) => void>} */
   const statusListeners = new Set();
   /** @type {Set<() => void>} */
@@ -216,6 +238,22 @@ export function createDaemonClient(env = {}) {
   let servedUi = null;
   /** @type {Promise<DaemonConfig> | null} */
   let config = null;
+  /** How each awake session is doing, by session id. @type {Map<string, SessionActivity>} */
+  let activities = new Map();
+  /** @type {Set<() => void>} */
+  const activityListeners = new Set();
+  const activityChanged = () => {
+    for (const fn of activityListeners) fn();
+  };
+  /** Null until the daemon first says. @type {RemoteState | null} */
+  let remote = null;
+  /** @type {Set<() => void>} */
+  const remoteListeners = new Set();
+  /** @param {RemoteState} next */
+  const setRemote = (next) => {
+    remote = next;
+    for (const fn of remoteListeners) fn();
+  };
   const sessionsChanged = () => {
     for (const fn of sessionListeners) fn();
   };
@@ -241,6 +279,8 @@ export function createDaemonClient(env = {}) {
       buffers.clear();
       metas.clear();
       config = null;
+      // The new daemon's seqs start over.
+      for (const id of cursors.keys()) cursors.set(id, 0);
       for (const fn of resetListeners) fn();
     }
     bootId = hello.bootId;
@@ -255,6 +295,9 @@ export function createDaemonClient(env = {}) {
     setSettings(hello.settings);
     setWatches(hello.bugbot);
     setLogin(hello.login);
+    activities = new Map(Object.entries(hello.activity));
+    activityChanged();
+    setRemote(hello.remote);
     // Changes made while this page was away were not heard: ask again.
     decisions.clear();
     decisionsChanged();
@@ -277,19 +320,67 @@ export function createDaemonClient(env = {}) {
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'bugbot') return setWatches(event.watches);
     if (event.kind === 'login') return setLogin(event.login);
+    if (event.kind === 'remote') return setRemote({ state: event.state, error: event.error });
+    if (event.kind === 'activity') {
+      if (event.activity) activities.set(event.session, event.activity);
+      else activities.delete(event.session);
+      return activityChanged();
+    }
     if (event.kind === 'decisions') {
       decisions.set(event.ompId, event.reviews);
       return decisionsChanged();
+    }
+    const cursor = cursors.get(event.session);
+    // Scoped, a reopened stream may repeat what the last one delivered.
+    if (cursor !== undefined) {
+      if (event.seq <= cursor) return;
+      cursors.set(event.session, event.seq);
     }
     if (event.kind === 'session') {
       metas.set(event.session, event.meta);
       sessionsChanged();
     }
+    // Scoped, only a followed session's events are kept: the others' come for their status alone.
+    if (scoped && cursor === undefined) return;
     let buffer = buffers.get(event.session);
     if (!buffer) buffers.set(event.session, (buffer = []));
     buffer.push(event);
     buffers.set(event.session, withoutSpent(buffer, event));
     for (const fn of subscribers.get(event.session) ?? []) fn(event);
+  }
+
+  /** The stream's address: scoped, with each followed session and how far it got. */
+  const streamUrl = () =>
+    scoped ? `/api/stream?follow=${[...cursors].map(([id, seq]) => `${encodeURIComponent(id)}:${seq}`).join(',')}` : '/api/stream';
+
+  function open() {
+    const opened = new Source(streamUrl());
+    source = opened;
+    opened.onmessage = (message) => onEvent(JSON.parse(message.data));
+    opened.onerror = () => {
+      if (opened.readyState === Source.CLOSED) {
+        source = null;
+        setStatus('down');
+        later(connect, RECONNECT_MS);
+      } else {
+        setStatus('down'); // the browser reconnects by itself, resuming after the last event id
+      }
+    };
+  }
+
+  /** Scoped: follows `session` from its start, reopening the stream once for all those subscribed to in this task. @param {string} session */
+  function addFollowed(session) {
+    if (cursors.has(session)) return;
+    cursors.set(session, 0);
+    if (reopening) return;
+    reopening = true;
+    queueMicrotask(() => {
+      reopening = false;
+      // No stream yet (or between retries): the next one opens with every session followed.
+      if (!source) return;
+      source.close();
+      open();
+    });
   }
 
   async function connect() {
@@ -302,16 +393,7 @@ export function createDaemonClient(env = {}) {
       later(connect, RECONNECT_MS);
       return;
     }
-    const source = new Source('/api/stream');
-    source.onmessage = (message) => onEvent(JSON.parse(message.data));
-    source.onerror = () => {
-      if (source.readyState === Source.CLOSED) {
-        setStatus('down');
-        later(connect, RECONNECT_MS);
-      } else {
-        setStatus('down'); // the browser reconnects by itself, resuming after the last event id
-      }
-    };
+    open();
   }
 
   /** The daemon's JSON answer, or null when it has none. @param {Response} res @returns {Promise<any>} */
@@ -370,6 +452,7 @@ export function createDaemonClient(env = {}) {
 
   /** @param {string} session @param {(event: SessionEvent) => void} fn @returns {() => void} */
   function subscribe(session, fn) {
+    if (scoped) addFollowed(session);
     for (const event of buffers.get(session) ?? []) fn(event);
     let set = subscribers.get(session);
     if (!set) subscribers.set(session, (set = new Set()));
@@ -598,6 +681,19 @@ export function createDaemonClient(env = {}) {
     async cancelLogin() {
       await request('/api/setup/login', { method: 'DELETE' });
     },
+    /** How awake session `session` is doing, or null when the daemon tells of none (it is asleep, or not heard of yet). */
+    activity: (session) => activities.get(session) ?? null,
+    onActivity(fn) {
+      activityListeners.add(fn);
+      return () => activityListeners.delete(fn);
+    },
+    remote: () => remote,
+    onRemote(fn) {
+      remoteListeners.add(fn);
+      return () => remoteListeners.delete(fn);
+    },
+    // Answered on the Mac's own (loopback) address only: it carries the sign-in QR code.
+    remoteInfo: () => request('/api/remote'),
   };
 }
 
@@ -606,3 +702,9 @@ let shared = null;
 
 /** The page's one connection, opened on first use. */
 export const getDaemon = () => (shared ??= createDaemonClient());
+
+/** Makes the page's one connection a scoped one (the phone's): call before anything uses `getDaemon`. */
+export function useScopedDaemon() {
+  if (shared) throw new Error('the page’s daemon connection is already open');
+  shared = createDaemonClient({}, { scoped: true });
+}

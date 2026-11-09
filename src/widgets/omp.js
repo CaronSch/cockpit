@@ -178,8 +178,13 @@ function createPane(body, ctx, daemon) {
    * gives back to a message box as they return to the page is not them coming back to its window.
    */
   let away = !document.hasFocus();
-  /** Looking at this window: the user is in it and pointing at it, in a page that has focus. */
-  const reading = () => inside && pointerInside && document.visibilityState === 'visible' && document.hasFocus();
+  /** A touch screen (a phone): no pointer rests on a window, and Enter is a new line. */
+  const coarse = matchMedia('(pointer: coarse)');
+  /**
+   * Looking at this window: the user is in it and pointing at it, in a page that has focus. On a
+   * touch screen, which leaves no pointer anywhere, a focused page showing it is enough.
+   */
+  const reading = () => (coarse.matches || (inside && pointerInside)) && document.visibilityState === 'visible' && document.hasFocus();
   const read = () => view?.read();
   const seen = () => view?.seen();
   /** @param {Event} event */
@@ -514,15 +519,15 @@ function createPane(body, ctx, daemon) {
     costEl.title = 'Cost of this session';
     const errorBadge = el('span', 'omp-badge-error', 'error');
     const spacer = el('span', 'omp-spacer');
-    const newBtn = toolButton('New', 'Start a new conversation in this window (Sessions keeps this one)');
+    const newBtn = toolButton('New', 'Start a new conversation in this window (Sessions keeps this one)', 'omp-new');
     // The conversation's forks and the one it was forked from; forks start from `/fork <prompt>`
     // (in the background) or by dragging Send onto the grid (in a new window).
-    const forksBtn = toolButton('Forks', FORKS_TITLE);
-    const prsBtn = toolButton('PRs', 'Pull requests of this repository: click one to review it beside this conversation, or drag it where you want it');
+    const forksBtn = toolButton('Forks', FORKS_TITLE, 'omp-forks');
+    const prsBtn = toolButton('PRs', 'Pull requests of this repository: click one to review it beside this conversation, or drag it where you want it', 'omp-prs');
     prsBtn.hidden = true; // until GitHub says the directory is in a repository
     // Model providers and accounts omp can use: connect another, or switch.
-    const accountsBtn = toolButton('Accounts', 'Connect a model provider or another account');
-    const stopBtn = toolButton('Stop', 'Stop the agent and restore queued messages (Esc)');
+    const accountsBtn = toolButton('Accounts', 'Connect a model provider or another account', 'omp-accounts');
+    const stopBtn = toolButton('Stop', 'Stop the agent and restore queued messages (Esc)', 'omp-stop');
     // Shown only while the session's model has no account signed in to talk to it with.
     const signInBtn = toolButton('Sign in', 'Sign in to a model provider: this conversation’s model needs it');
     toolbar.append(cwdEl, modelBtn, thinkingBtn, activity, progressEl, contextEl, costEl, errorBadge, spacer, signInBtn);
@@ -655,17 +660,19 @@ function createPane(body, ctx, daemon) {
       Object.assign(state, createTranscript());
       clearDrawn();
       let live = false;
+      editorSeen = 0;
       unsubscribe = daemon.subscribe(id, (event) => {
         applyEvent(state, event);
-        // News is read as it lands under its reader's eyes. News that landed while they were
-        // elsewhere, the history replayed now included, waits for them to come into the window,
-        // even once they are looking at it again.
-        if (live && reading()) readLive = awaitedAfter(readLive, event);
+        // History, replayed now or (from a stream reopened for it) a moment later: requests to
+        // fill the box in it were carried out already, and it is no news to read live. News is
+        // read as it lands under its reader's eyes. News that landed while they were elsewhere,
+        // the history included, waits for them to come into the window, even once they are
+        // looking at it again.
+        if (!live || daemon.replayed(event)) editorSeen = Math.max(editorSeen, state.editorText?.seq ?? 0);
+        else if (reading()) readLive = awaitedAfter(readLive, event);
         schedule();
       });
       live = true;
-      // The subscription replayed history synchronously: requests in it are already handled.
-      editorSeen = state.editorText?.seq ?? 0;
       if (params().session !== id) ctx.setParams({ session: id });
       schedule();
     }
@@ -1256,7 +1263,8 @@ function createPane(body, ctx, daemon) {
         }
         return;
       }
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // On a touch screen Enter is a new line, as its keyboard shows it; Send sends.
+      if (e.key === 'Enter' && !e.shiftKey && !coarse.matches) {
         e.preventDefault();
         void send();
       } else if (e.key === 'Escape') {
@@ -1674,9 +1682,9 @@ function createPane(body, ctx, daemon) {
     };
   }
 
-  /** @param {string} label @param {string} title */
-  function toolButton(label, title) {
-    const b = button('omp-tool-btn', label);
+  /** @param {string} label @param {string} title @param {string} [name] a class naming it, for styles */
+  function toolButton(label, title, name) {
+    const b = button(name ? `omp-tool-btn ${name}` : 'omp-tool-btn', label);
     b.title = title;
     return b;
   }

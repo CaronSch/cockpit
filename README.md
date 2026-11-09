@@ -42,6 +42,18 @@ digits and dashes; the default is `main`). Windows at two different addresses at
 once (say `127.0.0.1` and `localhost`) do not see which screens the other has
 open.
 
+**Phone.** With [Tailscale](https://tailscale.com) on the Mac and on an Android phone,
+signed in to the same account, turn on **Phone access** in Config: it shows a QR code to scan
+once with the phone. The phone gets a page of its own, `/phone`: the Sessions list, and one
+conversation at a time, full screen, live, with prompts and responses only unless you show the
+work. From it you can reply, answer questions and approvals, and stop the agent; replying to a
+conversation that went to sleep wakes it, as on the Mac. What you read there is read everywhere.
+No server is involved: the phone talks to the daemon over your tailnet, and only while the Mac
+is awake and `bun start` runs. The daemon answers there only devices signed in to Tailscale as
+the Mac's owner (it asks `tailscale whois` about each connection), and only with its token, which
+the QR code carries. The page is plain HTTP inside Tailscale's encrypted tunnel, so the browser
+treats it as insecure: Copy buttons and notifications are not offered there.
+
 ## Getting started
 
 ### 1. Install the programs
@@ -96,7 +108,8 @@ are suggested as you type, from your home folder; Tab completes) and start chatt
 new screens start empty; **＋ Widget → Setup** opens it again. Another provider can be added
 later from an agent window's **Accounts** (omp's `/login`).
 
-The daemon listens on loopback only and refuses requests from other sites.
+The daemon listens on loopback only, and also on the Mac's Tailscale address while Phone access
+is on (see **Phone** above); it refuses requests from other sites.
 
 | Option | Default |
 | --- | --- |
@@ -105,6 +118,8 @@ The daemon listens on loopback only and refuses requests from other sites.
 | `--cwd <dir>` / `COCKPIT_CWD` (the directory a new agent window suggests) | your home directory |
 | `COCKPIT_STATE_DIR` (token, settings, notes, attachments, workspaces) | `~/.cockpit` |
 | `COCKPIT_OMP_SESSIONS` (omp's session files) | `~/.omp/agent/sessions` |
+| `--tailscale <path>` / `COCKPIT_TAILSCALE` (Phone access) | `tailscale` on `PATH` |
+| `--remote-port <n>` / `COCKPIT_REMOTE_PORT` (Phone access) | the `--port` |
 
 Pass flags through with `bun start --port 4800 --cwd ~/code/app`.
 
@@ -119,9 +134,9 @@ bun run claude-md:check            # generated part of CLAUDE.md is current
 ```
 
 No build step: the UI is plain ES modules. Its runtime dependencies are Temml,
-which turns agents' TeX math into MathML the browser typesets, and Mermaid, Vega
+which turns agents' TeX math into MathML the browser typesets, Mermaid, Vega
 and Vega-Lite, which draw the diagrams and charts agents write (loaded only when a
-reply has one). CI runs all four
+reply has one), and uqr, with which the daemon draws Phone access's QR code. CI runs all four
 checks on every push to `main` and every pull request.
 
 - [`CLAUDE.md`](CLAUDE.md): architecture, conventions, how to add a widget.

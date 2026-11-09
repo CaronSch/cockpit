@@ -1,0 +1,113 @@
+/* The phone page (phone.html, src/phone.js): a top bar over one widget, full screen. */
+
+.phone {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  /* The viewport's interactive-widget=resizes-content shrinks this for the keyboard, so the
+     message box at the bottom stays above it. */
+  height: 100dvh;
+}
+
+.phone-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--topbar-h);
+  padding-inline: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.phone-back,
+.phone-work {
+  flex: none;
+  min-width: 36px;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text);
+  font: 600 var(--text-sm) / 1 var(--font-mono);
+  cursor: pointer;
+}
+
+.phone-back {
+  font-size: var(--text-base);
+}
+
+.phone-work[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-surface-raised);
+}
+
+.phone-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-dim);
+  font: 600 var(--text-2xs) / 1.4 var(--font-mono);
+  letter-spacing: var(--tracking-caps);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.phone-label {
+  margin-left: 6px;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.phone-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: var(--text-xs) / 1.4 var(--font-mono);
+}
+
+.phone-actions .omp-tool-btn {
+  min-height: 32px;
+}
+
+.phone-status {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-surface-raised);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.phone-status[hidden] {
+  display: none;
+}
+
+.phone-view {
+  /* The stretching row, whether or not the status line above it shows: a hidden one takes no
+     row, and the view would fall into its `auto` one and grow past the screen. */
+  grid-row: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Outside what the phone does (no new agents, forks, pull requests, accounts, archiving,
+   pinning or rewinding), or needing a secure context it does not have (Copy). Hover reveals
+   them on the desktop; on a phone they would still take taps while invisible. */
+.phone .omp-new,
+.phone .omp-forks,
+.phone .omp-prs,
+.phone .omp-accounts,
+.phone .sessions-archive,
+.phone .sessions-pin,
+.phone .omp-rewind-btn,
+.phone .md-code-copy,
+.phone .md-table-copy {
+  display: none;
+}

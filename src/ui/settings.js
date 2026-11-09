@@ -3,15 +3,18 @@
  * opens while the pointer rests on Config (and closes a moment after it leaves), or on a
  * click, which keeps it open until a click elsewhere or Esc.
  *
- * Each setting is a switch with its default; only the ones set away from it are stored.
- * Below them the menu lists the daemon's settings (daemon/settings.js), the same for every
- * browser, while the daemon can be reached: its switches, and which browser agents drive. The
- * Setup window (widgets/setup.js) offers the same ones.
+ * Each setting is a switch with its default; only the ones this browser chose are stored, so a
+ * page can tell a choice from the default (`storedSetting`). Below them the menu lists the
+ * daemon's settings (daemon/settings.js), the same for every browser, while the daemon can be
+ * reached: its switches, Phone access (with, while it is on, the QR code a phone signs in with),
+ * and which browser agents drive. The Setup window (widgets/setup.js) offers the same ones, Phone
+ * access aside.
  */
 import { button, el } from './dom.js';
 import { createAtom } from '../state/atom.js';
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { BrowserChoice } from '../../daemon/browser.js' */
+/** @import { RemoteState } from '../../daemon/wire.js' */
 
 const SETTINGS_KEY = 'cockpit.settings';
 /** How long the menu stays open after the pointer leaves it, so crossing the gap to it does not close it. */
@@ -87,47 +90,48 @@ export const BROWSER_SETTING = Object.freeze({
 
 /** @typedef {Record<SettingKey, boolean>} Settings */
 
-/** Stored settings over the defaults; anything unknown or not a switch is ignored. @param {string | null} value @returns {Settings} */
-export function parseSettings(value) {
+/** The switches stored, as chosen; anything unknown or not a switch is ignored. @param {string | null} value @returns {Partial<Settings>} */
+function parseChosen(value) {
   /** @type {Record<string, unknown>} */
   let saved = {};
   try {
     const parsed = value ? JSON.parse(value) : null;
     if (parsed && typeof parsed === 'object') saved = parsed;
   } catch {
-    // Not settings: the defaults stand.
+    // Not settings: none chosen.
   }
-  return /** @type {Settings} */ (Object.fromEntries(SETTINGS.map((s) => [s.key, typeof saved[s.key] === 'boolean' ? saved[s.key] : s.initial])));
+  return /** @type {Partial<Settings>} */ (Object.fromEntries(SETTINGS.flatMap((s) => (typeof saved[s.key] === 'boolean' ? [[s.key, saved[s.key]]] : []))));
 }
 
-/** @returns {Settings} */
-function stored() {
-  try {
-    return parseSettings(localStorage.getItem(SETTINGS_KEY));
-  } catch {
-    return parseSettings(null);
-  }
+/** Stored settings over the defaults; anything unknown or not a switch is ignored. @param {string | null} value @returns {Settings} */
+export function parseSettings(value) {
+  const chosen = parseChosen(value);
+  return /** @type {Settings} */ (Object.fromEntries(SETTINGS.map((s) => [s.key, chosen[s.key] ?? s.initial])));
 }
 
-/** @param {Settings} settings */
-function store(settings) {
-  const changed = Object.fromEntries(SETTINGS.filter((s) => settings[s.key] !== s.initial).map((s) => [s.key, settings[s.key]]));
+/** What this browser stored, or null when it has none (or no storage). @returns {string | null} */
+function storedText() {
   try {
-    if (Object.keys(changed).length) localStorage.setItem(SETTINGS_KEY, JSON.stringify(changed));
-    else localStorage.removeItem(SETTINGS_KEY);
+    return localStorage.getItem(SETTINGS_KEY);
   } catch {
-    // Not kept: they stay as chosen until the page reloads.
+    return null;
   }
 }
 
 /** The settings as they are now; subscribe to follow them. */
-export const settings = createAtom(stored());
+export const settings = createAtom(parseSettings(storedText()));
 
-/** @param {SettingKey} key @param {boolean} on */
-function set(key, on) {
-  const next = { ...settings.get(), [key]: on };
-  settings.set(next);
-  store(next);
+/** What this browser chose for `key`, or null if it never chose. @param {SettingKey} key @returns {boolean | null} */
+export const storedSetting = (key) => parseChosen(storedText())[key] ?? null;
+
+/** Sets `key` for this browser, from now on and across reloads. @param {SettingKey} key @param {boolean} on */
+export function setSetting(key, on) {
+  settings.set({ ...settings.get(), [key]: on });
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...parseChosen(storedText()), [key]: on }));
+  } catch {
+    // Not kept: it stays as chosen until the page reloads.
+  }
 }
 
 /** @param {string} label @param {string} detail @param {boolean} checked @param {(on: boolean, box: HTMLInputElement) => void} onChange */
@@ -139,6 +143,70 @@ export function switchRow(label, detail, checked, onChange) {
   box.addEventListener('change', () => onChange(box.checked, box));
   row.append(box, el('span', '', label), el('span', 'config-detail', detail));
   return { row, box };
+}
+
+/** Phone access (the daemon's `remote`, daemon/remote.js), as Config offers it. */
+const PHONE_SETTING = Object.freeze({
+  label: 'Phone access',
+  detail: 'Read and answer your agents from your phone, over Tailscale: only your own devices get in, signed in once with the QR code; for every browser',
+});
+
+/** How Phone access is doing: on, coming on, or why it is not. @param {RemoteState | null} remote */
+const remoteText = (remote) => (remote?.state === 'on' ? 'On' : remote?.state === 'error' ? (remote.error ?? 'Phone access failed') : 'Starting…');
+
+/**
+ * The Phone access switch and, while it is on, how it is doing; once on, the QR code a phone
+ * signs in with (an image, never markup), the phone's address and whose devices get in, asked
+ * of the daemon each time it comes on (its address may change). `show` follows the daemon.
+ * @param {DaemonClient} daemon
+ */
+function phoneAccess(daemon) {
+  const root = el('div', 'config-phone');
+  const { row, box } = switchRow(PHONE_SETTING.label, PHONE_SETTING.detail, false, (on, box) => {
+    // The daemon tells every page, this one too; until then the switch shows the choice.
+    daemon.changeSettings({ remote: on }).catch(() => (box.checked = !on));
+  });
+  const panel = el('div', 'config-phone-panel');
+  const stateLine = el('p', 'config-detail config-phone-state');
+  const signIn = el('div', 'config-phone-sign-in');
+  panel.append(stateLine, signIn);
+  root.append(row, panel);
+  /** Whether the sign-in was asked for since it last came on. */
+  let asked = false;
+  /** Which asking is current: an answer to an older one is stale. */
+  let asking = 0;
+  function show() {
+    const on = daemon.settings()?.remote ?? false;
+    const remote = daemon.remote();
+    box.checked = on;
+    panel.hidden = !on;
+    stateLine.textContent = remoteText(remote);
+    panel.classList.toggle('is-error', remote?.state === 'error');
+    if (!on || remote?.state !== 'on') {
+      asked = false;
+      asking++;
+      signIn.replaceChildren();
+      return;
+    }
+    if (asked) return;
+    asked = true;
+    const mine = ++asking;
+    daemon
+      .remoteInfo()
+      .then((info) => {
+        if (mine !== asking || info.state !== 'on' || info.qr === null || info.url === null || info.login === null) return;
+        const qr = el('img', 'config-phone-qr');
+        qr.src = `data:image/svg+xml,${encodeURIComponent(info.qr)}`;
+        qr.alt = 'QR code: scan it with your phone to sign in';
+        signIn.replaceChildren(qr, el('p', 'config-phone-url', info.url), el('p', 'config-detail', `Only ${info.login}’s devices`));
+      })
+      .catch(() => {
+        // Asked again on the next change.
+        if (mine === asking) asked = false;
+      });
+  }
+  show();
+  return { root, show };
 }
 
 /**
@@ -215,13 +283,16 @@ export function createConfigMenu({ daemon }) {
   const daemonBoxes = new Map();
   /** The browser choice, while the menu is open with the daemon's settings. @type {ReturnType<typeof browserChoice> | null} */
   let browser = null;
+  /** Phone access, while the menu is open with the daemon's settings. @type {ReturnType<typeof phoneAccess> | null} */
+  let phone = null;
   function render() {
     const now = settings.get();
     const atDaemon = daemon.settings();
     daemonBoxes.clear();
     browser = atDaemon ? browserChoice(daemon, atDaemon.browser) : null;
+    phone = atDaemon ? phoneAccess(daemon) : null;
     menu.replaceChildren(
-      ...SETTINGS.map((setting) => switchRow(setting.label, setting.detail, now[setting.key], (on) => set(setting.key, on)).row),
+      ...SETTINGS.map((setting) => switchRow(setting.label, setting.detail, now[setting.key], (on) => setSetting(setting.key, on)).row),
       ...(atDaemon
         ? DAEMON_SETTINGS.map((setting) => {
             const { row, box } = switchRow(setting.label, setting.detail, atDaemon[setting.key], (on, box) => {
@@ -232,6 +303,7 @@ export function createConfigMenu({ daemon }) {
             return row;
           })
         : []),
+      ...(phone ? [phone.root] : []),
       ...(browser ? [browser.root] : []),
     );
   }
@@ -242,6 +314,10 @@ export function createConfigMenu({ daemon }) {
     if (!browser) return render();
     for (const [key, box] of daemonBoxes) box.checked = atDaemon[key];
     browser.show(atDaemon.browser);
+    phone?.show();
+  });
+  daemon.onRemote(() => {
+    if (menu.matches(':popover-open')) phone?.show();
   });
   return { root };
 }

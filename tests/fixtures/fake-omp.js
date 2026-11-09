@@ -10,9 +10,12 @@
  * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
  * - contains "ask": an `ask` dialog; the reply names the chosen option
+ * - contains "approve": a `confirm` dialog, as omp asks to approve a command; the reply says
+ *   whether it was approved, denied or cancelled
  * - contains "spawn": a `task` call starting subagents Alpha and Beta in the background, which
  *   run until a prompt containing "kill" cancels them through `proc://` (shapes of omp 18.12.6)
  * - contains "revive": a `write` to `agent://Alpha`, which a parked Alpha wakes for
+ * - contains "prefill": a `set_editor_text` request ("Prefilled by the agent") before the reply
  * - contains "mystery": emits a frame type no client knows
  * - contains "garble": writes a stdout line that is not JSON
  * - contains "table": replies with a markdown table; with "wide" too, a heading, a table wider
@@ -353,6 +356,7 @@ async function runPrompt(id, text) {
     out({ type: 'notice', level: 'warning', message: 'Memory retention failed', source: 'Hindsight' });
   }
   if (/garble/.test(text)) process.stdout.write('this line is not json\n');
+  if (/prefill/.test(text)) out({ type: 'extension_ui_request', id: `ui-${Date.now()}-e`, method: 'set_editor_text', text: 'Prefilled by the agent' });
   if (/tool/.test(text)) toolCall();
   if (/todo/.test(text)) todoCall();
   if (/background/.test(text)) backgroundCall();
@@ -371,6 +375,12 @@ async function runPrompt(id, text) {
     const answer = await askDialog();
     const picked = answer.cancelled ? 'nothing (cancelled)' : (answer.answers?.[0]?.selectedOptions?.[0] ?? answer.answers?.[0]?.customInput);
     streamAssistant(`You picked **${picked}**.`);
+  } else if (/approve/.test(text)) {
+    const id = `ui-${Date.now()}-c`;
+    out({ type: 'extension_ui_request', id, method: 'confirm', title: 'Allow this command?', message: 'rm -rf build' });
+    /** @type {Record<string, any>} */
+    const answer = await new Promise((resolve) => dialogs.set(id, resolve));
+    streamAssistant(answer.cancelled ? 'Approval cancelled.' : answer.confirmed ? 'Approved: going ahead.' : 'Denied: not running it.');
   } else if (/interrupt/.test(text) && /early/.test(text)) {
     const aborted = { role: 'assistant', content: [], provider: model.provider, model: model.id, usage, stopReason: 'aborted', errorMessage: 'Interrupted by user', timestamp: Date.now() };
     const messageId = record(aborted);

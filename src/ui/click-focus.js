@@ -1,7 +1,8 @@
 /**
  * Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at
  * the end of its main text box, while clicks on controls, in boxes of their own, and those
- * that end a text selection do what they did before.
+ * that end a text selection do what they did before. A tap is reading, not typing: it focuses
+ * nothing (it would open a phone's keyboard, and wake an asleep conversation).
  */
 
 /**
@@ -35,7 +36,7 @@ const INTERACTIVE = [
 export function focusOnClick(surface, field, ignore) {
   surface.addEventListener('click', (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
-    if (field.disabled) return;
+    if (field.disabled || (e instanceof PointerEvent && e.pointerType === 'touch')) return;
     // The path as dispatched, not the target's ancestors now: a control's own handler may
     // already have replaced it (Comment swaps itself for its box), detaching it from the pane.
     const path = e.composedPath();

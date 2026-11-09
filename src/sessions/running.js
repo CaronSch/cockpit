@@ -4,21 +4,22 @@
  * and what an agent window is given to show one.
  *
  * Asleep or awake is the daemon's business (daemon/sleep.js): the list shows conversations.
- * How an awake one is doing is read from its session's events, as an agent window reads them:
- * its name, whether a turn runs and whether it asks its user something; and from whether the
- * user has read what it did (daemon/unread.js).
+ * How an awake one is doing is the daemon's summary of its session's events (`SessionActivity`):
+ * its name, whether a turn runs, whether it asks its user something and what work it has
+ * running; and whether the user has read what it did (daemon/unread.js). The desktop's
+ * notifications follow sessions' events themselves (`follow`, sessions/notify.js).
  *
  * A conversation is named by its journal; a new one's session names it before omp has
  * written it (and a session's journal is reported as it starts), so `conversationKey` is the
  * journal, else the session.
  */
 import { applyEvent, conversationName, createTranscript } from '../omp/transcript.js';
-/** @import { PastSession, SessionEvent, SessionMeta } from '../../daemon/wire.js' */
+/** @import { PastSession, SessionActivity, SessionEvent, SessionMeta } from '../../daemon/wire.js' */
 /** @import { LeafParams } from '../layout/grid-model.js' */
 /** @import { Transcript } from '../omp/transcript.js' */
 
 /** @typedef {'starting' | 'asking' | 'working' | 'done' | 'idle'} RunningState */
-/** What the list follows of one running session. @typedef {{ transcript: Transcript }} Followed */
+/** What the notifier follows of one running session, from its events. @typedef {{ transcript: Transcript }} Followed */
 
 /** A conversation the list shows: a journal, with the session holding it while it is awake. @typedef {PastSession & { key: string, meta: SessionMeta | null }} Listed */
 
@@ -67,16 +68,17 @@ export function noteEvent(followed, event) {
 }
 
 /**
- * How an awake conversation is doing: still starting, asking its user something (a question or
- * an approval, read or not: it waits until they answer), working on a turn, done (it handed
- * the turn back and they have not read it yet), or idle.
- * @param {Followed} followed @param {SessionMeta} meta @param {boolean} unread
+ * How an awake conversation is doing: still starting (or not summed up by the daemon yet),
+ * asking its user something (a question or an approval, read or not: it waits until they
+ * answer), working on a turn, done (it handed the turn back and they have not read it yet), or
+ * idle.
+ * @param {SessionActivity | null} activity @param {SessionMeta} meta @param {boolean} unread
  * @returns {RunningState}
  */
-export function runningState(followed, meta, unread) {
-  if (meta.status === 'starting') return 'starting';
-  if (followed.transcript.dialogs.length > 0) return 'asking';
-  if (followed.transcript.streaming) return 'working';
+export function runningState(activity, meta, unread) {
+  if (meta.status === 'starting' || !activity) return 'starting';
+  if (activity.asking) return 'asking';
+  if (activity.working) return 'working';
   return unread ? 'done' : 'idle';
 }
 

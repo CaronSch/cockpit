@@ -104,7 +104,11 @@ Planned capabilities:
   (omp said so), `proxy` (seen on the wire), or `os` (seen by the kernel or the
   filesystem). The UI shows the source. The gap between what an agent claims it
   did and what the OS saw is the product, so never merge the two silently.
-- **Local only, single user.** No auth beyond the loopback guard below.
+- **Single user, local first.** No auth beyond the guard below. **Phone access**
+  (a daemon setting, off by default) adds a second listener on the Mac's Tailscale
+  IPv4 (`daemon/remote.js`) serving the same routes to the owner's own devices, for a
+  phone page of its own (`phone.html`, `src/phone.js`): the Sessions and Agent widgets,
+  one at a time, on a stream scoped to the conversations it shows (`?follow=`).
 
 ## Current state
 
@@ -379,6 +383,28 @@ What runs today:
   if the file changed since (an agent wrote it), the window asks whose text stays. Only a file
   read whole and plain UTF-8 is editable (`editable`), so a save changes no byte not edited;
   `\r\n` line ends are kept.
+- Phone access (`daemon/remote.js`, the `remote` setting, **Phone access** in Config): while on,
+  a second listener on the Mac's Tailscale IPv4, at the daemon's port unless `--remote-port`,
+  serves the same routes behind the whois gate (Invariants), the health check reading
+  `tailscale status --json` every 30 s (Tailscale stopped: the listener stops and Config says
+  why; running again, or a new address: it binds again). Config shows the sign-in QR code
+  (`GET /api/remote`, loopback only, drawn by `uqr`), the URL and whose devices get in. On the
+  tailnet `/` goes to `/phone` (`phone.html`, `src/phone.js`, `styles/phone.css`): the Sessions
+  widget, then one Agent widget full screen, with a context of the page's own (no grid,
+  workspace, screens or Web Locks: plain HTTP is no secure context), a top bar with Back, the
+  conversation's name, **Show work** (the per-browser *Only prompts and responses*, on by default
+  there) and the Agent window's Stop and ↑ ↓; it starts no agent, and hides what it has no use
+  for (New, Forks, PRs, Accounts, Archive, Pin, rewind, and Copy, which needs a secure context).
+  Its daemon client is scoped (`useScopedDaemon`): the stream carries every session's status
+  (`session` events, and the hub's `activity` summary of each awake one: working, asking, work
+  running, name) but the events of only the conversations the page opened, each picked up
+  where the page left it (`?follow=<id>:<seq>`); the desktop's Sessions window reads the same
+  summaries instead of following every session's events. On a touch screen an Agent window
+  takes a tap for reading (it focuses nothing, so it opens no keyboard and wakes nothing), Enter
+  is a new line (Send sends), and a visible, focused page counts as reading it; a history
+  replayed after `subscribe` (the phone's stream reopening) counts as history, so an old
+  `set_editor_text` never fills the box. JSON answers of 64 KiB or more are gzipped for a client
+  that accepts it.
 
 Not built yet: saved-context pins, terminal panes, process view,
 telemetry views, cmux-parity features beyond the above.
@@ -404,7 +430,7 @@ telemetry views, cmux-parity features beyond the above.
 
 ## Invariants (current stage)
 
-- The daemon binds `127.0.0.1` only, checks every request's `Host` against an
+- The daemon binds `127.0.0.1`, checks every request's `Host` against an
   explicit list of loopback names (`127.0.0.1`, `localhost`, `cockpit.localhost`
   with its port; DNS rebinding; `*.localhost` is loopback in browsers per RFC 6761), requires the token cookie on every API request, and refuses any
   foreign `Origin` or cross-site `Sec-Fetch-Site`. The token is random, stored
@@ -412,6 +438,16 @@ telemetry views, cmux-parity features beyond the above.
   the URL the daemon prints (it becomes an HttpOnly, SameSite=Strict cookie).
   Without this, any web page open in the user's browser can reach the daemon and
   run commands on the machine. `tests/daemon.test.js` guards each check.
+- While Phone access is on, the daemon also binds the Mac's Tailscale IPv4 (never
+  `0.0.0.0`), and before anything else asks `tailscale whois` who each connection
+  comes from: only a device signed in as the Mac's owner, and not a tagged one, is
+  answered at all (a failed or slow lookup refuses). Behind that gate the same guard
+  applies, with the tailnet names (the IPv4 and the MagicDNS name) in place of the
+  loopback ones, and the token cookie still required; over plain HTTP the browser sends
+  no `Sec-Fetch-*`, so the cookie's SameSite=Strict and the `Origin` checks carry
+  cross-site refusal there. The QR code carrying the token is served on loopback only.
+  A tailnet's other users can reach the Mac's ports: the gate, not the network, keeps
+  them out.
 - Every agent the workbench shows was launched by the daemon.
 - An omp event or message kind the adapter does not know is shown as an
   unrecognised entry, never dropped. Telemetry that silently loses events lies.
@@ -432,6 +468,8 @@ telemetry views, cmux-parity features beyond the above.
   - `mermaid`, `vega` and `vega-lite` (diagrams and charts agents write as fenced
     blocks, `src/omp/visuals.js`): their UMD builds are served at `/vendor/…` and
     loaded as classic scripts only when a reply first holds one.
+  - `uqr` (QR codes): the daemon draws Phone access's sign-in QR code as an SVG
+    (`daemon/remote.js`); the browser never loads it.
 - omp is not a dependency: the user installs it on its own (https://omp.sh) and
   the daemon runs the `omp` on PATH. The version the fake omp in `tests/` was
   recorded from is in `RISKS.md`; a newer installed omp means re-recording frames. GitHub's
@@ -461,7 +499,10 @@ telemetry views, cmux-parity features beyond the above.
   `--omp <path>` (or `COCKPIT_OMP`), `--gh <path>` (or `COCKPIT_GH`), `--cwd <dir>` (or `COCKPIT_CWD`: the
   directory a new agent window suggests, home by default) and `COCKPIT_STATE_DIR`
   override the defaults; `COCKPIT_IDLE_COMPACT_MIN_TOKENS` sets idle compaction's
-  threshold (at least 100K), `COCKPIT_BUGBOT_POLL_MS` how often a Bugbot review is looked for.
+  threshold (at least 100K), `COCKPIT_BUGBOT_POLL_MS` how often a Bugbot review is looked for;
+  `--tailscale <path>` (or `COCKPIT_TAILSCALE`) and `--remote-port <n>` (or
+  `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's. Tests drive
+  `tests/fixtures/fake-tailscale.js`, never the real `tailscale`.
 - Before committing, all of these must pass (CI in `.github/workflows/ci.yml`
   runs the same on every push to `main` and every PR):
   - `bun run typecheck`
@@ -588,6 +629,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/transcript.js` — Transcript reducer for one omp session: folds the daemon's SessionEvents into display items plus derived session state, with no DOM.
 - `src/omp/visibility.js` — Which transcript items an agent pane shows when it is set to only prompts and responses: what the user said and ran, and what the agent finally answered, without the work in between.
 - `src/omp/visuals.js` — Diagrams and charts in agent replies: a closed ```mermaid fence is drawn by Mermaid, a closed ```vega-lite fence (a Vega-Lite spec, JSON) by Vega.
+- `src/phone.js` — The phone page (`/phone`, phone.html): the Sessions list, then one conversation full screen, then Back, for a phone reaching the daemon over its owner's tailnet (daemon/remote.js).
 - `src/render/drop-indicator.js` — Landing preview for drag & drop, plus the sash snap guide.
 - `src/render/grid-renderer.js` — Imperative, diffed DOM writer for the grid.
 - `src/scratchpad/blocks.js` — A scratchpad's text as blocks to edit: runs of text, and the images and files it references, kept free of the DOM so the round trip can be tested.
@@ -635,16 +677,17 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/forks.js` — Forks: conversations the workbench started from a copy of another (omp's `--fork`), which one each came from, and their own titles.
 - `daemon/frame-decoder.js` — Decodes omp's stdout: newline-delimited JSON frames, with protocol-v2 `rpc_chunk` sequences reassembled into the one frame they carry.
 - `daemon/github.js` — GitHub, through the user's own `gh` CLI (https://cli.github.com), signed in as they are: the pull requests of a repository, the repositories of a directory's repository's owner (for `#` mentions of another one), one pull request to review (its conversation, line comments and diff), a comment on one, and Bugbot's reviews of one (src/github/bugbot.js).
-- `daemon/guard.js` — Loopback guard: decides which requests may reach the daemon (CLAUDE.md, Invariants).
+- `daemon/guard.js` — Request guard: decides which requests may reach the daemon, on each of its listeners (CLAUDE.md, Invariants).
 - `daemon/history.js` — Past omp sessions, read from omp's session files: one summary per conversation, searchable (search.js, ranked) by title, directory, what the user asked and what the agent answered.
 - `daemon/hub.js` — The daemon's omp sessions and the single ordered event log the browser replays.
 - `daemon/idle-compaction.js` — Idle compaction, as Claude Code does it: a long conversation left idle is compacted shortly before its prompt cache expires, while the summary request can still read the conversation from the cache, so coming back later sends a summary instead of the whole conversation at full price.
-- `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback and runs the omp processes it shows.
+- `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback (and, with Phone access on, to the owner's tailnet devices: remote.js) and runs the omp processes it shows.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
+- `daemon/remote.js` — Phone access (settings.js `remote`): while it is on, the daemon also serves the owner's own devices on their tailnet, through a second listener bound to the Mac's Tailscale IPv4 with the same routes as loopback (server.js), behind a whois gate.
 - `daemon/scratchpad.js` — Scratchpads: plain Markdown files the daemon keeps, one per pad, with pasted screenshots and files stored beside them.
 - `daemon/search.js` — Ranked search over conversations: a question in plain words ("in which session did we find that Binance bundle exclusivity dropped…") finds the conversations that talk about it.
-- `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), all behind the loopback guard.
+- `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), the same on each listener: loopback, and the remote one Phone access opens on the tailnet (remote.js), whose whois gate runs before anything else; then the guard of the listener's names (guard.js) on all of them.
 - `daemon/settings.js` — The daemon's settings: what the daemon does, so every page sees and changes the same ones (a page's own look is kept per browser: src/ui/settings.js).
 - `daemon/setup.js` — Setup (the Setup window, src/widgets/setup.js): what this machine needs before a first agent can start, checked whenever the window asks, and omp's own `omp login` run for the window, so a model provider can be signed in to from the browser.
 - `daemon/sleep.js` — When the daemon puts a session to sleep: ends its omp process, as nobody needs it running.
@@ -678,6 +721,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/setup.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/phone-access.spec.js`, `e2e/phone.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/setup.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

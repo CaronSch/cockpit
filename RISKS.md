@@ -291,15 +291,56 @@ is newer. The daemon prints its version at start.
   own event vocabulary from what omp and the new harness have in common; make
   omp an adapter onto it. Do not abstract before the second harness exists.
 
-## When the daemon is reachable from anything but loopback (LAN, remote, team)
+## When access widens beyond the owner's own tailnet devices (a second user, node sharing, Funnel)
 
-- **No real auth.** The loopback guard (token plus Origin check) assumes one user
-  on one machine. *Response:* real authentication, TLS, and per-user isolation of
-  sessions and telemetry.
+- **One identity, all or nothing.** Phone access admits every device signed in to
+  Tailscale as the Mac's owner (`daemon/remote.js`, `tailscale whois`), and each gets
+  the whole daemon: the same routes as loopback, behind the same token. A device shared
+  into the tailnet from another account is not the owner and is refused, but Funnel
+  would carry no identity at all. *Response:* real authentication per person, TLS, and
+  per-user isolation of sessions and telemetry; never put the daemon behind Funnel.
 - **The telemetry store holds secrets.** Prompts, file contents, env values and
   tool output are stored in plain text, with the same trust as omp's own
   `~/.omp` session files. *Response:* redaction before storage or display to
   others, and encryption at rest.
+
+## When Phone access is used on a slow or metered connection
+
+- **A long awake conversation is heavy to open.** The phone's stream carries only the
+  conversations it shows, but opening one replays everything the daemon still keeps of
+  it, a resumed session's whole `get_messages` answer included: tens of megabytes for the
+  longest, uncompressed (an asleep one loads from its journal, gzipped). *Threshold
+  detail:* opening a conversation on the phone takes long enough to notice. *Response:*
+  gzip the stream with a flush per event, or load a conversation's history from its
+  gzipped journal and stream only what follows.
+- **A phone page's followed conversations only grow.** Each conversation the page opened
+  keeps streaming to it live until it reloads. *Threshold detail:* a phone tab left open
+  across many conversations. *Response:* unfollow, and drop the buffers of, conversations
+  not shown for a while.
+
+## When Tailscale is upgraded past 1.104
+
+- **Phone access reads the Tailscale CLI's JSON.** `daemon/remote.js` reads `tailscale
+  status --json` (`BackendState`, `Self.TailscaleIPs`, `Self.DNSName`, `Self.UserID`,
+  `Self.Tags`, `User[…].LoginName`) and `tailscale whois --json <ip>`
+  (`UserProfile.LoginName`, `Node.Tags`; exit 1 for an address it does not know), as
+  1.104 gives them; `tests/fixtures/fake-tailscale.js` copies those shapes. A change shows
+  up as Phone access stuck in its error, or every phone request refused. *Response:*
+  compare the real output with the fake's and update both.
+
+## When the tailnet has HTTPS certificates
+
+- **The phone page is not a secure context.** It is plain HTTP to a tailnet address
+  (the tunnel encrypts it), so the browser offers it no clipboard API, notifications,
+  service worker or home-screen app; the phone page hides Copy for that reason.
+  *Response:* serve through Tailscale Serve over HTTPS (its identity headers come from
+  the same `whois`), then offer Copy, push notifications and installing the page.
+
+## When the Mac restarts while away from it
+
+- **The daemon is not a login item.** After a reboot the phone finds nothing until
+  `bun start` runs again, and a closed lid sleeps the Mac. *Response:* a launchd agent
+  for the daemon, if this bites; staying awake is the user's (Energy settings).
 
 ## When telemetry can leave the machine (export, share, sync, OTLP)
 
