@@ -7,8 +7,8 @@
  * page can tell a choice from the default (`storedSetting`). Below them the menu lists the
  * daemon's settings (daemon/settings.js), the same for every browser, while the daemon can be
  * reached: its switches, Phone access (with, while it is on, the QR code a phone signs in with),
- * and which browser agents drive. The Setup window (widgets/setup.js) offers the same ones, Phone
- * access aside.
+ * and which browser agents drive. The Setup window (widgets/setup.js) offers the same ones,
+ * Phone access in a step of its own.
  */
 import { button, el } from './dom.js';
 import { createAtom } from '../state/atom.js';
@@ -157,10 +157,11 @@ const remoteText = (remote) => (remote?.state === 'on' ? 'On' : remote?.state ==
 /**
  * The Phone access switch and, while it is on, how it is doing; once on, the QR code a phone
  * signs in with (an image, never markup), the phone's address and whose devices get in, asked
- * of the daemon each time it comes on (its address may change). `show` follows the daemon.
+ * of the daemon each time it comes on (its address may change). `show` follows the daemon. Config
+ * and Setup each show one.
  * @param {DaemonClient} daemon
  */
-function phoneAccess(daemon) {
+export function phoneAccess(daemon) {
   const root = el('div', 'config-phone');
   const { row, box } = switchRow(PHONE_SETTING.label, PHONE_SETTING.detail, false, (on, box) => {
     // The daemon tells every page, this one too; until then the switch shows the choice.

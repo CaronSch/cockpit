@@ -283,16 +283,18 @@ What runs today:
 - The Setup window (the `setup` widget): what a machine starting afresh needs before a first
   agent, checked by the daemon whenever the window asks (`GET /api/setup`, `daemon/setup.js`):
   omp runs (`omp --version`), omp has models from a provider it is signed in to (`omp models
-  --json`), and `gh` is signed in (`gh api user`); then the Agents’ browser choice and the
-  daemon's switches, the same controls as Config's (`src/ui/settings.js` exports them). Without
-  any provider `omp --mode rpc-ui` exits at start, so an agent window cannot sign in from a
-  session of its own: **Sign in…** has the daemon run omp's terminal login, `omp login`, which
-  lists providers by number, opens the provider's page in the default browser and finishes on
-  its local callback (or asks for a code); its output streams to every page (`login` events,
-  kept in `hello`) and the window sends what is typed as lines, one login at a time. Once
-  omp and a provider check out, the daemon's `setupDone` is set; until then the first empty
-  screen a page opens gets a Setup window (`src/app.js` `offerSetup`), and the palette opens
-  one any time. **Start an agent** opens an agent window beside it.
+  --json`), `gh` is signed in (`gh api user`), and Tailscale runs here (`tailscale status
+  --json`, read as Phone access reads it); then the Agents’ browser choice, Phone access (its
+  step offers the switch once Tailscale runs, or while it is on) and the daemon's switches, the
+  same controls as Config's (`src/ui/settings.js` exports them). Only omp and a provider hold
+  Setup up. Without any provider `omp --mode rpc-ui` exits at start, so an agent window cannot
+  sign in from a session of its own: **Sign in…** has the daemon run omp's terminal login, `omp
+  login`, which lists providers by number, opens the provider's page in the default browser and
+  finishes on its local callback (or asks for a code); its output streams to every page (`login`
+  events, kept in `hello`) and the window sends what is typed as lines, one login at a time.
+  Once omp and a provider check out, the daemon's `setupDone` is set; until then the first
+  empty screen a page opens gets a Setup window (`src/app.js` `offerSetup`), and the palette
+  opens one any time. **Start an agent** opens an agent window beside it.
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
@@ -383,28 +385,28 @@ What runs today:
   if the file changed since (an agent wrote it), the window asks whose text stays. Only a file
   read whole and plain UTF-8 is editable (`editable`), so a save changes no byte not edited;
   `\r\n` line ends are kept.
-- Phone access (`daemon/remote.js`, the `remote` setting, **Phone access** in Config): while on,
-  a second listener on the Mac's Tailscale IPv4, at the daemon's port unless `--remote-port`,
-  serves the same routes behind the whois gate (Invariants), the health check reading
-  `tailscale status --json` every 30 s (Tailscale stopped: the listener stops and Config says
-  why; running again, or a new address: it binds again). Config shows the sign-in QR code
-  (`GET /api/remote`, loopback only, drawn by `uqr`), the URL and whose devices get in. On the
-  tailnet `/` goes to `/phone` (`phone.html`, `src/phone.js`, `styles/phone.css`): the Sessions
-  widget, then one Agent widget full screen, with a context of the page's own (no grid,
-  workspace, screens or Web Locks: plain HTTP is no secure context), a top bar with Back, the
-  conversation's name, **Show work** (the per-browser *Only prompts and responses*, on by default
-  there) and the Agent window's Stop and ↑ ↓; it starts no agent, and hides what it has no use
-  for (New, Forks, PRs, Accounts, Archive, Pin, rewind, and Copy, which needs a secure context).
-  Its daemon client is scoped (`useScopedDaemon`): the stream carries every session's status
-  (`session` events, and the hub's `activity` summary of each awake one: working, asking, work
-  running, name) but the events of only the conversations the page opened, each picked up
-  where the page left it (`?follow=<id>:<seq>`); the desktop's Sessions window reads the same
-  summaries instead of following every session's events. On a touch screen an Agent window
-  takes a tap for reading (it focuses nothing, so it opens no keyboard and wakes nothing), Enter
-  is a new line (Send sends), and a visible, focused page counts as reading it; a history
-  replayed after `subscribe` (the phone's stream reopening) counts as history, so an old
-  `set_editor_text` never fills the box. JSON answers of 64 KiB or more are gzipped for a client
-  that accepts it.
+- Phone access (`daemon/remote.js`, the `remote` setting, **Phone access** in Config and in
+  Setup): while on, a second listener on the Mac's Tailscale IPv4, at the daemon's port unless
+  `--remote-port`, serves the same routes behind the whois gate (Invariants), the health check
+  reading `tailscale status --json` every 30 s (Tailscale stopped: the listener stops and
+  Config says why; running again, or a new address: it binds again). Config and Setup show the
+  sign-in QR code (`GET /api/remote`, loopback only, drawn by `uqr`), the URL and whose devices
+  get in. On the tailnet `/` goes to `/phone` (`phone.html`, `src/phone.js`,
+  `styles/phone.css`): the Sessions widget, then one Agent widget full screen, with a context
+  of the page's own (no grid, workspace, screens or Web Locks: plain HTTP is no secure context),
+  a top bar with Back, the conversation's name, **Show work** (the per-browser *Only prompts and
+  responses*, on by default there) and the Agent window's Stop and ↑ ↓; it starts no agent, and
+  hides what it has no use for (New, Forks, PRs, Accounts, Archive, Pin, rewind, and Copy, which
+  needs a secure context). Its daemon client is scoped (`useScopedDaemon`): the stream carries
+  every session's status (`session` events, and the hub's `activity` summary of each awake one:
+  working, asking, work running, name) but the events of only the conversations the page
+  opened, each picked up where the page left it (`?follow=<id>:<seq>`); the desktop's Sessions
+  window reads the same summaries instead of following every session's events. On a touch
+  screen an Agent window takes a tap for reading (it focuses nothing, so it opens no keyboard
+  and wakes nothing), Enter is a new line (Send sends), and a visible, focused page counts as
+  reading it; a history replayed after `subscribe` (the phone's stream reopening) counts as
+  history, so an old `set_editor_text` never fills the box. JSON answers of 64 KiB or more are
+  gzipped for a client that accepts it.
 
 Not built yet: saved-context pins, terminal panes, process view,
 telemetry views, cmux-parity features beyond the above.
@@ -501,8 +503,9 @@ telemetry views, cmux-parity features beyond the above.
   override the defaults; `COCKPIT_IDLE_COMPACT_MIN_TOKENS` sets idle compaction's
   threshold (at least 100K), `COCKPIT_BUGBOT_POLL_MS` how often a Bugbot review is looked for;
   `--tailscale <path>` (or `COCKPIT_TAILSCALE`) and `--remote-port <n>` (or
-  `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's. Tests drive
-  `tests/fixtures/fake-tailscale.js`, never the real `tailscale`.
+  `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's (Setup checks the same
+  `tailscale`). Tests, the e2e daemons included, drive `tests/fixtures/fake-tailscale.js`, never
+  the real `tailscale`.
 - Before committing, all of these must pass (CI in `.github/workflows/ci.yml`
   runs the same on every push to `main` and every PR):
   - `bun run typecheck`
@@ -661,7 +664,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
 - `src/widgets/sessions.js` — omp conversations, one list, searchable and sortable.
-- `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, and the daemon's switches.
+- `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
@@ -689,7 +692,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/search.js` — Ranked search over conversations: a question in plain words ("in which session did we find that Binance bundle exclusivity dropped…") finds the conversations that talk about it.
 - `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), the same on each listener: loopback, and the remote one Phone access opens on the tailnet (remote.js), whose whois gate runs before anything else; then the guard of the listener's names (guard.js) on all of them.
 - `daemon/settings.js` — The daemon's settings: what the daemon does, so every page sees and changes the same ones (a page's own look is kept per browser: src/ui/settings.js).
-- `daemon/setup.js` — Setup (the Setup window, src/widgets/setup.js): what this machine needs before a first agent can start, checked whenever the window asks, and omp's own `omp login` run for the window, so a model provider can be signed in to from the browser.
+- `daemon/setup.js` — Setup (the Setup window, src/widgets/setup.js): what this machine needs before a first agent can start, and what Phone access would need, checked whenever the window asks, and omp's own `omp login` run for the window, so a model provider can be signed in to from the browser.
 - `daemon/sleep.js` — When the daemon puts a session to sleep: ends its omp process, as nobody needs it running.
 - `daemon/state-file.js` — A value the daemon keeps in one small JSON file in the state directory (unread marks, pins, settings): read once as the daemon starts, written whole after every change (write-then-rename, one write at a time, so a crash mid-write leaves the old value, never half of the new one), and every change heard by its subscribers.
 - `daemon/token.js` — The daemon's access token: random, created once, kept owner-only in the state directory so a browser stays signed in across daemon restarts.

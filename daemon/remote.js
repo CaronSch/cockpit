@@ -60,10 +60,10 @@ async function run(argv, env, timeoutMs) {
 
 /**
  * The Mac on its tailnet, from `tailscale status --json`; throws, saying why, when Phone access
- * cannot be served.
+ * cannot be served. Setup (setup.js) checks with it too.
  * @param {string} tailscale @param {Env} env @returns {Promise<Tailnet>}
  */
-async function readTailnet(tailscale, env) {
+export async function readTailnet(tailscale, env) {
   const result = await run([tailscale, 'status', '--json'], env, STATUS_TIMEOUT_MS);
   if (!result) throw new Error(`Tailscale's CLI is not installed (no ${tailscale})`);
   /** @type {any} */

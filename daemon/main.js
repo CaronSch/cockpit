@@ -123,7 +123,7 @@ const bugbot = await loadBugbot({
   pollMs: bugbotPoll > 0 ? bugbotPoll : BUGBOT_POLL_MS,
 }).catch(unreadable);
 const scratchpadDir = join(stateDir, 'scratchpads');
-const setup = createSetup({ ompPath, ghPath });
+const setup = createSetup({ ompPath, ghPath, tailscalePath });
 // Phone access serves the same routes on the tailnet: `daemon` is there by the time it is switched on.
 const remote = createRemoteAccess({ tailscale: tailscalePath, port: remotePort, token, settings, serve: (listener) => daemon.serve(listener) });
 remote.subscribe((state) => {

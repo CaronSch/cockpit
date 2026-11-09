@@ -117,7 +117,8 @@ export async function rpcAnswer(request) {
 
 /**
  * A daemon of a test's own, beside the shared one, for a test that restarts it: the real
- * daemon with the fake omp and fake gh, keeping its state in `stateDir` and reading journals from
+ * daemon with the fake omp, fake gh and fake tailscale (Setup checks Tailscale, so no spec ever
+ * reaches the machine's own), keeping its state in `stateDir` and reading journals from
  * `sessionsDir`, with `env` added to its environment. Its state is marked set up unless `fresh`.
  * Resolves once it answers; `stop()` ends it as Ctrl+C does.
  * @param {{ port: number, stateDir: string, sessionsDir: string, env?: Record<string, string>, fresh?: boolean }} options
@@ -125,7 +126,7 @@ export async function rpcAnswer(request) {
 export async function startDaemon({ port, stateDir, sessionsDir, env = {}, fresh = false }) {
   if (!fresh) markSetUp(stateDir);
   const child = spawn('bun', ['daemon/main.js', '--port', String(port), '--omp', 'tests/fixtures/fake-omp.js', '--gh', 'tests/fixtures/fake-gh.js'], {
-    env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, FAKE_GH_ROOT: E2E_GH_ROOT, ...env },
+    env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, FAKE_GH_ROOT: E2E_GH_ROOT, COCKPIT_TAILSCALE: FAKE_TAILSCALE, ...env },
     stdio: 'ignore',
   });
   const exited = new Promise((resolve) => child.once('exit', resolve));

@@ -206,7 +206,7 @@ beforeAll(async () => {
   delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
   bugbot = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 100 });
   // Setup's fake omp keeps who is signed in in a file of the suite's own, with nobody to start with.
-  setup = createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, env: { ...process.env, FAKE_OMP_AUTH: join(cwd, 'fake-omp-auth') } });
+  setup = createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, tailscalePath: FAKE_TAILSCALE, env: { ...process.env, FAKE_OMP_AUTH: join(cwd, 'fake-omp-auth') } });
   tailscaleStatus = join(cwd, 'tailscale-status.json');
   await writeFile(tailscaleStatus, JSON.stringify(RUNNING_TAILSCALE));
   remote = createRemoteAccess({
@@ -982,6 +982,7 @@ describe('setup', () => {
       omp: { ok: true, detail: 'omp/fake' },
       models: { ok: false, detail: 'No model provider signed in' },
       gh: { ok: true, detail: 'Signed in as octocat' },
+      tailscale: { ok: true, detail: 'Connected as owner@example.com' },
     });
 
     const stream = await openStream();
@@ -1030,12 +1031,24 @@ describe('setup', () => {
     assert.equal((await call({ method: 'POST', path: '/api/setup/login', body: {}, origin: false })).status, 403);
   });
 
-  test('without omp, Setup says so, and the model step waits for it', async () => {
-    const missing = createSetup({ ompPath: join(cwd, 'no-such-omp'), ghPath: join(cwd, 'no-such-gh') });
+  test('without omp, Setup says so, and the model step waits for it; without Tailscale, so does its step', async () => {
+    const missing = createSetup({ ompPath: join(cwd, 'no-such-omp'), ghPath: join(cwd, 'no-such-gh'), tailscalePath: join(cwd, 'no-such-tailscale') });
     assert.deepEqual(await missing.check(), {
       omp: { ok: false, detail: `omp not found ("${join(cwd, 'no-such-omp')}")` },
       models: { ok: false, detail: 'Needs omp' },
       gh: { ok: false, detail: `GitHub CLI not installed ("${join(cwd, 'no-such-gh')}")` },
+      tailscale: { ok: false, detail: `Tailscale's CLI is not installed (no ${join(cwd, 'no-such-tailscale')})` },
+    });
+  });
+
+  test('Tailscale installed but not connected, or on a tagged Mac, is not ready for Phone access, and says why', async () => {
+    /** @param {unknown} status */
+    const tailscaleWith = (status) =>
+      createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, tailscalePath: FAKE_TAILSCALE, env: { ...process.env, FAKE_TAILSCALE_STATUS: JSON.stringify(status) } }).check();
+    assert.deepEqual((await tailscaleWith({ BackendState: 'Stopped' })).tailscale, { ok: false, detail: 'Tailscale is not connected (Stopped)' });
+    assert.deepEqual((await tailscaleWith({ ...RUNNING_TAILSCALE, Self: { ...RUNNING_TAILSCALE.Self, Tags: ['tag:server'] } })).tailscale, {
+      ok: false,
+      detail: 'This Mac is a tagged Tailscale node: it has no owner whose devices could be let in',
     });
   });
 });

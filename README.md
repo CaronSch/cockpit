@@ -43,19 +43,19 @@ once (say `127.0.0.1` and `localhost`) do not see which screens the other has
 open.
 
 **Phone.** With [Tailscale](https://tailscale.com) on the Mac and on an Android phone,
-signed in to the same account, turn on **Phone access** in Config: it shows a QR code to scan
-once with the phone. The phone gets a page of its own, `/phone`: the Sessions list, and one
-conversation at a time, full screen, live, with prompts and responses only unless you show the
-work. From it you can reply, answer questions and approvals, and stop the agent; replying to a
-conversation that went to sleep wakes it, as on the Mac. What you read there is read everywhere.
-No server is involved: the phone talks to the daemon over your tailnet, and only while the Mac
-is awake and `bun start` runs. The daemon answers there only devices signed in to Tailscale as
-the Mac's owner (it asks `tailscale whois` about each connection), and only with its token, which
-the QR code carries. The page is plain HTTP inside Tailscale's encrypted tunnel, so the browser
-treats it as insecure: Copy buttons and notifications are not offered there. Outside the tunnel
-that address means nothing, and a hostile Wi-Fi could answer for it, so keep Tailscale always on
-on the phone: in Android's VPN settings, turn on **Always-on VPN** and **Block connections without
-VPN** for Tailscale.
+signed in to the same account, turn on **Phone access** in Config or in Setup's phone step: it
+shows a QR code to scan once with the phone. The phone gets a page of its own, `/phone`: the
+Sessions list, and one conversation at a time, full screen, live, with prompts and responses
+only unless you show the work. From it you can reply, answer questions and approvals, and stop
+the agent; replying to a conversation that went to sleep wakes it, as on the Mac. What you read
+there is read everywhere. No server is involved: the phone talks to the daemon over your
+tailnet, and only while the Mac is awake and `bun start` runs. The daemon answers there only
+devices signed in to Tailscale as the Mac's owner (it asks `tailscale whois` about each
+connection), and only with its token, which the QR code carries. The page is plain HTTP inside
+Tailscale's encrypted tunnel, so the browser treats it as insecure: Copy buttons and
+notifications are not offered there. Outside the tunnel that address means nothing, and a
+hostile Wi-Fi could answer for it, so keep Tailscale always on on the phone: in Android's VPN
+settings, turn on **Always-on VPN** and **Block connections without VPN** for Tailscale.
 
 ## Getting started
 
@@ -104,7 +104,9 @@ says whether it is done; **Check again** after fixing one in a terminal.
 3. **Agents’ browser**: where agents open web pages (see Config above). The default keeps
    them out of your own Chrome.
 4. **GitHub** (optional): whether `gh` is signed in.
-5. **Preferences**: the daemon's switches from Config.
+5. **Your phone** (optional): whether Tailscale runs on this Mac; once it does, how to set the
+   phone up and the **Phone access** switch with its QR code (see **Phone** above).
+6. **Preferences**: the daemon's switches from Config.
 
 Once omp runs with a model, **Start an agent** opens an Agent window: pick a directory (folders
 are suggested as you type, from your home folder; Tab completes) and start chatting. From then on
