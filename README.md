@@ -2,10 +2,10 @@
 
 **A modular, in-browser workbench for coding agents.**
 
-Cockpit runs coding agents from a local daemon and shows them in your browser;
-each Agent window runs [omp](https://omp.sh). Everything is a window: chats,
-past sessions, notes, pull requests and files are widgets you drag, split, stack and resize on a snapping grid,
-as many as you like, side by side.
+Cockpit runs coding agents from a local daemon and shows them in your browser, and
+optionally on your phone; each Agent window runs [omp](https://omp.sh). Everything is a window:
+chats, past sessions, notes, pull requests and files are widgets you drag, split, stack and
+resize on a snapping grid, as many as you like, side by side.
 
 ![Cockpit: an agent adds due dates to a small todo CLI; under its reply, the five decisions it took without asking; beside it, todo.js opened from a path in the reply](docs/screenshot.png)
 
@@ -17,18 +17,24 @@ as many as you like, side by side.
 | **Notes** | Markdown notes with inline screenshots and files, kept in `~/.cockpit/scratchpads/`. |
 | **Pull request** | A GitHub pull request beside its agent: description, conversation and diff with line comments. Comment on or ask about highlighted parts and send them to the agent as one review; **Bugbot** sends it Cursor Bugbot's findings. The list colours open and draft pull requests and filters by status and author. |
 | **File** | A Markdown, JSON, text or code file with line numbers, opened from a path in a reply (at the line it names); Markdown shows rendered. |
-| **Setup** | What this machine needs before a first agent, checked live: omp, a model provider (sign in through omp's login from the window), the agents' browser, GitHub's CLI, and the daemon's switches. Opens by itself on a machine not set up yet. |
+| **Setup** | What this machine needs before a first agent, checked live: omp, a model provider (sign in through omp's login from the window), the agents' browser, GitHub's CLI, your phone (optional) and the daemon's switches. Opens by itself on a machine not set up yet. |
 
-A pane whose agent finished or asks something while you looked away gets a blue
-border, and its session stays unread (in every window, across reloads and daemon
-restarts, after it stops) until you click or type in a window showing it, or show it
-from Sessions; hovering over the window or scrolling it leaves it unread. The marks are kept in `~/.cockpit/unread.json`. Turn
-on **Notify** in the top bar for a desktop notification as well, while you are not looking at
-that session; clicking it shows the session. When the workbench's files change under an open tab, the top bar offers
-**Reload**. **Config** in the top bar (it opens as you point at it) holds the app's switches, kept per browser: *Only prompts and responses* hides the work in between (thinking and tool calls, keeping what the agent says as it works) in every agent window, and *Animated selection* (on) highlights whole words while you drag over a reply, gliding between them as in Google Docs. Below them are the daemon's, the same in every browser: *Compact idle conversations* (on) compacts a long conversation shortly before its prompt cache expires, *Review decisions* (off) has a small model read each turn and list the decisions the agent took without you, under its reply (one cheap model call per turn), *I have ADHD* (off) has every agent answer by the rules of [i-have-adhd](https://github.com/ayghri/i-have-adhd): the next action first, steps numbered, lists of five at most, one next step to end on, no preamble or closers, and *Agents’ browser* picks where agents open web pages: *A separate browser* (the default: omp's own Chrome for Testing, with a profile of its own, so an agent never takes over the tab you are reading), *Your Chrome* (omp's browser relay, signed in as you) or *As omp is set up* (`~/.omp/agent/config.yml` decides). A conversation already running takes a change up from its next message. **− 100% +** in the top bar sets the text size (the percentage resets it), kept per
-browser. An agent window whose conversation has been quiet for 54 minutes since its last
-request, the point at which idle compaction would compact it (on or off), dims until you use
-it again: its prompt cache is about to expire.
+A window whose agent finished or asks something while you looked away gets a blue border and
+stays unread, everywhere, until you click or type in it. **Notify** in the top bar adds desktop
+notifications.
+
+**Config** in the top bar holds the switches. Per browser: *Only prompts and responses* hides
+the agent's work in between; *Animated selection* glides between words as you select. Kept by
+the daemon, for every browser:
+
+- *Compact idle conversations* (on): compacts a long conversation just before its prompt cache
+  expires. A window dims when that point nears.
+- *Review decisions* (off): lists, under each reply, the decisions the agent took without you.
+- *I have ADHD* (off): agents answer by the [i-have-adhd](https://github.com/ayghri/i-have-adhd)
+  rules.
+- *Agents’ browser*: where agents open web pages: a separate Chrome (default), your own, or as
+  omp is set up.
+- *Phone access* (off): see **Phone** below.
 
 **Screens.** Each browser window is a screen of your workspace, like an extra
 monitor: open a second window and it starts empty, with its own panes. Layouts
@@ -41,6 +47,15 @@ screen and what it holds; a screen open in no window can be opened in this one
 digits and dashes; the default is `main`). Windows at two different addresses at
 once (say `127.0.0.1` and `localhost`) do not see which screens the other has
 open.
+
+**Phone.** Read and answer your agents from an Android phone over
+[Tailscale](https://tailscale.com). Sign in to Tailscale on the Mac and the phone with the same
+account, turn on **Phone access** (in Setup or Config), and scan its QR code once. The phone
+gets the Sessions list and one conversation at a time, live: reply, answer questions and
+approvals, stop the agent. Nothing is hosted: it works while the Mac is awake and `bun start`
+runs, and only your own Tailscale devices get in. The page is plain HTTP inside Tailscale's
+tunnel, so in Android's VPN settings turn on **Always-on VPN** and **Block connections without
+VPN** for Tailscale.
 
 ## Getting started
 
@@ -89,14 +104,17 @@ says whether it is done; **Check again** after fixing one in a terminal.
 3. **Agents’ browser**: where agents open web pages (see Config above). The default keeps
    them out of your own Chrome.
 4. **GitHub** (optional): whether `gh` is signed in.
-5. **Preferences**: the daemon's switches from Config.
+5. **Your phone** (optional): whether Tailscale runs on this Mac; once it does, how to set the
+   phone up and the **Phone access** switch with its QR code (see **Phone** above).
+6. **Preferences**: the daemon's switches from Config.
 
 Once omp runs with a model, **Start an agent** opens an Agent window: pick a directory (folders
 are suggested as you type, from your home folder; Tab completes) and start chatting. From then on
 new screens start empty; **＋ Widget → Setup** opens it again. Another provider can be added
 later from an agent window's **Accounts** (omp's `/login`).
 
-The daemon listens on loopback only and refuses requests from other sites.
+The daemon listens on loopback only, and also on the Mac's Tailscale address while Phone access
+is on (see **Phone** above); it refuses requests from other sites.
 
 | Option | Default |
 | --- | --- |
@@ -105,6 +123,8 @@ The daemon listens on loopback only and refuses requests from other sites.
 | `--cwd <dir>` / `COCKPIT_CWD` (the directory a new agent window suggests) | your home directory |
 | `COCKPIT_STATE_DIR` (token, settings, notes, attachments, workspaces) | `~/.cockpit` |
 | `COCKPIT_OMP_SESSIONS` (omp's session files) | `~/.omp/agent/sessions` |
+| `--tailscale <path>` / `COCKPIT_TAILSCALE` (Phone access) | `tailscale` on `PATH` |
+| `--remote-port <n>` / `COCKPIT_REMOTE_PORT` (Phone access) | the `--port` |
 
 Pass flags through with `bun start --port 4800 --cwd ~/code/app`.
 
@@ -119,9 +139,9 @@ bun run claude-md:check            # generated part of CLAUDE.md is current
 ```
 
 No build step: the UI is plain ES modules. Its runtime dependencies are Temml,
-which turns agents' TeX math into MathML the browser typesets, and Mermaid, Vega
+which turns agents' TeX math into MathML the browser typesets, Mermaid, Vega
 and Vega-Lite, which draw the diagrams and charts agents write (loaded only when a
-reply has one). CI runs all four
+reply has one), and uqr, with which the daemon draws Phone access's QR code. CI runs all four
 checks on every push to `main` and every pull request.
 
 - [`CLAUDE.md`](CLAUDE.md): architecture, conventions, how to add a widget.

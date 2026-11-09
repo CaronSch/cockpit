@@ -2,7 +2,9 @@
  * Wire contract between the daemon and the browser: session metadata, stream events and
  * HTTP payloads.
  *
- * Routes (all same-origin, authenticated by the `ac_token` cookie; see `guard.js`):
+ * Routes (all same-origin, authenticated by the `ac_token` cookie; see `guard.js`), the same on
+ * the loopback listener and on the remote one Phone access opens on the tailnet (`remote.js`),
+ * except where noted:
  *
  *   GET    /api/config                 → DaemonConfig
  *   GET    /api/ui                     → { version }: the UI files' version now (see `ui-files.js`)
@@ -97,14 +99,24 @@
  *   POST   /api/github/bugbot          { repo, number, target: ConversationTarget } → 201 BugbotWatch:
  *                                      `bugbot go` commented on the pull request, and its review,
  *                                      once Bugbot posts it, sent to the conversation (see `bugbot.js`)
+ *   GET    /api/remote                 → RemoteInfo: Phone access, with the phone's URL and sign-in QR
+ *                                      code (loopback only: 404 on the remote listener)
  *   GET    /api/stream                 Server-Sent Events, one StreamEvent per message
+ *   GET    /api/stream?follow=<id>:<seq>,…  the same, scoped to the sessions named (none for an empty
+ *                                      `follow`): only their events with a seq above their cursor (or
+ *                                      Last-Event-ID's, the larger) are replayed, and only their events
+ *                                      sent live, bar every session's `session` events; 400 when malformed
+ *
+ * A `PUT /api/settings` naming `remote` is refused (403) on the remote listener: the phone
+ * cannot switch itself off. JSON answers of 64 KiB or more are gzipped for a request that accepts
+ * it (the stream never is).
  *
  * Errors are `{ error: string }` with a 4xx/5xx status. The stream's SSE ids are
  * `<bootId>:<seq>`, so a reconnect resumes after the last event it saw; the first message
  * on every connection is a `hello` carrying the current boot id, the newest event's seq (the
  * events up to it that follow are a replay), session list, unread conversations, forks, settings, Bugbot watches, the
- * Setup window's login and UI version. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
- * `bugbot` and `login` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
+ * Setup window's login, UI version, awake sessions' activity and Phone access. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
+ * `bugbot`, `login`, `activity` and `remote` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
  * GET /api/history and GET /api/decisions/:ompId instead, and its `hello` carries the rest.
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
@@ -194,8 +206,30 @@
  * `pinned` holds the pinned conversations' omp ids; `forks` every fork: the conversation it
  * came from and its title (see `forks.js`). `settings` are the daemon's (see `settings.js`).
  * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`); `login` the Setup window's
- * `omp login`, null if none ran since the daemon started (see `setup.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], login: LoginState | null, ui: string }} HelloEvent
+ * `omp login`, null if none ran since the daemon started (see `setup.js`). `activity` holds
+ * how every awake session is doing, by session id; `remote` how Phone access is (`remote.js`).
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState }} HelloEvent
+ */
+
+/**
+ * How an awake session is doing, from its events: its agent is on a turn (`working`), waits on
+ * a question or approval (`asking`), how many shells and subagents it has running (`work`,
+ * omp/running-work.js), its name (title, else first prompt; null before either).
+ * @typedef {{ working: boolean, asking: boolean, work: number, name: string | null }} SessionActivity
+ */
+/** Sent to every page after an awake session's activity changed; null once the session ended. @typedef {{ kind: 'activity', session: string, activity: SessionActivity | null }} ActivityEvent */
+
+/**
+ * Phone access (settings.js `remote`, `remote.js`): `off`, `starting`, `on` (the remote
+ * listener is serving) or `error` (`error` says why, retried while the switch is on).
+ * @typedef {{ state: 'off' | 'starting' | 'on' | 'error', error: string | null }} RemoteState
+ */
+/** Sent to every page after Phone access changed state. @typedef {{ kind: 'remote' } & RemoteState} RemoteEvent */
+/**
+ * GET /api/remote, loopback only: the state, and while `on` the phone's address (`url`, no
+ * token), the Tailscale login whose devices get in, and `qr`, an SVG of the sign-in URL (with
+ * the token); all three null otherwise.
+ * @typedef {RemoteState & { url: string | null, login: string | null, qr: string | null }} RemoteInfo
  */
 
 /** A scratchpad's text; `rev` names this exact text (a hash of it). @typedef {{ text: string, rev: string }} Scratchpad */
@@ -218,7 +252,7 @@
 
 /** Sent to every page as the Setup window's `omp login` starts, prints, is answered or ends. @typedef {{ kind: 'login', login: LoginState | null }} LoginEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | LoginEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | LoginEvent | ActivityEvent | RemoteEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

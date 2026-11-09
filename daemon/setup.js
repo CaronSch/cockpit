@@ -1,7 +1,7 @@
 /**
  * Setup (the Setup window, src/widgets/setup.js): what this machine needs before a first agent
- * can start, checked whenever the window asks, and omp's own `omp login` run for the window, so a
- * model provider can be signed in to from the browser.
+ * can start, and what Phone access would need, checked whenever the window asks, and omp's own
+ * `omp login` run for the window, so a model provider can be signed in to from the browser.
  *
  * Without credentials for any provider `omp --mode rpc-ui` exits at once ("No default model
  * selected"), so an agent window cannot sign in from a session of its own (its Accounts needs one
@@ -12,6 +12,7 @@
  * its output as it comes and sends what its user types as lines. One login runs at a time, for
  * every page.
  */
+import { readTailnet } from './remote.js';
 /** @import { Subprocess } from 'bun' */
 
 const CHECK_TIMEOUT_MS = 30_000;
@@ -26,8 +27,10 @@ const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
 
 /**
  * `omp`: omp runs (its version); `models`: omp has models it may use, i.e. credentials for a
- * provider; `gh`: GitHub's CLI is signed in (only pull request windows need it).
- * @typedef {{ omp: SetupCheck, models: SetupCheck, gh: SetupCheck }} SetupStatus
+ * provider; `gh`: GitHub's CLI is signed in (only pull request windows need it); `tailscale`:
+ * Tailscale runs on this Mac, which belongs to a person (only Phone access needs it,
+ * daemon/remote.js).
+ * @typedef {{ omp: SetupCheck, models: SetupCheck, gh: SetupCheck, tailscale: SetupCheck }} SetupStatus
  */
 
 /**
@@ -99,8 +102,24 @@ async function checkGh(ghPath, env) {
   return { ok: true, detail: `Signed in as ${result.out.trim()}` };
 }
 
-/** `env`: what Setup's commands run in, the daemon's own unless given. @param {{ ompPath: string, ghPath: string, env?: Env }} options */
-export function createSetup({ ompPath, ghPath, env = process.env }) {
+/**
+ * Whether Phone access could come on: Tailscale connected on this Mac, and whose devices it would
+ * let in, as a check.
+ * @param {string} tailscalePath @param {Env} env @returns {Promise<SetupCheck>}
+ */
+async function checkTailscale(tailscalePath, env) {
+  try {
+    return { ok: true, detail: `Connected as ${(await readTailnet(tailscalePath, env)).login}` };
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * `env`: what Setup's commands run in, the daemon's own unless given.
+ * @param {{ ompPath: string, ghPath: string, tailscalePath: string, env?: Env }} options
+ */
+export function createSetup({ ompPath, ghPath, tailscalePath, env = process.env }) {
   /** @type {LoginState | null} */
   let login = null;
   /** @type {Subprocess<'pipe', 'pipe', 'pipe'> | null} */
@@ -125,11 +144,12 @@ export function createSetup({ ompPath, ghPath, env = process.env }) {
     /** @returns {Promise<SetupStatus>} */
     async check() {
       const version = await ompVersion(ompPath, env);
-      const [models, gh] = await Promise.all([
+      const [models, gh, tailscale] = await Promise.all([
         version ? checkModels(ompPath, env) : Promise.resolve({ ok: false, detail: 'Needs omp' }),
         checkGh(ghPath, env),
+        checkTailscale(tailscalePath, env),
       ]);
-      return { omp: version ? { ok: true, detail: version } : { ok: false, detail: `omp not found ("${ompPath}")` }, models, gh };
+      return { omp: version ? { ok: true, detail: version } : { ok: false, detail: `omp not found ("${ompPath}")` }, models, gh, tailscale };
     },
     login: {
       state: () => login,

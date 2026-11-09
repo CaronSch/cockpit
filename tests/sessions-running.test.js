@@ -1,10 +1,13 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
 import { STATE_LABELS, conversationKey, follow, followedName, isRunning, listConversations, noteEvent, runningState, showConversation } from '../src/sessions/running.js';
-/** @import { SessionEvent, SessionMeta } from '../daemon/wire.js' */
+/** @import { SessionActivity, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 
 /** @param {Partial<SessionMeta> & { id: string }} m @returns {SessionMeta} */
 const meta = (m) => ({ cwd: '/p', resume: null, fork: null, sessionFile: null, status: 'ready', pid: 1, exitCode: null, error: null, startedAt: 0, ompId: 'o', ...m });
+
+/** @param {Partial<SessionActivity>} a @returns {SessionActivity} */
+const activity = (a) => ({ working: false, asking: false, work: 0, name: null, ...a });
 
 let seq = 0;
 /** @param {Record<string, unknown>} frame @param {number} at @returns {SessionEvent} */
@@ -47,26 +50,19 @@ describe('conversations', () => {
   });
 
   test('awake, are working during a turn, done once it ends unread, and idle once read', () => {
-    const followed = follow();
-    assert.equal(runningState(followed, meta({ id: 's', status: 'starting' }), false), 'starting');
-    noteEvent(followed, frame({ type: 'agent_start' }, 10));
-    assert.equal(runningState(followed, meta({ id: 's' }), false), 'working');
-    assert.equal(runningState(followed, meta({ id: 's' }), true), 'working', 'marked unread mid-turn: still working');
-    noteEvent(followed, frame({ type: 'agent_end', messages: [], isTerminal: true, yielded: true }, 20));
-    assert.equal(runningState(followed, meta({ id: 's' }), true), 'done');
+    assert.equal(runningState(activity({}), meta({ id: 's', status: 'starting' }), false), 'starting');
+    assert.equal(runningState(null, meta({ id: 's' }), false), 'starting', 'not summed up by the daemon yet');
+    assert.equal(runningState(activity({ working: true }), meta({ id: 's' }), false), 'working');
+    assert.equal(runningState(activity({ working: true }), meta({ id: 's' }), true), 'working', 'marked unread mid-turn: still working');
+    assert.equal(runningState(activity({}), meta({ id: 's' }), true), 'done');
     assert.equal(STATE_LABELS.done, 'done');
-    assert.equal(runningState(followed, meta({ id: 's' }), false), 'idle', 'read in some window');
+    assert.equal(runningState(activity({}), meta({ id: 's' }), false), 'idle', 'read in some window');
   });
 
-  test('a question asked mid-turn needs the user while the turn runs, read or not, until it is answered', () => {
-    const followed = follow();
-    noteEvent(followed, frame({ type: 'agent_start' }, 10));
-    noteEvent(followed, frame({ type: 'extension_ui_request', id: 'u', method: 'ask', title: 'Which?' }, 12));
-    assert.equal(runningState(followed, meta({ id: 's' }), true), 'asking');
-    assert.equal(runningState(followed, meta({ id: 's' }), false), 'asking');
+  test('a question asked mid-turn needs the user while the turn runs, read or not', () => {
+    assert.equal(runningState(activity({ working: true, asking: true }), meta({ id: 's' }), true), 'asking');
+    assert.equal(runningState(activity({ working: true, asking: true }), meta({ id: 's' }), false), 'asking');
     assert.equal(STATE_LABELS.asking, 'needs you');
-    noteEvent(followed, { kind: 'sent', command: { type: 'extension_ui_response', id: 'u', value: 'a' }, seq: ++seq, at: 13, session: 's' });
-    assert.equal(runningState(followed, meta({ id: 's' }), false), 'working');
   });
 
   test('are named as an agent window names them: the first prompt until omp has a title', () => {

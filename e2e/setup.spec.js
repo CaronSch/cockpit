@@ -1,9 +1,11 @@
 // Setup (widgets/setup.js, daemon/setup.js): a machine starting afresh gets the Setup window on its
 // first empty screen, signs in to a model provider through omp's own login from there, picks the
-// agents' browser, and starts its first agent; once ready, empty screens stay empty. Runs a daemon
-// of its own, fresh, with the fake omp signed in to nothing and the fake gh signed out.
+// agents' browser, and starts its first agent; once ready, empty screens stay empty. Its optional
+// phone step says how to get Tailscale until it runs here, then offers Phone access and, switched
+// on, the QR code a phone signs in with. Runs daemons of their own, fresh, with the fake omp, the
+// fake gh signed out and the fake tailscale.
 import { test, expect } from '@playwright/test';
-import { mkdirSync, mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { freePort, newWorkspace, startDaemon } from './daemon.js';
@@ -80,6 +82,75 @@ test('a fresh machine opens Setup, signs in through omp login, picks the agents�
     await page.goto(daemon.url(newWorkspace()));
     await expect(page.locator('.grid-empty')).toBeVisible();
     await expect(page.locator('.widget')).toHaveCount(0);
+  } finally {
+    await daemon.stop();
+  }
+  expect(problems).toEqual([]);
+});
+
+test('the optional phone step says how to get Tailscale, then offers Phone access and its QR code, holding nothing up', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'ac-e2e-setup-phone-'));
+  const sessionsDir = join(dir, 'omp-sessions');
+  mkdirSync(sessionsDir, { recursive: true });
+  // Signed in to a model provider already: Setup is ready while Tailscale is not.
+  const auth = join(dir, 'auth');
+  writeFileSync(auth, 'fake-cloud\n');
+  const tailscaleStatus = join(dir, 'tailscale-status.json');
+  writeFileSync(tailscaleStatus, JSON.stringify({ BackendState: 'Stopped' }));
+  /** @type {string[]} */
+  const problems = [];
+  page.on('pageerror', (err) => problems.push(err.message));
+  await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
+
+  const remotePort = await freePort();
+  const daemon = await startDaemon({
+    port: await freePort(),
+    stateDir: join(dir, 'state'),
+    sessionsDir,
+    env: { FAKE_OMP_AUTH: auth, FAKE_TAILSCALE_STATUS_FILE: tailscaleStatus, COCKPIT_REMOTE_PORT: String(remotePort) },
+    fresh: true,
+  });
+  try {
+    await page.goto(daemon.url(newWorkspace()));
+    const setup = page.locator('.widget[data-widget="setup"]');
+    const phone = setup.locator('.setup-step', { has: page.locator('.setup-step-title', { hasText: '5. Your phone (optional)' }) });
+    await expect(phone).toHaveAttribute('data-state', 'missing');
+    await expect(phone.locator('.setup-state')).toHaveText('✗ Tailscale is not connected (Stopped)');
+    await expect(phone.locator('.setup-todo')).toContainText('https://tailscale.com/download');
+    await expect(phone.getByRole('checkbox', { name: /Phone access/ })).toBeHidden();
+    await expect(setup.getByRole('button', { name: 'Start an agent' })).toBeEnabled();
+
+    // Tailscale connected: checked again, the step offers Phone access, and how to set the phone up.
+    writeFileSync(
+      tailscaleStatus,
+      JSON.stringify({
+        BackendState: 'Running',
+        Self: { TailscaleIPs: ['127.0.0.1'], DNSName: 'mac.example.ts.net.', UserID: 1 },
+        User: { 1: { LoginName: 'owner@example.com' } },
+      }),
+    );
+    await setup.getByRole('button', { name: 'Check again' }).click();
+    await expect(phone).toHaveAttribute('data-state', 'ok');
+    await expect(phone.locator('.setup-state')).toHaveText('✓ Connected as owner@example.com');
+    await expect(phone.locator('.setup-todo')).toBeHidden();
+    await expect(phone).toContainText('Always-on VPN');
+    const access = phone.getByRole('checkbox', { name: /Phone access/ });
+    await expect(access).not.toBeChecked();
+    await expect(phone.locator('.config-phone-qr')).toHaveCount(0);
+
+    await access.check();
+    await expect(phone.locator('.config-phone-state')).toHaveText('On');
+    await expect(phone.locator('img.config-phone-qr')).toBeVisible();
+    await expect(phone.locator('.config-phone-url')).toHaveText(`http://127.0.0.1:${remotePort}/phone`);
+    await expect(phone).toContainText('Only owner@example.com’s devices');
+    // The same setting Config shows.
+    await page.locator('.config-toggle').click();
+    await expect(page.locator('.config-menu').getByRole('checkbox', { name: /Phone access/ })).toBeChecked();
+    await page.keyboard.press('Escape');
+
+    await access.uncheck();
+    await expect(phone.locator('.config-phone-panel')).toBeHidden();
+    await expect(phone.locator('.config-phone-qr')).toHaveCount(0);
   } finally {
     await daemon.stop();
   }

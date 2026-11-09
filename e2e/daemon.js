@@ -117,7 +117,8 @@ export async function rpcAnswer(request) {
 
 /**
  * A daemon of a test's own, beside the shared one, for a test that restarts it: the real
- * daemon with the fake omp and fake gh, keeping its state in `stateDir` and reading journals from
+ * daemon with the fake omp, fake gh and fake tailscale (Setup checks Tailscale, so no spec ever
+ * reaches the machine's own), keeping its state in `stateDir` and reading journals from
  * `sessionsDir`, with `env` added to its environment. Its state is marked set up unless `fresh`.
  * Resolves once it answers; `stop()` ends it as Ctrl+C does.
  * @param {{ port: number, stateDir: string, sessionsDir: string, env?: Record<string, string>, fresh?: boolean }} options
@@ -125,7 +126,7 @@ export async function rpcAnswer(request) {
 export async function startDaemon({ port, stateDir, sessionsDir, env = {}, fresh = false }) {
   if (!fresh) markSetUp(stateDir);
   const child = spawn('bun', ['daemon/main.js', '--port', String(port), '--omp', 'tests/fixtures/fake-omp.js', '--gh', 'tests/fixtures/fake-gh.js'], {
-    env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, FAKE_GH_ROOT: E2E_GH_ROOT, ...env },
+    env: { ...process.env, HOME: E2E_HOME, COCKPIT_STATE_DIR: stateDir, COCKPIT_OMP_SESSIONS: sessionsDir, FAKE_GH_ROOT: E2E_GH_ROOT, COCKPIT_TAILSCALE: FAKE_TAILSCALE, ...env },
     stdio: 'ignore',
   });
   const exited = new Promise((resolve) => child.once('exit', resolve));
@@ -138,12 +139,42 @@ export async function startDaemon({ port, stateDir, sessionsDir, env = {}, fresh
     if (tries > 100 || child.exitCode !== null) throw new Error(`the daemon on port ${port} did not start`);
     await new Promise((r) => setTimeout(r, 100));
   }
+  const token = () => readFileSync(join(stateDir, 'token'), 'utf8').trim();
   return {
+    token,
     /** The URL that signs a page in to this daemon, in `workspace`. @param {string} workspace */
-    url: (workspace) => `http://127.0.0.1:${port}/?token=${readFileSync(join(stateDir, 'token'), 'utf8').trim()}&workspace=${workspace}`,
+    url: (workspace) => `http://127.0.0.1:${port}/?token=${token()}&workspace=${workspace}`,
+    /**
+     * A request to its API on loopback, signed in as a page of its own is (its token cookie and
+     * Origin); a body is sent as JSON.
+     * @param {string} path @param {{ method?: string, body?: unknown }} [init]
+     */
+    api: (path, { method = 'GET', body } = {}) =>
+      fetch(`http://127.0.0.1:${port}${path}`, {
+        method,
+        headers: { cookie: `ac_token=${token()}`, origin: `http://127.0.0.1:${port}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
     async stop() {
       child.kill('SIGTERM');
       await exited;
     },
   };
+}
+
+/** Stands in for Tailscale's CLI (daemon/remote.js) in the specs of Phone access: its `status` and `whois`. */
+export const FAKE_TAILSCALE = 'tests/fixtures/fake-tailscale.js';
+
+/**
+ * Waits until a daemon's Phone access listener is up, as Config hears it (`GET /api/remote`).
+ * @param {{ api: (path: string) => Promise<Response> }} daemon
+ * @returns {Promise<import('../daemon/wire.js').RemoteInfo>}
+ */
+export async function remoteOn(daemon) {
+  for (let tries = 0; ; tries++) {
+    const info = await (await daemon.api('/api/remote')).json();
+    if (info.state === 'on') return info;
+    if (tries > 100) throw new Error(`Phone access did not come on: ${JSON.stringify(info)}`);
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }

@@ -1,7 +1,7 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
 import { createDaemonClient } from '../src/daemon/client.js';
-/** @import { SessionEvent, SessionMeta, StreamEvent } from '../daemon/wire.js' */
+/** @import { SessionActivity, SessionEvent, SessionMeta, StreamEvent } from '../daemon/wire.js' */
 
 /** A controllable stand-in for the browser's EventSource. */
 class FakeSource {
@@ -22,6 +22,9 @@ class FakeSource {
   deliver(event) {
     this.onmessage?.({ data: JSON.stringify(event) });
   }
+  close() {
+    this.readyState = FakeSource.CLOSED;
+  }
 }
 
 /** @param {string} id @param {SessionMeta['status']} [status] @returns {SessionMeta} */
@@ -30,21 +33,44 @@ const meta = (id, status = 'ready') => ({ id, cwd: '/p', resume: null, fork: nul
 /** @param {string} session @param {number} seq @returns {SessionEvent} */
 const frame = (session, seq) => ({ kind: 'frame', frame: { type: 'agent_start' }, seq, at: 0, session });
 
-/** @param {string} bootId @param {SessionMeta[]} [sessions] @param {string} [ui] @param {Record<string, number>} [unread] @param {number} [seq] @returns {StreamEvent} */
-const hello = (bootId, sessions = [], ui = 'v1', unread = {}, seq = 0) => ({ kind: 'hello', bootId, seq, sessions, unread, pinned: [], forks: {}, settings: { idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: true }, bugbot: [], login: null, ui });
+/** @param {string} bootId @param {SessionMeta[]} [sessions] @param {string} [ui] @param {Record<string, number>} [unread] @param {number} [seq] @param {Record<string, SessionActivity>} [activity] @returns {StreamEvent} */
+const hello = (bootId, sessions = [], ui = 'v1', unread = {}, seq = 0, activity = {}) => ({
+  kind: 'hello',
+  bootId,
+  seq,
+  sessions,
+  unread,
+  pinned: [],
+  forks: {},
+  settings: { idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: true, remote: false },
+  bugbot: [],
+  login: null,
+  ui,
+  activity,
+  remote: { state: 'off', error: null },
+});
+
+/** @param {Partial<SessionActivity>} a @returns {SessionActivity} */
+const doing = (a) => ({ working: false, asking: false, work: 0, name: null, ...a });
+
+/** Lets the client's queued work run (a scoped client reopens its stream at the end of a task). */
+const tick = () => new Promise((r) => setImmediate(r));
 
 /** The daemon's answer to POST /rpc: the id omp's response will carry on the stream. */
 const accepted = () => new Response(JSON.stringify({ id: 'ac_7' }), { status: 202 });
 
-/** @param {number} [status] @param {(url: string) => Response | Promise<Response> | null} [route] */
-async function connectedClient(status = 200, route = () => null) {
+/** @param {number} [status] @param {(url: string) => Response | Promise<Response> | null} [route] @param {{ scoped?: boolean }} [options] */
+async function connectedClient(status = 200, route = () => null, options = {}) {
   FakeSource.opened = [];
-  const client = createDaemonClient({
-    fetch: /** @type {typeof fetch} */ (async (/** @type {string} */ url) => route(url) ?? new Response('{}', { status })),
-    EventSource: /** @type {typeof EventSource} */ (/** @type {unknown} */ (FakeSource)),
-    setTimeout: /** @type {typeof setTimeout} */ (/** @type {unknown} */ (() => 0)),
-  });
-  await new Promise((r) => setImmediate(r));
+  const client = createDaemonClient(
+    {
+      fetch: /** @type {typeof fetch} */ (async (/** @type {string} */ url) => route(url) ?? new Response('{}', { status })),
+      EventSource: /** @type {typeof EventSource} */ (/** @type {unknown} */ (FakeSource)),
+      setTimeout: /** @type {typeof setTimeout} */ (/** @type {unknown} */ (() => 0)),
+    },
+    options,
+  );
+  await tick();
   return { client, source: FakeSource.opened[0] };
 }
 
@@ -203,5 +229,137 @@ describe('unread conversations', () => {
     assert.equal(client.unreadSince(null), null, 'a session omp has not named yet is never unread');
     assert.equal(client.unreadSince('toString'), null, 'only the daemon’s own marks');
     assert.equal(heard, 2);
+  });
+});
+
+describe('how sessions are doing and Phone access', () => {
+  test('activity comes with every hello and every change, and every listener hears it', async () => {
+    const { client, source } = await connectedClient();
+    let heard = 0;
+    client.onActivity(() => heard++);
+    assert.equal(client.activity('s1'), null, 'nothing before the daemon says');
+    source.deliver(hello('b1', [meta('s1')], 'v1', {}, 0, { s1: doing({ working: true, name: 'Fix it' }) }));
+    assert.deepEqual(client.activity('s1'), doing({ working: true, name: 'Fix it' }));
+    source.deliver({ kind: 'activity', session: 's1', activity: doing({ asking: true, work: 2 }) });
+    assert.equal(client.activity('s1')?.asking, true);
+    assert.equal(client.activity('s1')?.work, 2);
+    source.deliver({ kind: 'activity', session: 's1', activity: null });
+    assert.equal(client.activity('s1'), null, 'the session ended');
+    /** @type {number[]} */
+    const seen = [];
+    client.subscribe('s1', (e) => seen.push(e.seq));
+    assert.deepEqual(seen, [], 'not a session event');
+    assert.equal(heard, 3);
+  });
+
+  test('Phone access’s state comes with every hello and every change', async () => {
+    const { client, source } = await connectedClient();
+    let heard = 0;
+    client.onRemote(() => heard++);
+    assert.equal(client.remote(), null, 'nothing before the daemon says');
+    source.deliver(hello('b1'));
+    assert.deepEqual(client.remote(), { state: 'off', error: null });
+    source.deliver({ kind: 'remote', state: 'error', error: 'Tailscale is not running' });
+    assert.deepEqual(client.remote(), { state: 'error', error: 'Tailscale is not running' });
+    assert.equal(heard, 2);
+  });
+
+  test('its sign-in is asked of the daemon', async () => {
+    const info = { state: 'on', error: null, url: 'http://100.64.0.1:4777/phone', login: 'owner@example.com', qr: '<svg/>' };
+    const { client } = await connectedClient(200, (url) => (url === '/api/remote' ? Response.json(info) : null));
+    assert.deepEqual(await client.remoteInfo(), info);
+  });
+});
+
+describe('scoped client', () => {
+  test('opens the stream following no session', async () => {
+    const { source } = await connectedClient(200, () => null, { scoped: true });
+    assert.equal(source.url, '/api/stream?follow=');
+  });
+
+  test('a subscribe follows the session from its start, reopening the stream once for all those of a task', async () => {
+    const { client, source } = await connectedClient(200, () => null, { scoped: true });
+    source.deliver(hello('b1', [meta('s1'), meta('s2')]));
+    client.subscribe('s1', () => {});
+    client.subscribe('s2', () => {});
+    client.subscribe('s1', () => {});
+    await tick();
+    assert.equal(source.readyState, FakeSource.CLOSED);
+    assert.deepEqual(
+      FakeSource.opened.map((s) => s.url),
+      ['/api/stream?follow=', '/api/stream?follow=s1:0,s2:0'],
+    );
+    client.subscribe('s1', () => {});
+    await tick();
+    assert.equal(FakeSource.opened.length, 2, 'a session followed already does not reopen it');
+  });
+
+  test('a reopen carries how far each session got, and nothing is delivered twice', async () => {
+    const { client, source } = await connectedClient(200, () => null, { scoped: true });
+    source.deliver(hello('b1', [meta('s1'), meta('s2')]));
+    /** @type {number[]} */
+    const s1 = [];
+    client.subscribe('s1', (e) => s1.push(e.seq));
+    await tick();
+    const second = FakeSource.opened[1];
+    second.deliver(hello('b1', [meta('s1'), meta('s2')], 'v1', {}, 2));
+    second.deliver(frame('s1', 1));
+    second.deliver(frame('s1', 2));
+    /** @type {number[]} */
+    const s2 = [];
+    client.subscribe('s2', (e) => s2.push(e.seq));
+    await tick();
+    const third = FakeSource.opened[2];
+    assert.equal(third.url, '/api/stream?follow=s1:2,s2:0');
+    third.deliver(hello('b1', [meta('s1'), meta('s2')], 'v1', {}, 3));
+    third.deliver(frame('s1', 2)); // already delivered on the last stream
+    third.deliver(frame('s2', 3));
+    third.deliver(frame('s1', 4));
+    assert.deepEqual(s1, [1, 2, 4]);
+    assert.deepEqual(s2, [3]);
+    assert.equal(client.replayed(frame('s2', 3)), true, 'the new session’s history is a replay');
+  });
+
+  test('every session’s status follows the stream, but only followed sessions’ events are kept', async () => {
+    const { client, source } = await connectedClient(200, () => null, { scoped: true });
+    source.deliver(hello('b1', [meta('s1', 'starting')]));
+    let heard = 0;
+    client.onSessions(() => heard++);
+    source.deliver({ kind: 'session', meta: meta('s1', 'ready'), seq: 1, at: 0, session: 's1' });
+    assert.equal(client.meta('s1')?.status, 'ready');
+    assert.equal(heard, 1);
+    source.deliver(frame('s1', 2));
+    /** @type {number[]} */
+    const seen = [];
+    client.subscribe('s1', (e) => seen.push(e.seq));
+    assert.deepEqual(seen, [], 'nothing kept from before it was followed');
+  });
+
+  test('a daemon restart starts every followed session over', async () => {
+    const { client, source } = await connectedClient(200, () => null, { scoped: true });
+    source.deliver(hello('b1', [meta('s1')]));
+    client.subscribe('s1', () => {});
+    await tick();
+    const second = FakeSource.opened[1];
+    second.deliver(hello('b1', [meta('s1')]));
+    second.deliver(frame('s1', 5));
+    second.deliver(hello('b2'));
+    /** @type {number[]} */
+    const seen = [];
+    client.subscribe('s1', (e) => seen.push(e.seq));
+    second.deliver(frame('s1', 1));
+    assert.deepEqual(seen, [1], 'the new daemon’s seqs are not taken for old ones');
+  });
+
+  test('an unscoped client keeps one stream with every session', async () => {
+    const { client, source } = await connectedClient();
+    source.deliver(hello('b1', [meta('s1')]));
+    source.deliver(frame('s1', 1));
+    /** @type {number[]} */
+    const seen = [];
+    client.subscribe('s1', (e) => seen.push(e.seq));
+    await tick();
+    assert.deepEqual(FakeSource.opened.map((s) => s.url), ['/api/stream']);
+    assert.deepEqual(seen, [1]);
   });
 });
