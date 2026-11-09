@@ -2,12 +2,13 @@
  * Setup: what this machine needs before a first agent can start, and the choices worth making
  * first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by
  * the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's
- * CLI for pull request windows, and the daemon's switches. An empty screen opens it until the
- * checks first pass (the daemon's `setupDone`); the palette opens it any time.
+ * CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once
+ * Tailscale runs here) and the daemon's switches. An empty screen opens it until the checks
+ * first pass (the daemon's `setupDone`); the palette opens it any time.
  */
 import { button, el, setText } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
-import { DAEMON_SETTINGS, browserChoice, switchRow } from '../ui/settings.js';
+import { DAEMON_SETTINGS, browserChoice, phoneAccess, switchRow } from '../ui/settings.js';
 import { getDaemon } from '../daemon/client.js';
 /** @import { SetupCheck, SetupStatus } from '../../daemon/setup.js' */
 /** @import { WidgetContext } from './registry.js' */
@@ -96,9 +97,23 @@ export default {
     const gh = step('4. GitHub (optional)', 'Pull request windows read and comment through GitHub’s CLI, signed in as you. Everything else works without it.');
     gh.todo.append(para('Install it from ', shell('https://cli.github.com'), ', then run ', shell('gh auth login'), ' in a terminal.'));
 
+    const phoneStep = step(
+      '5. Your phone (optional)',
+      'Read and answer your agents from an Android phone, over Tailscale, while this Mac is awake and Cockpit runs. Only devices signed in to Tailscale as you get in. Everything else works without it.',
+    );
+    phoneStep.todo.append(para('Install Tailscale on this Mac from ', shell('https://tailscale.com/download'), ', sign in and connect, then Check again.'));
+    const phoneReady = el('div', 'setup-phone');
+    phoneReady.hidden = true;
+    phoneReady.append(
+      para(
+        'On the phone, install the Tailscale app and sign in with the same account. In Android’s VPN settings, turn on Always-on VPN and Block connections without VPN for Tailscale: the phone’s page is plain HTTP, safe only inside the tunnel. Then turn Phone access on and scan the QR code with the phone’s camera.',
+      ),
+    );
+    phoneStep.root.append(phoneReady);
+
     const prefs = el('section', 'setup-step');
     prefs.append(
-      el('h3', 'setup-step-title', '5. Preferences'),
+      el('h3', 'setup-step-title', '6. Preferences'),
       el('p', 'setup-about', 'Kept by the daemon, for every browser; Config in the top bar changes them later. Notify, also in the top bar, adds desktop notifications when an agent finishes or needs you.'),
     );
     const prefsList = el('div', 'setup-prefs');
@@ -108,8 +123,18 @@ export default {
     const start = button('btn btn-accent', 'Start an agent', () => ctx.openBeside('omp', {}));
     const actions = el('div', 'setup-actions');
     actions.append(recheck, start);
-    root.append(omp.root, models.root, browser, gh.root, prefs, actions);
+    root.append(omp.root, models.root, browser, gh.root, phoneStep.root, prefs, actions);
     body.append(root);
+
+    /** Phone access, once the daemon's settings are known. @type {ReturnType<typeof phoneAccess> | null} */
+    let phone = null;
+    /** Whether Tailscale runs here, as last checked. */
+    let tailscaleOk = false;
+    /** Phone access is offered once Tailscale runs here, or while it is on (to switch it off). */
+    function drawPhone() {
+      phoneReady.hidden = !(tailscaleOk || daemon.settings()?.remote === true);
+      phone?.show();
+    }
 
     /** @type {ReturnType<typeof browserChoice> | null} */
     let choice = null;
@@ -121,6 +146,9 @@ export default {
       if (!choice) {
         choice = browserChoice(daemon, settings.browser);
         browser.append(choice.root);
+        phone = phoneAccess(daemon);
+        phoneReady.append(phone.root);
+        drawPhone();
         prefsList.append(
           ...DAEMON_SETTINGS.map((setting) => {
             const { row, box } = switchRow(setting.label, setting.detail, settings[setting.key], (on) => {
@@ -133,6 +161,7 @@ export default {
         return;
       }
       choice.show(settings.browser);
+      drawPhone();
       for (const setting of DAEMON_SETTINGS) {
         const box = boxes.get(setting.key);
         if (box) box.checked = settings[setting.key];
@@ -144,7 +173,7 @@ export default {
       const run = ++checking;
       recheck.disabled = true;
       start.disabled = true;
-      for (const s of [omp, models, gh]) s.show(null);
+      for (const s of [omp, models, gh, phoneStep]) s.show(null);
       /** @type {SetupStatus} */
       let status;
       try {
@@ -153,7 +182,7 @@ export default {
         if (run !== checking) return;
         recheck.disabled = false;
         const failed = { ok: false, detail: `Could not check: ${errorMessage(err)}` };
-        for (const s of [omp, models, gh]) s.show(failed);
+        for (const s of [omp, models, gh, phoneStep]) s.show(failed);
         return;
       }
       if (run !== checking) return;
@@ -161,6 +190,9 @@ export default {
       omp.show(status.omp);
       models.show(status.models);
       gh.show(status.gh);
+      phoneStep.show(status.tailscale);
+      tailscaleOk = status.tailscale.ok;
+      drawPhone();
       const ready = status.omp.ok && status.models.ok;
       start.disabled = !ready;
       // Ready once: an empty screen no longer opens Setup.
@@ -191,6 +223,7 @@ export default {
 
     const offSettings = daemon.onSettings(drawSettings);
     const offLogin = daemon.onLogin(drawLogin);
+    const offRemote = daemon.onRemote(drawPhone);
     drawSettings();
     drawLogin();
     void check();
@@ -199,6 +232,7 @@ export default {
         checking++;
         offSettings();
         offLogin();
+        offRemote();
       },
     };
   },

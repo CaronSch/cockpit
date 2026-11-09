@@ -7,9 +7,10 @@
  */
 import { extname, join } from 'node:path';
 
-/** Directories served under their own name, besides `index.html`. */
+/** Directories served under their own name, besides the pages. */
 export const STATIC_DIRS = ['src', 'styles'];
-export const INDEX_FILE = 'index.html';
+/** The pages: the workbench (`/`) and the phone's (`/phone`). */
+export const PAGE_FILES = ['index.html', 'phone.html'];
 /**
  * Files from dependencies, each served at a stable path of its own (index.html's import map
  * names them), so the page loads what it needs and nothing else of `node_modules`.
@@ -37,7 +38,7 @@ const ALL_FILES = new Bun.Glob('**');
 
 /** @param {string} root @returns {Promise<string[]>} every served file, relative to `root` */
 async function servedFiles(root) {
-  const files = [INDEX_FILE, ...Object.values(VENDOR_FILES)];
+  const files = [...PAGE_FILES, ...Object.values(VENDOR_FILES)];
   for (const dir of STATIC_DIRS) {
     try {
       for await (const path of ALL_FILES.scan({ cwd: join(root, dir), dot: true })) {

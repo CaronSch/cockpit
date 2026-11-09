@@ -37,15 +37,14 @@ import { button, el } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
-import { STATE_LABELS, follow, followedName, isRunning, listConversations, noteEvent, runningState, showConversation } from '../sessions/running.js';
+import { STATE_LABELS, listConversations, runningState, showConversation } from '../sessions/running.js';
 import { sessionLinks } from '../sessions/links.js';
 import { snippetLine } from '../sessions/snippet.js';
-import { runningWork } from '../omp/running-work.js';
 import { openContextMenu, opensContextMenu } from '../ui/context-menu.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { PastSession, SessionMeta } from '../../daemon/wire.js' */
-/** @import { Followed, Listed, RunningState } from '../sessions/running.js' */
+/** @import { Listed, RunningState } from '../sessions/running.js' */
 /** @import { SortDir, SortKey } from '../sessions/order.js' */
 
 const SEARCH_DEBOUNCE_MS = 200;
@@ -127,8 +126,6 @@ function createSessionsWindow(body, ctx, daemon) {
   let links = sessionLinks(ctx.screen.get());
   /** The rows pointed at: under the pointer, and holding focus. @type {{ hovered: string | null, focused: string | null }} */
   const pointing = { hovered: null, focused: null };
-  /** What this window follows of each awake session, from its events. @type {Map<string, { followed: Followed, off: () => void }>} */
-  const followed = new Map();
   let frame = 0;
   /** Redraws once per frame however many events arrive. */
   const scheduleDraw = () => {
@@ -145,25 +142,6 @@ function createSessionsWindow(body, ctx, daemon) {
       draw();
     })
     .catch(() => {});
-
-  /** Follows every awake session's events (to tell how it is doing), and lets go of the others. */
-  function syncFollowed() {
-    const awake = new Set(daemon.sessions().filter(isRunning).map((m) => m.id));
-    for (const [id, entry] of followed) {
-      if (awake.has(id)) continue;
-      entry.off();
-      followed.delete(id);
-    }
-    for (const id of awake) {
-      if (followed.has(id)) continue;
-      const entry = { followed: follow(), off: () => {} };
-      followed.set(id, entry);
-      entry.off = daemon.subscribe(id, (event) => {
-        noteEvent(entry.followed, event);
-        scheduleDraw();
-      });
-    }
-  }
 
   async function load() {
     const seq = ++requestSeq;
@@ -197,10 +175,7 @@ function createSessionsWindow(body, ctx, daemon) {
     listConversations(sessions, showArchived() ? [] : daemon.sessions(), { searching: query() !== '', directory: directory() });
 
   /** What a row's conversation is called: its awake session's name, else its journal's. @param {Listed} c */
-  const nameOf = (c) => {
-    const f = c.meta && followed.get(c.meta.id)?.followed;
-    return (f && followedName(f)) ?? (c.title || c.firstPrompt ? displayTitle(c) : null);
-  };
+  const nameOf = (c) => (c.meta && daemon.activity(c.meta.id)?.name) ?? (c.title || c.firstPrompt ? displayTitle(c) : null);
 
   /** @param {Listed} c */
   const isUnread = (c) => daemon.unreadSince(c.meta?.ompId ?? (c.id || null)) !== null;
@@ -209,17 +184,10 @@ function createSessionsWindow(body, ctx, daemon) {
   const isPinned = (c) => daemon.isPinned(c.meta?.ompId ?? (c.id || null));
 
   /** How an awake conversation is doing, or null for one asleep. @param {Listed} c @returns {RunningState | null} */
-  function stateOf(c) {
-    if (!c.meta) return null;
-    const f = followed.get(c.meta.id)?.followed;
-    return f ? runningState(f, c.meta, isUnread(c)) : 'starting';
-  }
+  const stateOf = (c) => (c.meta ? runningState(daemon.activity(c.meta.id), c.meta, isUnread(c)) : null);
 
   /** How many shells and subagents an awake conversation has running (omp/running-work.js). @param {Listed} c */
-  function workOf(c) {
-    const f = c.meta ? followed.get(c.meta.id)?.followed : null;
-    return f ? runningWork(f.transcript).length : 0;
-  }
+  const workOf = (c) => (c.meta ? (daemon.activity(c.meta.id)?.work ?? 0) : 0);
 
   /**
    * Whether Archive is offered for `c`: a listed journal, or a new session omp has not written
@@ -558,11 +526,8 @@ function createSessionsWindow(body, ctx, daemon) {
 
   const offUnread = daemon.onUnread(scheduleDraw);
   const offPins = daemon.onPins(scheduleDraw);
-  const offSessions = daemon.onSessions(() => {
-    syncFollowed();
-    scheduleDraw();
-  });
-  syncFollowed();
+  const offSessions = daemon.onSessions(scheduleDraw);
+  const offActivity = daemon.onActivity(scheduleDraw);
   const offStatus = daemon.onStatus((s) => {
     if (s === 'open') void load();
   });
@@ -625,7 +590,7 @@ function createSessionsWindow(body, ctx, daemon) {
       offUnread();
       offPins();
       offStatus();
-      for (const entry of followed.values()) entry.off();
+      offActivity();
       cancelAnimationFrame(frame);
       root.remove();
     },

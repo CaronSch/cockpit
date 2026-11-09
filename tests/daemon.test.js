@@ -8,7 +8,8 @@ import { createHub } from '../daemon/hub.js';
 import { createAttachments } from '../daemon/attachments.js';
 import { createScratchpads } from '../daemon/scratchpad.js';
 import { createWorkspaces } from '../daemon/workspace.js';
-import { createDaemonServer } from '../daemon/server.js';
+import { createDaemon, createDaemonServer, loopbackListener } from '../daemon/server.js';
+import { createRemoteAccess } from '../daemon/remote.js';
 import { listDirectory, readTextFile } from '../daemon/files.js';
 import { loadToken } from '../daemon/token.js';
 import { loadUnread } from '../daemon/unread.js';
@@ -24,12 +25,21 @@ import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon
 import { withAdhdRules } from '../daemon/adhd.js';
 import { browserEnv } from '../daemon/browser.js';
 import { createSetup } from '../daemon/setup.js';
-/** @import { RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
+/** @import { RemoteState, RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
+/** @import { DaemonOptions } from '../daemon/server.js' */
+/** @import { RemoteAccess } from '../daemon/remote.js' */
 
 const ROOT = resolve(import.meta.dir, '..');
 const FAKE_OMP = join(ROOT, 'tests/fixtures/fake-omp.js');
 const FAKE_GH = join(ROOT, 'tests/fixtures/fake-gh.js');
+const FAKE_TAILSCALE = join(ROOT, 'tests/fixtures/fake-tailscale.js');
 const TOKEN = 'a'.repeat(64);
+/** The fake Tailscale's `status --json` while it runs: this Mac at 127.0.0.1, owned by owner@example.com. */
+const RUNNING_TAILSCALE = {
+  BackendState: 'Running',
+  Self: { TailscaleIPs: ['127.0.0.1', 'fd7a::1'], DNSName: 'mac.example.ts.net.', UserID: 1 },
+  User: { 1: { LoginName: 'owner@example.com', DisplayName: 'Owner' } },
+};
 
 /** @type {ReturnType<typeof createDaemonServer>} */
 let server;
@@ -55,21 +65,29 @@ let bugbot;
 let decisions;
 /** @type {import('../daemon/setup.js').Setup} */
 let setup;
+/** Phone access of the suite's daemon, on the fake Tailscale. @type {RemoteAccess} */
+let remote;
+/** What the suite's daemon is made of, for other daemons on the same sessions. @type {DaemonOptions} */
+let daemonOptions;
+/** The file the fake Tailscale's `status --json` prints. */
+let tailscaleStatus = '';
 let port = 0;
 let cwd = '';
 
 /**
- * @param {{ method?: string, path: string, headers?: Record<string, string>, body?: unknown, raw?: string, auth?: boolean, origin?: boolean }} options
+ * A request to the suite's daemon, or to the listener on port `daemon`, named `name` (its Host,
+ * and its Origin when one is sent) as a page there names it.
+ * @param {{ method?: string, path: string, headers?: Record<string, string>, body?: unknown, raw?: string, auth?: boolean, origin?: boolean, daemon?: number, name?: string }} options
  * @returns {Promise<{ status: number, headers: Headers, text: string, json: any }>}
  */
-async function call({ method = 'GET', path, headers = {}, body, raw, auth = true, origin = method !== 'GET' }) {
-  const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+async function call({ method = 'GET', path, headers = {}, body, raw, auth = true, origin = method !== 'GET', daemon = port, name = '127.0.0.1' }) {
+  const res = await fetch(`http://127.0.0.1:${daemon}${path}`, {
     method,
     redirect: 'manual',
     headers: {
-      host: `127.0.0.1:${port}`,
+      host: `${name}:${daemon}`,
       ...(auth ? { cookie: `ac_token=${TOKEN}` } : {}),
-      ...(origin ? { origin: `http://127.0.0.1:${port}` } : {}),
+      ...(origin ? { origin: `http://${name}:${daemon}` } : {}),
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       ...headers,
     },
@@ -87,17 +105,18 @@ async function call({ method = 'GET', path, headers = {}, body, raw, auth = true
  * Connects to the event stream as a page does (resuming after `lastEventId`, if given). Once
  * it resolves, the daemon sends this connection everything new, so whatever happens next is
  * on it; `until` reads until `done` holds. `daemon` is the port of a daemon other than the
- * suite's.
- * @param {{ lastEventId?: string, daemon?: number }} [options]
+ * suite's; `query` is the stream's (`?follow=…`).
+ * @param {{ lastEventId?: string, daemon?: number, query?: string }} [options]
  */
-async function openStream({ lastEventId, daemon = port } = {}) {
+async function openStream({ lastEventId, daemon = port, query = '' } = {}) {
   /** @type {StreamEvent[]} */
   const events = [];
   /** @type {string[]} */
   const ids = [];
   const headers = { cookie: `ac_token=${TOKEN}`, ...(lastEventId ? { 'last-event-id': lastEventId } : {}) };
   const connection = new AbortController();
-  const res = await fetch(`http://127.0.0.1:${daemon}/api/stream`, { headers, signal: connection.signal });
+  const res = await fetch(`http://127.0.0.1:${daemon}/api/stream${query}`, { headers, signal: connection.signal });
+  assert.equal(res.status, 200);
   return {
     /** @param {(events: StreamEvent[], ids: string[]) => boolean} done @returns {Promise<{ events: StreamEvent[], ids: string[] }>} */
     async until(done) {
@@ -167,7 +186,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'login' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -187,8 +206,19 @@ beforeAll(async () => {
   delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
   bugbot = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 100 });
   // Setup's fake omp keeps who is signed in in a file of the suite's own, with nobody to start with.
-  setup = createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, env: { ...process.env, FAKE_OMP_AUTH: join(cwd, 'fake-omp-auth') } });
-  server = createDaemonServer({
+  setup = createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, tailscalePath: FAKE_TAILSCALE, env: { ...process.env, FAKE_OMP_AUTH: join(cwd, 'fake-omp-auth') } });
+  tailscaleStatus = join(cwd, 'tailscale-status.json');
+  await writeFile(tailscaleStatus, JSON.stringify(RUNNING_TAILSCALE));
+  remote = createRemoteAccess({
+    tailscale: FAKE_TAILSCALE,
+    port: 0,
+    token: TOKEN,
+    settings,
+    serve: (listener) => daemon.serve(listener),
+    env: { ...process.env, FAKE_TAILSCALE_STATUS_FILE: tailscaleStatus },
+    checkEveryMs: 100,
+  });
+  daemonOptions = {
     hub,
     unread,
     pins,
@@ -201,18 +231,21 @@ beforeAll(async () => {
     delivery,
     bugbot,
     setup,
+    remote,
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
     token: TOKEN,
     root: ROOT,
     config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000 },
-    port: 0,
-  });
+  };
+  const daemon = createDaemon(daemonOptions);
+  server = daemon.serve(loopbackListener(0));
   port = /** @type {number} */ (server.port);
 });
 
 afterAll(async () => {
+  await remote.stop();
   bugbot.stop();
   await hub.closeAll();
   await server.stop(true);
@@ -839,6 +872,7 @@ describe('unread conversations', () => {
       delivery,
       bugbot,
       setup,
+      remote,
       token: TOKEN,
       root: ROOT,
       config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000 },
@@ -900,7 +934,7 @@ describe('pins', () => {
 });
 
 describe('settings', () => {
-  const DEFAULTS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: false });
+  const DEFAULTS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: false, remote: false });
 
   test('every page hears them first thing and after each change, which the next daemon starts with', async () => {
     const stream = await openStream();
@@ -948,6 +982,7 @@ describe('setup', () => {
       omp: { ok: true, detail: 'omp/fake' },
       models: { ok: false, detail: 'No model provider signed in' },
       gh: { ok: true, detail: 'Signed in as octocat' },
+      tailscale: { ok: true, detail: 'Connected as owner@example.com' },
     });
 
     const stream = await openStream();
@@ -996,12 +1031,24 @@ describe('setup', () => {
     assert.equal((await call({ method: 'POST', path: '/api/setup/login', body: {}, origin: false })).status, 403);
   });
 
-  test('without omp, Setup says so, and the model step waits for it', async () => {
-    const missing = createSetup({ ompPath: join(cwd, 'no-such-omp'), ghPath: join(cwd, 'no-such-gh') });
+  test('without omp, Setup says so, and the model step waits for it; without Tailscale, so does its step', async () => {
+    const missing = createSetup({ ompPath: join(cwd, 'no-such-omp'), ghPath: join(cwd, 'no-such-gh'), tailscalePath: join(cwd, 'no-such-tailscale') });
     assert.deepEqual(await missing.check(), {
       omp: { ok: false, detail: `omp not found ("${join(cwd, 'no-such-omp')}")` },
       models: { ok: false, detail: 'Needs omp' },
       gh: { ok: false, detail: `GitHub CLI not installed ("${join(cwd, 'no-such-gh')}")` },
+      tailscale: { ok: false, detail: `Tailscale's CLI is not installed (no ${join(cwd, 'no-such-tailscale')})` },
+    });
+  });
+
+  test('Tailscale installed but not connected, or on a tagged Mac, is not ready for Phone access, and says why', async () => {
+    /** @param {unknown} status */
+    const tailscaleWith = (status) =>
+      createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, tailscalePath: FAKE_TAILSCALE, env: { ...process.env, FAKE_TAILSCALE_STATUS: JSON.stringify(status) } }).check();
+    assert.deepEqual((await tailscaleWith({ BackendState: 'Stopped' })).tailscale, { ok: false, detail: 'Tailscale is not connected (Stopped)' });
+    assert.deepEqual((await tailscaleWith({ ...RUNNING_TAILSCALE, Self: { ...RUNNING_TAILSCALE.Self, Tags: ['tag:server'] } })).tailscale, {
+      ok: false,
+      detail: 'This Mac is a tagged Tailscale node: it has no owner whose devices could be let in',
     });
   });
 });
@@ -1862,5 +1909,361 @@ describe('GitHub', () => {
     const next = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 60_000 });
     assert.deepEqual(next.all(), bugbot.all());
     next.stop();
+  });
+});
+
+/** A new session the daemon started, once it is ready. */
+async function readySession() {
+  const { json } = await call({ method: 'POST', path: '/api/sessions', body: { cwd } });
+  await waitForStatus(json.session.id, 'ready');
+  return /** @type {string} */ (json.session.id);
+}
+
+/** The seqs of session `id`'s events in the daemon's log now. @param {string} id */
+const loggedSeqs = (id) => forSession(hub.since(0), id).map((e) => e.seq);
+
+describe('session activity', () => {
+  test('every page hears how each awake session is doing: first thing, then on each change, and null once it ended', async () => {
+    const id = await readySession();
+    const first = await readStream({ done: (events) => events.some((e) => e.kind === 'hello') });
+    const hello = first.events.find((e) => e.kind === 'hello');
+    assert.deepEqual(hello?.kind === 'hello' && hello.activity[id], { working: false, asking: false, work: 0, name: null });
+
+    const stream = await openStream();
+    await rpc(id, { type: 'prompt', message: 'ask me' });
+    const asked = await logged((e) => e.session === id && e.kind === 'frame' && e.frame.method === 'ask');
+    assert.ok(asked.kind === 'frame');
+    assert.equal((await call({ method: 'POST', path: `/api/sessions/${id}/ui`, body: { id: asked.frame.id, cancelled: true } })).status, 204);
+    await logged((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'agent_end');
+    await call({ method: 'DELETE', path: `/api/sessions/${id}` });
+    const { events } = await stream.until((events) => events.some((e) => e.kind === 'activity' && e.session === id && e.activity === null));
+    const changes = events.flatMap((e) => (e.kind === 'activity' && e.session === id ? [e.activity] : []));
+    assert.ok(changes.some((a) => a?.working && !a.asking), 'working');
+    assert.ok(changes.some((a) => a?.working && a.asking), 'asking');
+    const done = changes.at(-2);
+    assert.deepEqual({ working: done?.working, asking: done?.asking, work: done?.work }, { working: false, asking: false, work: 0 });
+    assert.equal(typeof done?.name, 'string', 'named by its first prompt, or the title omp gave it');
+    for (let i = 1; i < changes.length; i++) assert.notDeepEqual(changes[i], changes[i - 1], 'only changes are told');
+    assert.equal(id in hub.activity(), false);
+  });
+});
+
+describe('scoped event stream', () => {
+  let followed = '';
+  let other = '';
+  beforeAll(async () => {
+    [followed, other] = await Promise.all([readySession(), readySession()]);
+    for (const id of [followed, other]) {
+      await rpc(id, { type: 'prompt', message: 'hello' });
+      await logged((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'agent_end');
+    }
+  });
+  afterAll(async () => {
+    for (const id of [followed, other]) await call({ method: 'DELETE', path: `/api/sessions/${id}` });
+  });
+
+  test('only followed sessions are replayed; live, every session’s metas arrive, and only followed sessions’ other events', async () => {
+    const replayed = loggedSeqs(followed);
+    const last = /** @type {number} */ (replayed.at(-1));
+    const stream = await openStream({ query: `?follow=${followed}:0` });
+    const started = await readySession();
+    await rpc(followed, { type: 'prompt', message: 'hello again' });
+    const ended = await logged((e) => e.seq > last && e.session === followed && e.kind === 'frame' && e.frame.type === 'agent_end');
+    const { events } = await stream.until((events) => forSession(events, followed).some((e) => e.seq === ended.seq));
+    assert.deepEqual(forSession(events, followed).map((e) => e.seq).filter((seq) => seq <= last), replayed, 'the followed session’s whole history');
+    assert.deepEqual(forSession(events, other), [], 'nothing of a session not followed');
+    const news = forSession(events, started);
+    assert.ok(news.some((e) => e.kind === 'session' && e.meta.status === 'ready'), 'a new session’s metas');
+    assert.ok(news.every((e) => e.kind === 'session'), 'and nothing else of it');
+    assert.ok(forSession(hub.since(0), started).some((e) => e.kind !== 'session'), 'though it had frames');
+    await call({ method: 'DELETE', path: `/api/sessions/${started}` });
+  });
+
+  test('a followed session is replayed after its cursor, or after Last-Event-ID when that is later', async () => {
+    const log = loggedSeqs(followed);
+    const mid = log[Math.floor(log.length / 2)];
+    const last = log.at(-1);
+    /** The followed session's seqs a stream replays. @param {string} query @param {string} [lastEventId] */
+    const replay = async (query, lastEventId) => {
+      const { events } = await (await openStream({ query, lastEventId })).until((events) => forSession(events, followed).some((e) => e.seq === last));
+      return forSession(events, followed).map((e) => e.seq);
+    };
+    const after = log.filter((seq) => seq > mid);
+    assert.deepEqual(await replay(`?follow=${followed}:${mid}`), after);
+    assert.deepEqual(await replay(`?follow=${followed}:0`, `${hub.bootId}:${mid}`), after);
+    assert.deepEqual(await replay(`?follow=${followed}:${mid},${other}:${hub.latest()}`, `${hub.bootId}:1`), after, 'the later of the two');
+    assert.deepEqual(await replay(`?follow=${followed}:0`, `another-boot:${mid}`), log, 'an id from another boot counts for nothing');
+  });
+
+  test('an empty follow sends no session’s events but metas; a malformed one is refused', async () => {
+    for (const query of [`?follow=${followed}`, `?follow=${followed}:x`, `?follow=${followed}:1,`, '?follow=a b:1', `?follow=${followed}:-1`]) {
+      assert.equal((await call({ path: `/api/stream${query}` })).status, 400, query);
+    }
+    const stream = await openStream({ query: '?follow=' });
+    const started = await readySession();
+    const { events } = await stream.until((events) => forSession(events, started).some((e) => e.kind === 'session' && e.meta.status === 'ready'));
+    const sessionEvents = events.filter((e) => e.kind === 'session' || e.kind === 'frame' || e.kind === 'sent' || e.kind === 'stderr' || e.kind === 'garbled');
+    assert.ok(sessionEvents.length > 0 && sessionEvents.every((e) => e.kind === 'session'));
+    await call({ method: 'DELETE', path: `/api/sessions/${started}` });
+  });
+});
+
+describe('Phone access', () => {
+  let phoneRoot = '';
+  beforeAll(async () => {
+    phoneRoot = await mkdtemp(join(cwd, 'phone-root-'));
+    await writeFile(join(phoneRoot, 'index.html'), '<!doctype html><title>Workbench</title>');
+    await writeFile(join(phoneRoot, 'phone.html'), '<!doctype html><title>Phone</title>');
+  });
+
+  /** Resolves once `access` is in state `want`. @param {RemoteAccess} access @param {RemoteState['state']} want */
+  const reaches = (access, want) =>
+    new Promise((resolve) => {
+      const off = access.subscribe((state) => {
+        if (state.state !== want) return;
+        off();
+        resolve(undefined);
+      });
+      if (access.state().state === want) {
+        off();
+        resolve(undefined);
+      }
+    });
+  /** The port `access` listens on now. @param {RemoteAccess} [access] */
+  const remotePort = (access = remote) => Number(new URL(String(access.info().url)).port);
+  /** Switches the suite's Phone access from the Mac, and waits for it to come up or go. @param {boolean} on */
+  async function switchRemote(on) {
+    assert.equal((await call({ method: 'PUT', path: '/api/settings', body: { remote: on } })).status, 200);
+    await remote.settled();
+  }
+  /**
+   * Another daemon on the suite's sessions with Phone access on (its own settings), serving
+   * `phoneRoot`, whose fake Tailscale runs with `env` added.
+   * @param {{ env?: Record<string, string>, whoisTimeoutMs?: number }} [options]
+   */
+  async function phoneDaemon({ env = {}, whoisTimeoutMs } = {}) {
+    const own = await loadSettings({ file: join(await mkdtemp(join(cwd, 'phone-state-')), 'settings.json') });
+    await own.set({ remote: true });
+    const access = createRemoteAccess({
+      tailscale: FAKE_TAILSCALE,
+      port: 0,
+      token: TOKEN,
+      settings: own,
+      serve: (listener) => app.serve(listener),
+      env: { ...process.env, ...env },
+      ...(whoisTimeoutMs ? { whoisTimeoutMs } : {}),
+    });
+    const app = createDaemon({ ...daemonOptions, settings: own, remote: access, root: phoneRoot });
+    await access.settled();
+    assert.equal(access.state().state, 'on');
+    return { access, app, port: remotePort(access) };
+  }
+
+  test('off by default: Config hears it is off, with no address', async () => {
+    assert.deepEqual((await call({ path: '/api/remote' })).json, { state: 'off', error: null, url: null, login: null, qr: null });
+    const { events } = await readStream({ done: (events) => events.some((e) => e.kind === 'hello') });
+    const hello = events.find((e) => e.kind === 'hello');
+    assert.deepEqual(hello?.kind === 'hello' && hello.remote, { state: 'off', error: null });
+  });
+
+  test('switched on from the Mac, the tailnet listener comes up; Config gets its URL, owner and sign-in QR code', async () => {
+    const stream = await openStream();
+    await switchRemote(true);
+    try {
+      const info = (await call({ path: '/api/remote' })).json;
+      assert.equal(info.state, 'on');
+      assert.equal(info.error, null);
+      assert.match(info.url, /^http:\/\/127\.0\.0\.1:\d+\/phone$/);
+      assert.equal(info.login, 'owner@example.com');
+      assert.match(info.qr, /^<svg/);
+      const { events } = await stream.until((events) => events.some((e) => e.kind === 'remote' && e.state === 'on'));
+      const told = events.flatMap((e) => (e.kind === 'remote' ? [e] : []));
+      assert.deepEqual(told, [{ kind: 'remote', state: 'starting', error: null }, { kind: 'remote', state: 'on', error: null }], 'no address, no token');
+      assert.equal((await call({ daemon: remotePort(), name: 'mac.example.ts.net', path: '/api/config' })).status, 200);
+    } finally {
+      await switchRemote(false);
+    }
+  });
+
+  test('the tailnet listener answers to the Mac’s tailnet names only, and wants the token and Origin as loopback does', async () => {
+    await switchRemote(true);
+    try {
+      const rp = remotePort();
+      const same = { setupDone: settings.all().setupDone };
+      for (const name of ['mac.example.ts.net', 'mac', '127.0.0.1']) {
+        assert.equal((await call({ daemon: rp, name, path: '/api/config' })).status, 200, name);
+        assert.equal((await call({ daemon: rp, name, path: '/api/config', auth: false })).status, 401, name);
+        assert.equal((await call({ daemon: rp, name, method: 'PUT', path: '/api/settings', body: same })).status, 200, name);
+        assert.equal((await call({ daemon: rp, name, method: 'PUT', path: '/api/settings', body: same, origin: false })).status, 403, name);
+      }
+      for (const name of ['localhost', 'cockpit.localhost', 'evil.example', 'mac.example.ts.net.evil.example']) {
+        for (const path of ['/api/config', '/phone']) assert.equal((await call({ daemon: rp, name, path })).status, 403, `${name} ${path}`);
+      }
+      const foreign = await call({ daemon: rp, name: 'mac', method: 'PUT', path: '/api/settings', body: same, headers: { origin: `http://localhost:${rp}` } });
+      assert.equal(foreign.status, 403);
+      // Loopback, for its part, does not answer to the tailnet's names.
+      for (const name of ['mac.example.ts.net', 'mac']) {
+        for (const path of ['/api/config', '/']) assert.equal((await call({ name, path })).status, 403, `loopback ${name} ${path}`);
+      }
+      const tailnetOrigin = await call({ method: 'PUT', path: '/api/settings', body: same, headers: { origin: `http://mac.example.ts.net:${port}` } });
+      assert.equal(tailnetOrigin.status, 403);
+    } finally {
+      await switchRemote(false);
+    }
+  });
+
+  test('on the tailnet, Phone access is neither told nor switched, and / is the phone’s page', async () => {
+    await switchRemote(true);
+    try {
+      const at = { daemon: remotePort(), name: 'mac.example.ts.net' };
+      assert.equal((await call({ ...at, path: '/api/remote' })).status, 404);
+      const refused = await call({ ...at, method: 'PUT', path: '/api/settings', body: { remote: false } });
+      assert.equal(refused.status, 403);
+      assert.equal(refused.json.error, 'Phone access is switched on the Mac');
+      assert.equal(settings.all().remote, true);
+      const home = await call({ ...at, path: '/', auth: false });
+      assert.equal(home.status, 302);
+      assert.equal(home.headers.get('location'), '/phone');
+      const signIn = await call({ ...at, path: `/phone?token=${TOKEN}`, auth: false });
+      assert.equal(signIn.status, 302);
+      assert.equal(signIn.headers.get('location'), '/phone', 'the QR code’s link lands on the phone’s page, without the token');
+      assert.match(String(signIn.headers.get('set-cookie')), new RegExp(`^ac_token=${TOKEN};.*SameSite=Strict`));
+      assert.equal((await call({ path: '/api/remote' })).json.state, 'on', 'the Mac still tells');
+    } finally {
+      await switchRemote(false);
+    }
+  });
+
+  test('/phone is the phone’s page, on both listeners', async () => {
+    const phone = await phoneDaemon();
+    const loopback = phone.app.serve(loopbackListener(0));
+    try {
+      for (const [daemon, name] of /** @type {const} */ ([[phone.port, 'mac.example.ts.net'], [Number(loopback.port), '127.0.0.1']])) {
+        const page = await call({ daemon, name, path: '/phone', auth: false });
+        assert.equal(page.status, 200, name);
+        assert.match(page.headers.get('content-type') ?? '', /^text\/html/);
+        assert.match(page.text, /<title>Phone<\/title>/);
+      }
+      assert.match((await call({ daemon: Number(loopback.port), path: '/', auth: false })).text, /<title>Workbench<\/title>/, 'loopback keeps the workbench at /');
+    } finally {
+      await loopback.stop(true);
+      await phone.access.stop();
+    }
+  });
+
+  test('the whois gate: nothing at all for any device but the owner’s own untagged ones', async () => {
+    /** @type {Array<[string, Record<string, string>, number?]>} */
+    const strangers = [
+      ['another login', { FAKE_TAILSCALE_PEERS: JSON.stringify({ '127.0.0.1': { login: 'other@example.com' } }) }],
+      ['a tagged node', { FAKE_TAILSCALE_PEERS: JSON.stringify({ '127.0.0.1': { login: 'owner@example.com', tags: ['tag:server'] } }) }],
+      ['an address whois does not know', { FAKE_TAILSCALE_PEERS: '{}' }],
+      ['a whois that does not answer in time', { FAKE_TAILSCALE_WHOIS_DELAY_MS: '3000' }, 500],
+    ];
+    for (const [who, env, whoisTimeoutMs] of strangers) {
+      const phone = await phoneDaemon({ env, whoisTimeoutMs });
+      try {
+        for (const path of ['/phone', `/phone?token=${TOKEN}`, '/', '/api/config', '/api/stream', '/api/sessions']) {
+          const res = await call({ daemon: phone.port, name: 'mac.example.ts.net', path });
+          assert.equal(res.status, 403, `${who}: ${path}`);
+          assert.match(res.headers.get('content-type') ?? '', /^text\/plain/, `${who}: ${path}`);
+          assert.equal(res.headers.get('set-cookie'), null, `${who}: ${path}`);
+        }
+      } finally {
+        await phone.access.stop();
+      }
+    }
+    const owner = await phoneDaemon();
+    try {
+      assert.equal((await call({ daemon: owner.port, name: 'mac.example.ts.net', path: '/phone', auth: false })).status, 200);
+      assert.equal((await call({ daemon: owner.port, name: 'mac.example.ts.net', path: '/api/config' })).status, 200);
+    } finally {
+      await owner.access.stop();
+    }
+  }, 30_000);
+
+  test('a verdict is kept a minute per address, and one lookup serves every request waiting on it', async () => {
+    const log = join(cwd, 'tailscale-calls.log');
+    const phone = await phoneDaemon({ env: { FAKE_TAILSCALE_LOG: log } });
+    try {
+      const at = { daemon: phone.port, name: 'mac.example.ts.net', path: '/api/config' };
+      const together = await Promise.all(Array.from({ length: 5 }, () => call(at)));
+      assert.deepEqual(together.map((res) => res.status), [200, 200, 200, 200, 200]);
+      for (let i = 0; i < 3; i++) assert.equal((await call(at)).status, 200);
+      const lookups = (await Bun.file(log).text()).split('\n').filter((line) => line.startsWith('whois'));
+      assert.deepEqual(lookups, ['whois --json 127.0.0.1']);
+    } finally {
+      await phone.access.stop();
+    }
+  });
+
+  test('switched off, the tailnet listener ends its open streams and stops accepting', async () => {
+    await switchRemote(true);
+    const rp = remotePort();
+    const stream = await openStream({ daemon: rp });
+    const ended = assert.rejects(stream.until(() => false));
+    await switchRemote(false);
+    await ended;
+    await assert.rejects(fetch(`http://127.0.0.1:${rp}/phone`));
+    assert.deepEqual((await call({ path: '/api/remote' })).json, { state: 'off', error: null, url: null, login: null, qr: null });
+  });
+
+  test('Tailscale stopping takes the listener down, with the reason; running again brings it back', async () => {
+    await switchRemote(true);
+    try {
+      const before = remotePort();
+      await writeFile(tailscaleStatus, JSON.stringify({ ...RUNNING_TAILSCALE, BackendState: 'Stopped' }));
+      await reaches(remote, 'error');
+      assert.equal(remote.state().error, 'Tailscale is not connected (Stopped)');
+      assert.deepEqual((await call({ path: '/api/remote' })).json, { state: 'error', error: 'Tailscale is not connected (Stopped)', url: null, login: null, qr: null });
+      await assert.rejects(fetch(`http://127.0.0.1:${before}/phone`));
+      await writeFile(tailscaleStatus, JSON.stringify(RUNNING_TAILSCALE));
+      await reaches(remote, 'on');
+      assert.equal((await call({ daemon: remotePort(), name: 'mac', path: '/api/config' })).status, 200);
+    } finally {
+      await writeFile(tailscaleStatus, JSON.stringify(RUNNING_TAILSCALE));
+      await switchRemote(false);
+    }
+  });
+});
+
+describe('compression', () => {
+  test('a large JSON answer is gzipped for a client that accepts it, and plain otherwise; a small one never is', async () => {
+    const dir = join(cwd, 'omp-sessions', '-big');
+    await mkdir(dir, { recursive: true });
+    const file = join(dir, 'big.jsonl');
+    const text = 'lorem ipsum dolor '.repeat(10_000);
+    const lines = [
+      { type: 'session', version: 3, id: 'big-one', timestamp: '2026-10-01T10:00:00.000Z', cwd },
+      { type: 'message', message: { role: 'user', content: [{ type: 'text', text }] } },
+    ];
+    await Bun.write(file, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
+    const path = `/api/conversation?file=${encodeURIComponent(file)}`;
+    const zipped = await fetch(`http://127.0.0.1:${port}${path}`, { headers: { cookie: `ac_token=${TOKEN}`, 'accept-encoding': 'gzip' }, decompress: false });
+    assert.equal(zipped.status, 200);
+    assert.equal(zipped.headers.get('content-encoding'), 'gzip');
+    const bytes = await zipped.bytes();
+    assert.ok(bytes.length < text.length / 10, `${bytes.length} bytes`);
+    assert.ok(new TextDecoder().decode(Bun.gunzipSync(bytes)).includes(text));
+    const plain = await call({ path, headers: { 'accept-encoding': 'identity' } });
+    assert.equal(plain.headers.get('content-encoding'), null);
+    assert.ok(plain.text.includes(text));
+    const small = await fetch(`http://127.0.0.1:${port}/api/config`, { headers: { cookie: `ac_token=${TOKEN}`, 'accept-encoding': 'gzip' }, decompress: false });
+    assert.equal(small.headers.get('content-encoding'), null);
+    assert.equal((await small.json()).home, cwd);
+  });
+
+  test('a data file a reply shows is streamed as it is read, never gzipped (it would be read whole first)', async () => {
+    const file = join(cwd, 'chart-data.json');
+    const body = JSON.stringify({ values: Array.from({ length: 20_000 }, (_, i) => ({ x: i, y: i * 2 })) });
+    assert.ok(body.length > 128 * 1024);
+    await Bun.write(file, body);
+    const res = await fetch(`http://127.0.0.1:${port}/api/file?path=${encodeURIComponent(file)}`, {
+      headers: { cookie: `ac_token=${TOKEN}`, 'accept-encoding': 'gzip' },
+      decompress: false,
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/json');
+    assert.equal(res.headers.get('content-encoding'), null);
+    assert.equal(await res.text(), body);
   });
 });

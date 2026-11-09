@@ -432,6 +432,45 @@ button {
   padding: 0 6px;
 }
 
+/* Phone access, while on: how it is doing, then the QR code a phone signs in with and its address. */
+.config-phone-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--space-1);
+  padding: 0 6px 4px;
+}
+
+.config-phone-panel[hidden] {
+  display: none;
+}
+
+.config-phone-panel p {
+  margin: 0;
+}
+
+.config-phone-panel.is-error .config-phone-state {
+  color: var(--color-danger);
+}
+
+.config-phone-sign-in {
+  display: contents;
+}
+
+/* Dark modules on light, whatever the theme, as phone cameras read them. */
+.config-phone-qr {
+  width: 10rem;
+  height: 10rem;
+  padding: 6px;
+  border-radius: var(--radius-s);
+  background: white;
+}
+
+.config-phone-url {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 /* ── Screen switcher ─────────────────────────────────── */
 /* The layout is not being saved: shown, never hidden. */
 .screen-switch.is-unsaved,

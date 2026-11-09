@@ -100,6 +100,17 @@
   gap: var(--space-1);
 }
 
+/* The phone step's instructions and Phone access, once Tailscale runs here. */
+.setup-phone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.setup-phone[hidden] {
+  display: none;
+}
+
 /* The Config menu's rows, at the window's own width. */
 .setup .config-group {
   border-top: 0;

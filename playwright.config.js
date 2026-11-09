@@ -15,8 +15,8 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    // The real daemon, driving the scripted fake omp and fake gh instead of a real agent and GitHub.
-    command: `bun daemon/main.js --port ${E2E_PORT} --omp tests/fixtures/fake-omp.js --gh tests/fixtures/fake-gh.js`,
+    // The real daemon, driving the scripted fake omp, fake gh and fake tailscale instead of a real agent, GitHub and tailnet.
+    command: `bun daemon/main.js --port ${E2E_PORT} --omp tests/fixtures/fake-omp.js --gh tests/fixtures/fake-gh.js --tailscale tests/fixtures/fake-tailscale.js`,
     env: { HOME: E2E_HOME, COCKPIT_STATE_DIR: E2E_STATE_DIR, COCKPIT_OMP_SESSIONS: E2E_OMP_SESSIONS, COCKPIT_BUGBOT_POLL_MS: '300', FAKE_GH_ROOT: E2E_GH_ROOT },
     url: BASE_URL,
   },

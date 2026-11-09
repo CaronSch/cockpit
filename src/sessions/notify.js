@@ -3,7 +3,7 @@
  * running while the user is elsewhere: the moments that mark a conversation unread
  * (omp/activity.js), as they happen.
  *
- * Every awake session is followed, as the Sessions window follows them. A notification waits
+ * Every awake session's events are followed. A notification waits
  * a moment after the event, and is shown only if the conversation is still unread then and
  * the user is not looking at it: an agent window the user is reading reads it at once (wherever
  * that window is, in this tab or another), which clears the mark. Events the daemon replays
