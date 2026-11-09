@@ -468,6 +468,8 @@ function createPane(body, ctx, daemon) {
     let file = started.sessionFile;
     /** What the journal said of the conversation, while asleep. @type {{ id: string, cwd: string | null, archived: boolean } | null} */
     let asleep = null;
+    /** Reading the journal (`load`): settles once what it says is known, or that it could not be read. @type {Promise<void>} */
+    let loading = Promise.resolve();
     /** Waking the conversation: resolves with the session once it is ready. @type {Promise<string> | null} */
     let waking = null;
     let unsubscribe = () => {};
@@ -681,7 +683,7 @@ function createPane(body, ctx, daemon) {
     function load() {
       const want = file;
       if (!want) return;
-      daemon
+      loading = daemon
         .conversation(want)
         .then((conversation) => {
           if (closed || session !== null || file !== want) return;
@@ -709,6 +711,9 @@ function createPane(body, ctx, daemon) {
     function wake() {
       if (ready() && session) return Promise.resolve(session);
       waking ??= (async () => {
+        // Whether there is a journal to resume is known once it has been read: woken any sooner
+        // (the box focused as the window shows it), the conversation would start afresh instead.
+        await loading;
         const own = meta();
         const running = own && isRunning(own) ? own.id : holding(file);
         const id = running ?? (await daemon.createSession(file && saved() ? { cwd: cwd() || '~', resume: file } : { cwd: cwd() || '~' })).id;

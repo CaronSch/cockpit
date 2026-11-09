@@ -51,10 +51,16 @@ test('switched in Config, an awake conversation answers by the ADHD rules from i
       await pane.locator('textarea').press('Enter');
     };
     const setting = page.locator('.config-setting', { hasText: 'I have ADHD' }).locator('input');
-    /** @param {boolean} on */
+    /**
+     * Switches "I have ADHD" in Config. The idle conversation sleeps at once, and is seen asleep
+     * before the menu closes: closing it may give the message box its focus back, which wakes the
+     * conversation again (as the setting is now), so it would not be seen asleep after.
+     * @param {boolean} on
+     */
     const switchTo = async (on) => {
       await page.locator('.config-toggle').click();
       await setting.setChecked(on);
+      await expect.poll(awake).toBe(0);
       await page.keyboard.press('Escape');
     };
 
@@ -63,9 +69,8 @@ test('switched in Config, an awake conversation answers by the ADHD rules from i
     await expect(reply).toHaveText('Writing as usual.');
     expect(await awake()).toBe(1);
 
-    // On: the idle conversation sleeps at once, and the next message wakes it with the rules.
+    // On: the idle conversation sleeps at once, and wakes with the rules for the next message.
     await switchTo(true);
-    await expect.poll(awake).toBe(0);
     await send('and now, what style?');
     await expect(reply).toHaveText('Writing in ADHD mode.');
     await expect(pane.locator('.omp-user .omp-md')).toHaveText(['hello', 'what style?', 'and now, what style?'], { useInnerText: true });
@@ -78,7 +83,6 @@ test('switched in Config, an awake conversation answers by the ADHD rules from i
 
     // Off again: as usual from the next message.
     await switchTo(false);
-    await expect.poll(awake).toBe(0);
     await send('one more time, what style?');
     await expect(reply).toHaveText('Writing as usual.');
   } finally {
