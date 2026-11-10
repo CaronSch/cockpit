@@ -47,6 +47,7 @@ import { placeReviews } from '../omp/decisions.js';
 import { coldAt } from '../omp/cold.js';
 import { turnProgress } from '../omp/todos.js';
 import { elapsed, runningWork } from '../omp/running-work.js';
+import { whenLabel } from '../timeline/scale.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
 import { branchEntry, pointKey, rewindPoint } from '../omp/rewind.js';
 import { conversationKey, isRunning, listConversations, showConversation } from '../sessions/running.js';
@@ -170,6 +171,8 @@ function createPane(body, ctx, daemon) {
   const offDecisions = daemon.onDecisions(() => schedule());
   // Forks started or moved (daemon/forks.js): the Forks count, and which windows are related.
   const offForks = daemon.onForks(() => schedule());
+  // Prompts agents scheduled (daemon/schedule.js): the Scheduled line, for this conversation's.
+  const offSchedule = daemon.onSchedule(() => schedule());
   let pointerInside = false;
   /** The user's last click, keystroke or move of focus was in this window. */
   let inside = false;
@@ -592,6 +595,8 @@ function createPane(body, ctx, daemon) {
     const queue = el('div', 'omp-queue');
     const running = el('div', 'omp-running');
     running.hidden = true;
+    const scheduled = el('div', 'omp-scheduled');
+    scheduled.hidden = true;
     const suggestions = createSuggestions();
     const composer = createComposer({
       pane: node,
@@ -631,7 +636,7 @@ function createPane(body, ctx, daemon) {
         cancel: (id) => void (session && daemon.rpc(session, { type: 'btw_cancel', recordId: id }).catch(() => {})),
       },
     });
-    node.append(toolbar, strip, loginStrip, banner, transcript, dialogs, running, queue, suggestions.root, composer.root);
+    node.append(toolbar, strip, loginStrip, banner, transcript, dialogs, running, scheduled, queue, suggestions.root, composer.root);
     const highlight = attachDragHighlight({ host: node, transcript, enabled: () => settings.get().animatedSelection });
     const offHighlight = settings.subscribe(() => highlight.refresh());
     // A click on the pane that is not on a control, in a dialog omp asked for or in the
@@ -1304,6 +1309,7 @@ function createPane(body, ctx, daemon) {
     const dialogNodes = new Map();
     let queueKey = '';
     let runningKey = '';
+    let scheduledKey = '';
     /** Ticks the Running line's times while it shows. @type {ReturnType<typeof setInterval> | null} */
     let runningTimer = null;
     let stripKey = '';
@@ -1452,6 +1458,39 @@ function createPane(body, ctx, daemon) {
         const since = Number(/** @type {HTMLElement} */ (time).dataset.since);
         time.textContent = since ? elapsed(Date.now() - since) : '';
       }
+    }
+
+    /**
+     * The prompts scheduled for this conversation (its agent's `schedule` tool), soonest first,
+     * each with when it runs; the whole prompt shows on pointing at one.
+     */
+    function drawScheduled() {
+      const at = Date.now();
+      const tasks = daemon
+        .schedule()
+        .filter((t) => (t.target.sessionFile ? t.target.sessionFile === file : t.target.session !== null && t.target.session === session))
+        .sort((a, b) => a.dueAt - b.dueAt);
+      const shown = tasks.map((t) => ({ id: t.id, prompt: t.prompt, when: whenLabel(t.dueAt, at), missed: t.missedAt !== null, failed: Boolean(t.error) }));
+      const key = JSON.stringify(shown);
+      if (key === scheduledKey) return;
+      scheduledKey = key;
+      scheduled.replaceChildren(
+        ...(tasks.length ? [el('span', 'omp-label', 'Scheduled')] : []),
+        ...tasks.map((t, i) => {
+          const { when, missed, failed } = shown[i];
+          const c = el('span', `omp-chip is-scheduled${missed ? ' is-missed' : ''}${failed ? ' is-failed' : ''}`);
+          c.title = [
+            `Runs ${new Date(t.dueAt).toLocaleString()}`,
+            ...(missed ? [`Missed: it was due ${new Date(/** @type {number} */ (t.missedAt)).toLocaleString()}, while Cockpit was off or the computer slept`] : []),
+            ...(t.error ? [`Last try failed: ${t.error}`] : []),
+            '',
+            t.prompt.length > 400 ? `${t.prompt.slice(0, 399)}…` : t.prompt,
+          ].join('\n');
+          c.append(el('span', 'omp-chip-kind', missed ? `missed · ${when}` : when), el('span', 'omp-chip-text', t.prompt));
+          return c;
+        }),
+      );
+      scheduled.hidden = tasks.length === 0;
     }
 
     function drawStrips() {
@@ -1627,6 +1666,7 @@ function createPane(body, ctx, daemon) {
       drawTranscript();
       drawDialogs();
       drawRunning();
+      drawScheduled();
       drawQueue();
       drawComposer();
       selectionPopup.refresh();
@@ -1714,6 +1754,7 @@ function createPane(body, ctx, daemon) {
       offUnread();
       offDecisions();
       offForks();
+      offSchedule();
       document.removeEventListener('pointerdown', pressed, { capture: true });
       document.removeEventListener('keydown', pressed, { capture: true });
       document.removeEventListener('focusin', focused, { capture: true });

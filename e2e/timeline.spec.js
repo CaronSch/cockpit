@@ -1,8 +1,9 @@
-// Behaviour tests for the Timeline window: conversations by how recently they were active, the
-// prompts agents scheduled where they run, opening either by dragging it out, archiving and
-// deleting by dropping it on the bin, editing a scheduled prompt in place, and a prompt missed
-// while the daemon was off. Against a daemon of the spec's own (startDaemon), with journals and
-// scheduled prompts laid out before it starts, so no other spec's conversations are listed.
+// Behaviour tests for the Timeline window: idle conversations by how recently they were active,
+// busy ones at now, the prompts agents scheduled where they run (and in their agent windows),
+// opening either by dragging it out, archiving and deleting by dropping it on the bin, editing a
+// scheduled prompt in place, a prompt missed while the daemon was off, and one that ran, unread.
+// Against a daemon of the spec's own (startDaemon), with journals and scheduled prompts laid out
+// before it starts, so no other spec's conversations are listed.
 import { test, expect } from '@playwright/test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -202,7 +203,12 @@ test('an agent schedules a prompt from its window; its label opens the conversat
   await pane.locator('textarea').first().fill('schedule {"op":"add","in":"3h","prompt":"Ask for a review of the phone spec."}');
   await pane.locator('textarea').first().press('Enter');
   await expect(future(page, 'phone')).toBeVisible();
-  await expect(page.locator('.widget[data-widget="timeline"] .widget-label')).toHaveText('4 scheduled');
+  await expect(page.locator('.widget[data-widget="timeline"] .widget-label')).toHaveText(`${readSchedule().length} scheduled`);
+  // The agent window shows what its conversation has scheduled, and when it runs.
+  const tag = pane.locator('.omp-scheduled .omp-chip');
+  await expect(tag).toHaveCount(1);
+  await expect(tag.locator('.omp-chip-text')).toHaveText('Ask for a review of the phone spec.');
+  await expect(tag.locator('.omp-chip-kind')).toHaveText(/\d{1,2}:\d{2}/);
 
   await drag(page, future(page, 'phone'), () => gridRight(page));
   await page.mouse.up();
@@ -216,4 +222,62 @@ test('an agent schedules a prompt from its window; its label opens the conversat
   await expect.poll(async () => (await readSchedule()).some((t) => t.target.sessionFile === fileOf('phone'))).toBe(false);
   await expect(agentWindows(page), 'nothing more opened').toHaveCount(2);
   await expect(past(page, 'phone'), 'the conversation stays').toBeVisible();
+  await expect(agentWindows(page).locator('.omp-scheduled'), 'nor in its agent windows').toHaveCount(2);
+  for (const line of await agentWindows(page).locator('.omp-scheduled').all()) await expect(line).toBeHidden();
+});
+
+test('a prompt days ahead: the scale reaches past it, its label starts at its time, and every label says when under its name', async ({ page }) => {
+  const label = future(page, 'renderer'); // the furthest, a day ahead or more
+  await expect(label).toBeVisible();
+  await expect(page.locator('.timeline-tick', { hasText: /^1d$/ })).toBeVisible();
+  const box = /** @type {any} */ (await label.boundingBox());
+  const stem = /** @type {any} */ (await label.locator('.timeline-stem').boundingBox());
+  expect(Math.abs(stem.x - box.x), 'its stem, at its time, is at its left edge').toBeLessThan(2);
+  const side = /** @type {any} */ (await page.locator('.timeline-future').boundingBox());
+  expect(box.x + box.width).toBeLessThanOrEqual(side.x + side.width);
+  for (const chip of await page.locator('.timeline-chip.is-future').all()) {
+    const name = /** @type {any} */ (await chip.locator('.timeline-name').boundingBox());
+    const when = /** @type {any} */ (await chip.locator('.timeline-when').boundingBox());
+    expect(when.y).toBeGreaterThanOrEqual(name.y + name.height - 1);
+  }
+});
+
+test('a conversation whose agent is busy is at now, not in the past, until its agent is idle again', async ({ page }) => {
+  const atNow = page.locator('.timeline-now .timeline-chip.is-now[data-name="Investigate the flaky e2e tests"]');
+  await expect(atNow).toHaveCount(0);
+  await past(page, 'flaky').click();
+  const pane = agentWindows(page);
+  await expect(pane).toHaveCount(1);
+  await pane.locator('textarea').first().fill('ask me');
+  await pane.locator('textarea').first().press('Enter');
+  await expect(atNow).toBeVisible();
+  await expect(past(page, 'flaky')).toHaveCount(0);
+  const dialog = pane.locator('.omp-dialogs');
+  await dialog.getByText('SQLite', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Submit' }).click();
+  await expect(past(page, 'flaky')).toBeVisible();
+  await expect(atNow).toHaveCount(0);
+});
+
+test('a scheduled prompt that ran leaves its conversation unread in the past, ringed in blue, until it is read anywhere', async ({ page }) => {
+  const changed = await daemon.api('/api/schedule/soon', { method: 'PATCH', body: { dueAt: Date.now() + 1000 } });
+  expect(changed.status).toBe(200);
+  const chip = past(page, 'deploy');
+  await expect(chip).toHaveClass(/is-unread/, { timeout: 15_000 });
+  await expect(future(page, 'deploy'), 'it ran').toHaveCount(0);
+  const ringed = () =>
+    chip.evaluate((c) => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--color-unread)';
+      document.body.append(probe);
+      const unread = getComputedStyle(probe).color;
+      probe.remove();
+      return getComputedStyle(c).borderTopColor === unread;
+    });
+  expect(await ringed()).toBe(true);
+  // Read elsewhere (another tab, the Sessions window): read here too.
+  const read = await daemon.api('/api/unread/tl-deploy/read', { method: 'POST', body: { at: Date.now() } });
+  expect(read.ok).toBe(true);
+  await expect(chip).not.toHaveClass(/is-unread/);
+  expect(await ringed()).toBe(false);
 });

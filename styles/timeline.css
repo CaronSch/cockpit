@@ -1,26 +1,37 @@
-/* Timeline window: recent conversations on the left of now, scheduled prompts on its right,
-   all on one axis; a bin below while a label is dragged. */
+/* Timeline window, laid out for a wide, short window: one axis along its bottom, idle
+   conversations left of now, busy ones at now, scheduled prompts right of it, to scale; a bin
+   over the axis while a label is dragged. */
+
+/* Short windows are the usual: the whole height for the axis and its labels. */
+.widget-body:has(> .timeline) {
+  padding: 0 var(--space-2);
+  overflow: hidden;
+}
 
 .timeline {
-  --timeline-axis-h: 20px;
+  --timeline-axis-h: 18px;
+  --timeline-chip-h: 22px;
+  --timeline-future-h: 36px;
   --timeline-lanes: 1;
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
   justify-content: center;
-  gap: var(--space-1);
   min-height: 0;
+  padding: var(--space-1) 0 2px;
   font: var(--text-xs) / 1.4 var(--font-mono);
   color: var(--color-text);
 }
 
-/* As tall as the future's lanes of labels need (timeline.js sets how many), centred in the window. */
+/* As tall as the future's lanes of labels need (timeline.js sets how many), up to the window's
+   height, centred in it. */
 .timeline-track {
   position: relative;
   display: flex;
   flex: 0 1 auto;
-  height: calc(var(--timeline-lanes) * 28px + var(--timeline-axis-h) + 2 * var(--space-4));
-  min-height: 72px;
+  height: calc(var(--timeline-lanes) * (var(--timeline-future-h) + 6px) + var(--timeline-axis-h) + var(--space-2));
+  min-height: calc(var(--timeline-chip-h) + var(--timeline-axis-h) + var(--space-2));
 }
 
 .timeline-list {
@@ -29,18 +40,24 @@
   list-style: none;
 }
 
-/* ── the past: in order, not to scale ── */
+/* ── the past: idle conversations, in order, not to scale ── */
 .timeline-past {
   position: relative;
-  flex: 0 1 38%;
+  flex: 0 1 34%;
   min-width: 6rem;
   display: flex;
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: var(--timeline-axis-h);
-  scrollbar-width: thin;
+  /* A wheel or trackpad scrolls back; older ones fade out at the left edge instead of a scrollbar. */
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, transparent, #000 var(--space-4));
   /* Not to scale: a dashed axis. */
   background: linear-gradient(to right, var(--color-line) 50%, transparent 50%) left bottom var(--timeline-axis-h) / 6px 1px repeat-x;
+}
+
+.timeline-past::-webkit-scrollbar {
+  display: none;
 }
 
 .timeline-past-list {
@@ -51,12 +68,36 @@
   padding: 0 var(--space-2) var(--space-1);
 }
 
-/* ── now ── */
+/* ── now: a line, widened into a band holding the busy conversations ── */
 .timeline-now {
   position: relative;
   flex: none;
-  width: 2px;
+  display: flex;
+  min-width: 2px;
+  max-width: 30%;
+  padding-bottom: var(--timeline-axis-h);
   background: var(--color-accent);
+}
+
+.timeline-now.is-busy {
+  border-inline: 2px solid var(--color-accent);
+  background: color-mix(in oklch, var(--color-accent) 8%, transparent);
+}
+
+/* Rows from the axis up, as many as the band is tall for; more scroll. */
+.timeline-now-list {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-content: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: var(--space-1) var(--space-2);
+}
+
+.timeline-now-list:empty {
+  display: none;
 }
 
 .timeline-now-label {
@@ -75,7 +116,7 @@
 /* ── the future: to scale ── */
 .timeline-future {
   position: relative;
-  flex: 1 1 62%;
+  flex: 1 1 66%;
   min-width: 8rem;
   overflow: hidden;
 }
@@ -92,7 +133,7 @@
 .timeline-tick {
   position: absolute;
   top: 0;
-  padding-top: 2px;
+  padding-top: 1px;
   transform: translateX(-50%);
   color: var(--color-text-faint);
   font-size: var(--text-2xs);
@@ -132,7 +173,7 @@
   flex: none;
   gap: 6px;
   align-items: center;
-  height: 22px;
+  height: var(--timeline-chip-h);
   padding: 0 8px;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-s);
@@ -160,6 +201,14 @@
 .timeline-chip.is-unread .timeline-name {
   color: var(--color-text);
   font-weight: 600;
+}
+
+/* News its user has not read (a scheduled prompt that ran, say): ringed as an unread window is. */
+.timeline-chip:is(.is-past, .is-now).is-unread {
+  border-color: var(--color-unread);
+  box-shadow:
+    inset 0 0 0 1px var(--color-unread),
+    inset 0 0 8px color-mix(in oklch, var(--color-unread) 35%, transparent);
 }
 
 .timeline-dot {
@@ -192,17 +241,29 @@
   }
 }
 
+/* A scheduled prompt: its conversation's name, and when it runs under it. */
 .timeline-chip.is-future {
   position: absolute;
+  display: grid;
+  grid-template-columns: 6px auto;
+  column-gap: 6px;
+  align-content: center;
+  height: var(--timeline-future-h);
   border-color: var(--color-line-strong);
   color: var(--color-text);
+  line-height: 15px;
+}
+
+.timeline-chip.is-future .timeline-when {
+  grid-column: 2;
 }
 
 .timeline-when {
   color: var(--color-text-faint);
 }
 
-/* A stem from the label down to its time on the axis. */
+/* A stem from the label down to its time on the axis; for a label pushed along out of a full
+   lane, down from its left edge and back along the axis to its time (--stem-w). */
 .timeline-stem {
   position: absolute;
   top: 100%;
@@ -212,11 +273,20 @@
   pointer-events: none;
 }
 
+.timeline-stem::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: var(--stem-w, 0px);
+  border-bottom: 1px solid var(--color-line-strong);
+}
+
 .timeline-stem::after {
   content: '';
   position: absolute;
   bottom: -3px;
-  left: -3.5px;
+  left: calc(-3.5px - var(--stem-w, 0px));
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -236,7 +306,7 @@
   border-color: var(--color-danger);
 }
 
-/* The whole name, over the label pointed at. */
+/* The whole name, over the label pointed at (and when a scheduled prompt runs, under it). */
 .timeline-face:popover-open {
   position: fixed;
   display: flex;
@@ -251,38 +321,43 @@
   pointer-events: none;
 }
 
-/* ── the bin, and what the foot says otherwise ── */
-.timeline-foot {
-  position: relative;
-  display: flex;
-  align-items: center;
+.timeline-face.is-future:popover-open {
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: center;
-  min-height: 30px;
+  line-height: 15px;
 }
 
-.timeline-status {
-  margin: 0;
-  overflow: hidden;
+.timeline-face-when {
   color: var(--color-text-faint);
+}
+
+/* ── what went wrong, if anything; the bin, over the axis while a label is dragged ── */
+.timeline-status {
+  flex: none;
+  margin: 0 var(--space-2);
+  overflow: hidden;
+  color: var(--color-danger);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.timeline-status.is-error {
-  color: var(--color-danger);
+.timeline-status:empty {
+  display: none;
 }
 
 .timeline-bin {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 50%;
+  z-index: 1;
   display: none;
   align-items: center;
-  height: 28px;
+  height: 24px;
   padding: 0 var(--space-4);
   transform: translateX(-50%);
   border: 1px dashed var(--color-line-strong);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--color-surface);
   color: var(--color-text-dim);
   transition: transform var(--duration-fast) var(--ease-snap);
@@ -290,10 +365,6 @@
 
 .timeline-bin.is-drop-armed {
   display: flex;
-}
-
-.timeline-bin.is-drop-armed ~ .timeline-status {
-  visibility: hidden;
 }
 
 .timeline-bin.is-drop-over {

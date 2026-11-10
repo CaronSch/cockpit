@@ -1,7 +1,7 @@
 /**
  * The timeline window's arithmetic, kept free of the DOM so it can be tested: where a moment in
- * the future sits on its log scale (the next hour spread out, next month squeezed in), the times
- * its axis marks, how labels share lanes without covering one another, and how long until a
+ * the future sits on its log scale (the next hour spread out, next month squeezed in), how far
+ * ahead the scale reaches, the times its axis marks, how labels share lanes without covering one another, and how long until a
  * scheduled prompt runs, and when, said briefly (the daemon's schedule tool says it the same way).
  */
 
@@ -17,11 +17,18 @@ export const MIN_SPAN_MS = 24 * 3_600_000;
 export const position = (ms, span) => Math.min(1, Math.log1p(Math.max(0, ms) / KNEE_MS) / Math.log1p(span / KNEE_MS));
 
 /**
- * How far ahead the future side reaches: a day, or a quarter beyond the furthest prompt, so it
- * is never at the very end.
+ * How far ahead the future side reaches: a day at least, else past the furthest prompt by enough
+ * that its label, starting at its time, still fits before the end: a share `room` of the side
+ * (its label's width over the side's), and a quarter of the way further at the least.
  * @param {number} furthest how far ahead the furthest scheduled prompt is, in ms (0 for none)
+ * @param {number} [room] the share of the side's width the furthest label needs right of its time
  */
-export const futureSpan = (furthest) => Math.max(MIN_SPAN_MS, furthest * 1.25);
+export function futureSpan(furthest, room = 0) {
+  const share = Math.min(0.5, Math.max(0, room));
+  // position(furthest, span) = 1 - share, solved for span.
+  const fits = KNEE_MS * Math.expm1(Math.log1p(Math.max(0, furthest) / KNEE_MS) / (1 - share));
+  return Math.max(MIN_SPAN_MS, furthest * 1.25, fits);
+}
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -65,24 +72,32 @@ export function ticks(span, width, gap = 44) {
 }
 
 /**
- * Which lane each label takes, so that none covers another: labels at `x` (their left edge, in
- * pixels) `width` wide, given in any order; each takes the lowest lane where it starts at least
- * `gap` past the end of the one before it there. Lane 0 is the axis's own.
- * @param {ReadonlyArray<{ x: number, width: number }>} labels @param {number} gap @returns {number[]}
+ * Where each label goes, so that none covers another: labels at `x` (their left edge, in pixels)
+ * `width` wide, given in any order; each takes the lowest lane where it starts at least `gap`
+ * past the end of the one before it there (lane 0 is the axis's own), at its `x`. With no lane
+ * free and `most` lanes taken already (all the window is tall enough for), it goes in the lane
+ * free soonest, just past the label there, as far as `end` (the side's width) lets it; at the
+ * end, over it.
+ * @param {ReadonlyArray<{ x: number, width: number }>} labels @param {number} gap
+ * @param {number} [most] @param {number} [end]
+ * @returns {Array<{ lane: number, x: number }>}
  */
-export function lanes(labels, gap) {
+export function pack(labels, gap, most = Infinity, end = Infinity) {
   /** Where each lane is taken up to. @type {number[]} */
   const ends = [];
-  const lane = new Array(labels.length).fill(0);
+  /** @type {Array<{ lane: number, x: number }>} */
+  const placed = labels.map(({ x }) => ({ lane: 0, x }));
   const order = labels.map((_, i) => i).sort((a, b) => labels[a].x - labels[b].x);
   for (const i of order) {
     const { x, width } = labels[i];
-    let l = ends.findIndex((end) => end + gap <= x);
-    if (l === -1) l = ends.push(0) - 1;
-    ends[l] = x + width;
-    lane[i] = l;
+    let lane = ends.findIndex((taken) => taken + gap <= x);
+    if (lane === -1 && ends.length < Math.max(1, most)) lane = ends.push(-Infinity) - 1;
+    else if (lane === -1) lane = ends.indexOf(Math.min(...ends));
+    const at = Math.max(0, Math.min(Math.max(x, ends[lane] + gap), end - width));
+    ends[lane] = Math.max(ends[lane], at + width);
+    placed[i] = { lane, x: at };
   }
-  return lane;
+  return placed;
 }
 
 /**
