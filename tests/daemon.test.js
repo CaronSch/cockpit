@@ -2047,10 +2047,16 @@ describe('scoped event stream', () => {
     const log = loggedSeqs(followed);
     const mid = log[Math.floor(log.length / 2)];
     const last = log.at(-1);
-    /** The followed session's seqs a stream replays. @param {string} query @param {string} [lastEventId] */
+    /**
+     * The followed session's seqs a stream replays: up to `last`. Anything the session does after
+     * the log was read (the turn before may still be settling) arrives live, not as replay.
+     * @param {string} query @param {string} [lastEventId]
+     */
     const replay = async (query, lastEventId) => {
       const { events } = await (await openStream({ query, lastEventId })).until((events) => forSession(events, followed).some((e) => e.seq === last));
-      return forSession(events, followed).map((e) => e.seq);
+      return forSession(events, followed)
+        .map((e) => e.seq)
+        .filter((seq) => seq <= /** @type {number} */ (last));
     };
     const after = log.filter((seq) => seq > mid);
     assert.deepEqual(await replay(`?follow=${followed}:${mid}`), after);
