@@ -172,6 +172,7 @@ export async function createApp(root) {
         drag.start({ kind: 'new', leaf: newWidgetLeaf(type, params), into: options.into }, event, {
           label: options.label ?? WIDGETS[type]?.title ?? type,
           onEnd: options.onEnd,
+          target: options.target,
         });
       },
       setUnread(/** @type {boolean} */ unread) {

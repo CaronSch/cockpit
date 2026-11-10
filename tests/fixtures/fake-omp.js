@@ -33,6 +33,9 @@
  * - `compact`: answers with a summary in omp 18.12.6's `CompactionResult` shape (from its source)
  * - contains "style": says whether its system prompt carries the rules "I have ADHD" adds
  *   (daemon/adhd.js): "Writing in ADHD mode." or "Writing as usual."
+ * - `schedule <JSON>`: calls the host's `schedule` tool (the daemon's, given by `set_host_tools`)
+ *   with that JSON as its arguments, as omp runs a host tool (`host_tool_call`, answered by
+ *   `host_tool_result`; frame shapes from omp 18.10.3's source), then replies with its answer
  * - `/rename [title]`: like omp's builtin, names the session (with no title, from the first
  *   prompt that says something: "hi" alone is too little to name a session by; that
  *   outcome follows the answer, as omp's background title generation does)
@@ -258,12 +261,11 @@ let toolCalls = 0;
 let todoPhases = [];
 
 /**
- * One tool call, run and answered: the assistant message asking for it, its execution frames,
- * then its result message.
+ * The start of a tool call: the assistant message asking for it and its execution's start; its
+ * id, for the rest.
  * @param {string} name @param {Record<string, any>} args @param {string} intent
- * @param {Record<string, any>} result `{ content, details }`
  */
-function runTool(name, args, intent, result) {
+function startTool(name, args, intent) {
   const toolCallId = `tool-${++toolCalls}`;
   const call = { type: 'toolCall', id: toolCallId, name, arguments: args, intent };
   const assistant = { role: 'assistant', content: [call], provider: model.provider, model: model.id, usage, stopReason: 'toolUse', timestamp: Date.now() };
@@ -273,12 +275,55 @@ function runTool(name, args, intent, result) {
   out({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_end', contentIndex: 0, toolCall: call }, message: { role: 'assistant' }, messageId });
   out({ type: 'message_end', message: assistant, messageId });
   out({ type: 'tool_execution_start', toolCallId, toolName: name, args, intent: call.intent });
-  out({ type: 'tool_execution_update', toolCallId, toolName: name, args, partialResult: result });
-  out({ type: 'tool_execution_end', toolCallId, toolName: name, result, isError: false });
-  const toolResult = { role: 'toolResult', toolCallId, toolName: name, content: result.content, details: result.details, isError: false, timestamp: Date.now() };
+  return toolCallId;
+}
+
+/**
+ * The end of tool call `toolCallId`: its execution's end, then its result message.
+ * @param {string} toolCallId @param {string} name @param {Record<string, any>} result `{ content, details }` @param {boolean} isError
+ */
+function endTool(toolCallId, name, result, isError) {
+  out({ type: 'tool_execution_end', toolCallId, toolName: name, result, isError });
+  const toolResult = { role: 'toolResult', toolCallId, toolName: name, content: result.content, details: result.details, isError, timestamp: Date.now() };
   const resultId = record(toolResult);
   out({ type: 'message_start', message: toolResult, messageId: resultId });
   out({ type: 'message_end', message: toolResult, messageId: resultId });
+}
+
+/**
+ * One tool call, run and answered: the assistant message asking for it, its execution frames,
+ * then its result message.
+ * @param {string} name @param {Record<string, any>} args @param {string} intent
+ * @param {Record<string, any>} result `{ content, details }`
+ */
+function runTool(name, args, intent, result) {
+  const toolCallId = startTool(name, args, intent);
+  out({ type: 'tool_execution_update', toolCallId, toolName: name, args, partialResult: result });
+  endTool(toolCallId, name, result, false);
+}
+
+/** The host's tools (`set_host_tools`), by name. @type {Map<string, Record<string, any>>} */
+const hostTools = new Map();
+/** Host tool calls waiting on the host's answer (`host_tool_result`), by request id. @type {Map<string, (answer: Record<string, any>) => void>} */
+const hostCalls = new Map();
+
+/**
+ * A call of the host's tool `name`, as omp's RpcHostToolBridge makes it: `host_tool_call`, then
+ * the host's `host_tool_result` is the result (an error's text the error); a tool the host did
+ * not give fails as omp's unknown tools do. Returns the result's text.
+ * @param {string} name @param {Record<string, any>} args @returns {Promise<string>}
+ */
+async function hostToolCall(name, args) {
+  const toolCallId = startTool(name, args, `Using ${name}`);
+  /** @type {Record<string, any>} */
+  let answer = { result: { content: [{ type: 'text', text: `Tool ${name} not found` }] }, isError: true };
+  if (hostTools.has(name)) {
+    const id = `host-${toolCallId}`;
+    out({ type: 'host_tool_call', id, toolCallId, toolName: name, arguments: args });
+    answer = await new Promise((resolve) => hostCalls.set(id, resolve));
+  }
+  endTool(toolCallId, name, answer.result, answer.isError === true);
+  return answer.result.content.map((/** @type {any} */ c) => c.text).join('\n');
 }
 
 const toolCall = () => runTool('bash', { command: 'echo hi' }, 'Running echo', { content: [{ type: 'text', text: 'hi\n' }], details: {} });
@@ -369,7 +414,10 @@ async function runPrompt(id, text) {
     toolCall();
     await Bun.sleep(1500);
   }
-  if (text.startsWith('say:')) {
+  const scheduling = /^schedule (\{.*\})$/s.exec(text);
+  if (scheduling) {
+    streamAssistant(await hostToolCall('schedule', JSON.parse(scheduling[1])));
+  } else if (text.startsWith('say:')) {
     streamAssistant(text.slice('say:'.length).trim());
   } else if (/ask/.test(text)) {
     const answer = await askDialog();
@@ -512,6 +560,14 @@ lines.on('line', (line) => {
     case 'extension_ui_response':
       dialogs.get(cmd.id)?.(cmd);
       dialogs.delete(cmd.id);
+      return;
+    case 'set_host_tools':
+      hostTools.clear();
+      for (const tool of cmd.tools) hostTools.set(tool.name, tool);
+      return ok(id, type, { toolNames: [...hostTools.keys()] });
+    case 'host_tool_result':
+      hostCalls.get(cmd.id)?.(cmd);
+      hostCalls.delete(cmd.id);
       return;
     case 'negotiate_protocol':
       return ok(id, type, { protocolVersion: 2 });

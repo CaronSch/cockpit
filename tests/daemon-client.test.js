@@ -44,6 +44,7 @@ const hello = (bootId, sessions = [], ui = 'v1', unread = {}, seq = 0, activity 
   forks: {},
   settings: { idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: true, remote: false },
   bugbot: [],
+  schedule: [],
   login: null,
   ui,
   activity,

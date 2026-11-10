@@ -1,0 +1,386 @@
+/* Timeline window: recent conversations on the left of now, scheduled prompts on its right,
+   all on one axis; a bin below while a label is dragged. */
+
+.timeline {
+  --timeline-axis-h: 20px;
+  --timeline-lanes: 1;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 0;
+  font: var(--text-xs) / 1.4 var(--font-mono);
+  color: var(--color-text);
+}
+
+/* As tall as the future's lanes of labels need (timeline.js sets how many), centred in the window. */
+.timeline-track {
+  position: relative;
+  display: flex;
+  flex: 0 1 auto;
+  height: calc(var(--timeline-lanes) * 28px + var(--timeline-axis-h) + 2 * var(--space-4));
+  min-height: 72px;
+}
+
+.timeline-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── the past: in order, not to scale ── */
+.timeline-past {
+  position: relative;
+  flex: 0 1 38%;
+  min-width: 6rem;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--timeline-axis-h);
+  scrollbar-width: thin;
+  /* Not to scale: a dashed axis. */
+  background: linear-gradient(to right, var(--color-line) 50%, transparent 50%) left bottom var(--timeline-axis-h) / 6px 1px repeat-x;
+}
+
+.timeline-past-list {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
+  margin-left: auto;
+  padding: 0 var(--space-2) var(--space-1);
+}
+
+/* ── now ── */
+.timeline-now {
+  position: relative;
+  flex: none;
+  width: 2px;
+  background: var(--color-accent);
+}
+
+.timeline-now-label {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  background: var(--color-bg);
+  color: var(--color-accent);
+  font-size: var(--text-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+}
+
+/* ── the future: to scale ── */
+.timeline-future {
+  position: relative;
+  flex: 1 1 62%;
+  min-width: 8rem;
+  overflow: hidden;
+}
+
+.timeline-axis {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--timeline-axis-h);
+  border-top: 1px solid var(--color-line-strong);
+}
+
+.timeline-tick {
+  position: absolute;
+  top: 0;
+  padding-top: 2px;
+  transform: translateX(-50%);
+  color: var(--color-text-faint);
+  font-size: var(--text-2xs);
+}
+
+.timeline-tick::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  height: 4px;
+  border-left: 1px solid var(--color-line-strong);
+}
+
+.timeline-future-list {
+  position: absolute;
+  inset: 0 0 calc(var(--timeline-axis-h) + var(--space-2)) 0;
+}
+
+.timeline-empty {
+  position: absolute;
+  inset: 0 0 var(--timeline-axis-h) 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--color-text-faint);
+}
+
+.timeline-empty[hidden] {
+  display: none;
+}
+
+/* ── labels ── */
+.timeline-chip {
+  position: relative;
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  background: var(--color-surface);
+  color: var(--color-text-dim);
+  cursor: grab;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.timeline-chip:hover,
+.timeline-chip:focus-visible {
+  outline: none;
+  border-color: var(--color-line-focus);
+  color: var(--color-text);
+}
+
+/* Just the start of the name; pointing at a label shows it all (.timeline-face). */
+.timeline-name {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timeline-chip.is-unread .timeline-name {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.timeline-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+}
+
+.timeline-chip:is(.is-starting, .is-working) .timeline-dot {
+  background: var(--color-text-dim);
+  animation: timeline-pulse 1.2s ease-in-out infinite;
+}
+
+.timeline-chip:is(.is-unread, .is-asking) .timeline-dot {
+  background: var(--color-unread);
+  animation: none;
+}
+
+@keyframes timeline-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-dot {
+    animation: none !important;
+  }
+}
+
+.timeline-chip.is-future {
+  position: absolute;
+  border-color: var(--color-line-strong);
+  color: var(--color-text);
+}
+
+.timeline-when {
+  color: var(--color-text-faint);
+}
+
+/* A stem from the label down to its time on the axis. */
+.timeline-stem {
+  position: absolute;
+  top: 100%;
+  left: var(--stem-x, 0);
+  height: var(--stem-h, 6px);
+  border-left: 1px solid var(--color-line-strong);
+  pointer-events: none;
+}
+
+.timeline-stem::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: -3.5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+}
+
+/* Missed while the daemon was off or the Mac slept: moved to ten minutes after it was found. */
+.timeline-chip.is-missed {
+  border-color: var(--color-accent);
+}
+
+.timeline-chip.is-missed .timeline-when {
+  color: var(--color-accent);
+}
+
+.timeline-chip.is-failed {
+  border-color: var(--color-danger);
+}
+
+/* The whole name, over the label pointed at. */
+.timeline-face:popover-open {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 20px;
+  border: 1px solid var(--color-line-focus);
+  border-radius: var(--radius-s);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lift);
+  font: var(--text-xs) / 1.4 var(--font-mono);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── the bin, and what the foot says otherwise ── */
+.timeline-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+}
+
+.timeline-status {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-status.is-error {
+  color: var(--color-danger);
+}
+
+.timeline-bin {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: none;
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--space-4);
+  transform: translateX(-50%);
+  border: 1px dashed var(--color-line-strong);
+  border-radius: 14px;
+  background: var(--color-surface);
+  color: var(--color-text-dim);
+  transition: transform var(--duration-fast) var(--ease-snap);
+}
+
+.timeline-bin.is-drop-armed {
+  display: flex;
+}
+
+.timeline-bin.is-drop-armed ~ .timeline-status {
+  visibility: hidden;
+}
+
+.timeline-bin.is-drop-over {
+  transform: translateX(-50%) scale(1.15);
+  border-style: solid;
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* ── editing a scheduled prompt ── */
+.timeline-editor:popover-open {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(360px, calc(100vw - 16px));
+  padding: var(--space-2);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-m);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lift);
+  font: var(--text-xs) / 1.4 var(--font-mono);
+}
+
+.timeline-editor-prompt,
+.timeline-editor-when {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-s);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: var(--text-sm) / var(--leading-read) var(--font-mono);
+}
+
+.timeline-editor-prompt {
+  min-height: 6em;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.timeline-editor-when {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  color-scheme: dark;
+}
+
+.timeline-editor-prompt:focus,
+.timeline-editor-when:focus {
+  outline: none;
+  border-color: var(--color-line-focus);
+}
+
+.timeline-editor-actions {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.timeline-editor-cancel,
+.timeline-editor-save {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-dim);
+  font: var(--text-xs) / 1.4 var(--font-mono);
+  cursor: pointer;
+}
+
+.timeline-editor-save {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+.timeline-editor-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.timeline-editor-error {
+  margin: 0;
+  color: var(--color-danger);
+}
+
+.timeline-editor-error:empty {
+  display: none;
+}

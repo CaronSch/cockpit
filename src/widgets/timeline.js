@@ -1,0 +1,530 @@
+/**
+ * A timeline of the agents: on its left, conversations by how recently they were active (in
+ * order, not to scale), the latest beside now; on its right, the prompts agents scheduled for
+ * their conversations (daemon/schedule.js), each where it runs, on a log scale
+ * (timeline/scale.js): the next hour spread out, the next month squeezed in.
+ *
+ * A label is the start of its conversation's name; pointing at it shows the whole. Dragged onto
+ * the grid it opens the conversation in an agent window, as a Sessions row does; dragged onto the
+ * bin that appears below the timeline meanwhile, it archives the conversation (a past label) or
+ * deletes the scheduled prompt (a future one). A click on a past label shows its conversation in
+ * the agent window this screen used last; on a future one it edits the prompt and its time, in
+ * place.
+ *
+ * Archived conversations are not shown, nor the prompts scheduled for them, which wait until the
+ * conversation is restored. A prompt missed while the daemon was off or the Mac slept is marked
+ * missed where it runs now, ten minutes after the daemon found it, so its user can decide whether
+ * it is still wanted; one whose last delivery failed is marked so, with the reason.
+ */
+import { button, el } from '../ui/dom.js';
+import { errorMessage } from '../ui/format.js';
+import { getDaemon } from '../daemon/client.js';
+import { displayTitle, relativeTime, sortSessions } from '../sessions/order.js';
+import { listConversations, runningState, showConversation } from '../sessions/running.js';
+import { duration, futureSpan, lanes, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
+/** @import { WidgetContext } from './registry.js' */
+/** @import { DaemonClient } from '../daemon/client.js' */
+/** @import { PastSession, ScheduledTask } from '../../daemon/wire.js' */
+/** @import { Listed } from '../sessions/running.js' */
+
+/** How often the future side is redrawn as now moves on. */
+const CLOCK_MS = 30_000;
+/** Space between two labels in one lane of the future side, and between lanes. */
+const GAP_PX = 6;
+const HINT = 'Click a scheduled prompt to edit it · drag a label onto the grid to open it';
+
+export default {
+  type: 'timeline',
+  title: 'Timeline',
+  glyph: '⇥',
+  description: 'Agents by when they were last active, and the prompts they scheduled: drag one out to open it, or onto the bin to archive or delete',
+
+  /** @param {HTMLElement} body @param {WidgetContext} ctx */
+  mount(body, ctx) {
+    return createTimeline(body, ctx, getDaemon());
+  },
+};
+
+/** @param {HTMLElement} body @param {WidgetContext} ctx @param {DaemonClient} daemon */
+function createTimeline(body, ctx, daemon) {
+  const root = el('div', 'timeline');
+  const track = el('div', 'timeline-track');
+  const past = el('div', 'timeline-past');
+  const pastList = el('ol', 'timeline-list timeline-past-list');
+  pastList.setAttribute('aria-label', 'Recently active conversations, the latest last');
+  past.append(pastList);
+  const now = el('div', 'timeline-now');
+  now.append(el('span', 'timeline-now-label', 'now'));
+  const future = el('div', 'timeline-future');
+  const axis = el('div', 'timeline-axis');
+  const futureList = el('ol', 'timeline-list timeline-future-list');
+  futureList.setAttribute('aria-label', 'Scheduled prompts, the soonest first');
+  const nothing = el('p', 'timeline-empty', 'Nothing scheduled');
+  future.append(axis, futureList, nothing);
+  track.append(past, now, future);
+  const foot = el('div', 'timeline-foot');
+  const bin = el('div', 'timeline-bin');
+  bin.setAttribute('aria-hidden', 'true');
+  const status = el('p', 'timeline-status', HINT);
+  status.setAttribute('aria-live', 'polite');
+  foot.append(bin, status);
+  // The whole name over a label pointed at, and the editor of a scheduled prompt: both in the
+  // top layer (popovers), so neither is cut off by the timeline's edges.
+  const face = el('div', 'timeline-face');
+  face.popover = 'manual';
+  face.setAttribute('aria-hidden', 'true');
+  const editor = createEditor();
+  root.append(track, foot, face, editor.el);
+  body.append(root);
+
+  /** @type {PastSession[]} */
+  let sessions = [];
+  /** @type {string | null} */
+  let error = null;
+  /** Why the last archive or delete failed, until the next one. @type {string | null} */
+  let actionError = null;
+  let requestSeq = 0;
+  /** Past labels by conversation key, future ones by scheduled prompt id: each made once, then kept up to date. @type {Map<string, HTMLElement>} */
+  const pastNodes = new Map();
+  /** @type {Map<string, HTMLElement>} */
+  const futureNodes = new Map();
+  /** What each label shows, as last drawn: its conversation, and for a future one its prompt. @type {Map<HTMLElement, { conversation: Listed, task: ScheduledTask | null }>} */
+  let shown = new Map();
+  /** Whether the past keeps its latest label beside now: until the user scrolls back to older ones. */
+  let followNow = true;
+  /** The latest conversation as last drawn. @type {string | null} */
+  let shownLatest = null;
+  let frame = 0;
+  const scheduleDraw = () => {
+    frame ||= requestAnimationFrame(() => {
+      frame = 0;
+      draw();
+    });
+  };
+
+  async function load() {
+    const seq = ++requestSeq;
+    try {
+      const next = await daemon.history('');
+      if (seq !== requestSeq) return;
+      sessions = next;
+      error = null;
+    } catch (err) {
+      if (seq !== requestSeq) return;
+      error = `Could not list sessions: ${errorMessage(err)}`;
+    }
+    draw();
+  }
+
+  /** Every conversation not archived, the least recently active first. */
+  const listed = () => sortSessions(listConversations(sessions, daemon.sessions(), { searching: false, directory: null }), 'active', 'asc');
+
+  /** @param {Listed} c */
+  const nameOf = (c) => (c.meta && daemon.activity(c.meta.id)?.name) ?? (c.title || c.firstPrompt ? displayTitle(c) : 'New session');
+  /** @param {Listed} c */
+  const ompIdOf = (c) => c.meta?.ompId ?? (c.id || null);
+  /** @param {Listed} c */
+  const isUnread = (c) => daemon.unreadSince(ompIdOf(c)) !== null;
+  /** @param {Listed} c */
+  const stateOf = (c) => (c.meta ? runningState(daemon.activity(c.meta.id), c.meta, isUnread(c)) : null);
+  /** An awake session with no listed journal: a new one nothing was sent to. @param {Listed} c */
+  const isEmpty = (c) => c.meta !== null && !sessions.some((s) => s.file === c.file);
+
+  /**
+   * The conversation a prompt is scheduled for, if it is listed: by its journal, else (a new one
+   * omp has not named one for) by the session that scheduled it.
+   * @param {ScheduledTask} task @param {Listed[]} conversations
+   */
+  const conversationOf = (task, conversations) =>
+    conversations.find((c) => (task.target.sessionFile ? c.file === task.target.sessionFile : c.meta?.id === task.target.session)) ?? null;
+
+  /**
+   * A new label: a state dot and a name, and for a scheduled prompt when it runs and the stem
+   * down to its time.
+   * @param {boolean} scheduled
+   */
+  function newLabel(scheduled) {
+    const chip = el('li', 'timeline-chip');
+    chip.tabIndex = 0;
+    const dot = el('span', 'timeline-dot');
+    dot.setAttribute('aria-hidden', 'true');
+    chip.append(dot, el('span', 'timeline-name'));
+    if (scheduled) chip.append(el('span', 'timeline-when'), el('span', 'timeline-stem'));
+    return chip;
+  }
+
+  /** Sets `prop` of `node` to `value`, unless it is that already. @template {object} T @param {T} node @param {keyof T} prop @param {unknown} value */
+  const put = (node, prop, value) => {
+    if (node[prop] !== value) node[prop] = /** @type {any} */ (value);
+  };
+
+  /**
+   * Shows conversation `c` in label `chip`: its name, how it is doing, `classes` besides, and
+   * `title`, its tooltip.
+   * @param {HTMLElement} chip @param {Listed} c @param {string} classes @param {string} title
+   */
+  function paint(chip, c, classes, title) {
+    const state = stateOf(c);
+    const name = nameOf(c);
+    put(chip, 'className', `timeline-chip ${classes}${state ? ` is-${state}` : ''}${isUnread(c) ? ' is-unread' : ''}`);
+    if (chip.dataset.name !== name) {
+      chip.dataset.name = name;
+      chip.setAttribute('aria-label', name);
+    }
+    put(/** @type {HTMLElement} */ (chip.querySelector('.timeline-name')), 'textContent', name);
+    put(chip, 'title', title);
+  }
+
+  /** @param {Listed[]} conversations @param {number} at */
+  function drawPast(conversations, at) {
+    const live = new Set();
+    conversations.forEach((c, i) => {
+      live.add(c.key);
+      let chip = pastNodes.get(c.key);
+      if (!chip) pastNodes.set(c.key, (chip = newLabel(false)));
+      paint(chip, c, 'is-past', `${nameOf(c)}\n${c.cwd ?? ''}\nLast active ${relativeTime(c.modifiedAt, at)}\nClick to show it; drag it onto the grid to open it, or onto Archive below`);
+      shown.set(chip, { conversation: c, task: null });
+      if (pastList.children[i] !== chip) pastList.insertBefore(chip, pastList.children[i] ?? null);
+    });
+    for (const [key, chip] of pastNodes) {
+      if (live.has(key)) continue;
+      chip.remove();
+      pastNodes.delete(key);
+    }
+    // The latest stays beside now, unless the user scrolled back to look at older ones; a
+    // conversation newly the latest is shown there either way.
+    const latest = conversations.at(-1)?.key ?? null;
+    if (followNow || latest !== shownLatest) past.scrollLeft = past.scrollWidth;
+    shownLatest = latest;
+  }
+
+  /** @param {Listed[]} conversations @param {number} at */
+  function drawFuture(conversations, at) {
+    const tasks = daemon
+      .schedule()
+      .flatMap((task) => {
+        const conversation = conversationOf(task, conversations);
+        return conversation ? [{ task, conversation }] : [];
+      })
+      .sort((a, b) => a.task.dueAt - b.task.dueAt);
+    const width = future.clientWidth;
+    const span = futureSpan(Math.max(0, ...tasks.map(({ task }) => task.dueAt - at)));
+    axis.replaceChildren(
+      ...ticks(span, width).map((t) => {
+        const tick = el('span', 'timeline-tick', t.label);
+        tick.style.left = `${t.x}px`;
+        return tick;
+      }),
+    );
+    nothing.hidden = tasks.length > 0;
+
+    const live = new Set();
+    tasks.forEach(({ task, conversation }, i) => {
+      live.add(task.id);
+      let chip = futureNodes.get(task.id);
+      if (!chip) futureNodes.set(task.id, (chip = newLabel(true)));
+      const title = [
+        nameOf(conversation),
+        `Runs ${new Date(task.dueAt).toLocaleString()}, in ${duration(task.dueAt - at)}`,
+        ...(task.missedAt === null ? [] : [`Missed: it was due ${new Date(task.missedAt).toLocaleString()}, while Cockpit was off or the computer slept`]),
+        ...(task.error ? [`Last try failed: ${task.error}`] : []),
+        '',
+        task.prompt.length > 400 ? `${task.prompt.slice(0, 399)}…` : task.prompt,
+        '',
+        'Click to edit; drag it onto the grid to open its conversation, or onto Delete below',
+      ].join('\n');
+      paint(chip, conversation, `is-future${task.missedAt === null ? '' : ' is-missed'}${task.error ? ' is-failed' : ''}`, title);
+      const when = whenLabel(task.dueAt, at);
+      put(/** @type {HTMLElement} */ (chip.querySelector('.timeline-when')), 'textContent', task.missedAt === null ? when : `missed · ${when}`);
+      shown.set(chip, { conversation, task });
+      if (futureList.children[i] !== chip) futureList.insertBefore(chip, futureList.children[i] ?? null);
+    });
+    for (const [id, chip] of futureNodes) {
+      if (live.has(id)) continue;
+      chip.remove();
+      futureNodes.delete(id);
+    }
+
+    // Each label starts at its time, or as near as it fits; a stem joins it to its time on the axis.
+    const placed = tasks.map(({ task }) => {
+      const node = /** @type {HTMLElement} */ (futureNodes.get(task.id));
+      const x = position(task.dueAt - at, span) * width;
+      const w = node.offsetWidth;
+      return { node, x, left: Math.max(0, Math.min(x, width - w)), width: w, height: node.offsetHeight };
+    });
+    const lane = lanes(placed.map((p) => ({ x: p.left, width: p.width })), GAP_PX);
+    root.style.setProperty('--timeline-lanes', String(Math.max(1, ...lane.map((l) => l + 1))));
+    placed.forEach((p, i) => {
+      const rise = lane[i] * (p.height + GAP_PX);
+      p.node.style.left = `${p.left}px`;
+      p.node.style.bottom = `${rise}px`;
+      p.node.style.setProperty('--stem-x', `${p.x - p.left}px`);
+      p.node.style.setProperty('--stem-h', `${rise + GAP_PX}px`);
+    });
+    return tasks.length;
+  }
+
+  function draw() {
+    const at = Date.now();
+    const conversations = listed();
+    shown = new Map();
+    drawPast(conversations, at);
+    const scheduled = drawFuture(conversations, at);
+    // A label pointed at keeps its name shown, where it is now; one drawn anew loses it.
+    if (faceFor?.isConnected) showFace(faceFor);
+    else hideFace();
+    status.textContent = actionError ?? error ?? HINT;
+    status.classList.toggle('is-error', Boolean(actionError ?? error));
+    ctx.setLabel(scheduled ? `${scheduled} scheduled` : null);
+    if (editor.editing && !daemon.schedule().some((t) => t.id === editor.editing)) editor.close();
+  }
+
+  // ── labels: pointing, dragging, clicking ──
+  /** @param {EventTarget | null} target */
+  const chipAt = (target) => /** @type {HTMLElement | null} */ (/** @type {Element} */ (target)?.closest?.('.timeline-chip'));
+
+  /** The label whose whole name shows over it. @type {HTMLElement | null} */
+  let faceFor = null;
+  /** Shows the whole name of `chip` over it. @param {HTMLElement} chip */
+  function showFace(chip) {
+    faceFor = chip;
+    const box = chip.getBoundingClientRect();
+    face.textContent = chip.dataset.name ?? '';
+    face.style.left = `${box.left}px`;
+    face.style.top = `${box.top}px`;
+    face.style.minHeight = `${box.height}px`;
+    if (!face.matches(':popover-open')) face.showPopover();
+  }
+  function hideFace() {
+    faceFor = null;
+    if (face.matches(':popover-open')) face.hidePopover();
+  }
+  root.addEventListener('pointerover', (event) => {
+    const chip = chipAt(event.target);
+    if (chip) showFace(chip);
+    else hideFace();
+  });
+  root.addEventListener('pointerleave', hideFace);
+  root.addEventListener('focusin', (event) => {
+    const chip = chipAt(event.target);
+    if (chip?.matches(':focus-visible')) showFace(chip);
+  });
+  root.addEventListener('focusout', hideFace);
+  past.addEventListener('scroll', () => {
+    hideFace();
+    followNow = past.scrollLeft + past.clientWidth >= past.scrollWidth - 4;
+  });
+  // A mouse wheel scrolls back through the past.
+  past.addEventListener(
+    'wheel',
+    (event) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      past.scrollLeft += event.deltaY;
+      event.preventDefault();
+    },
+    { passive: false },
+  );
+
+  /** Shows the conversation in the agent window this screen used last; that reads it. @param {Listed} c */
+  function show(c) {
+    ctx.showWidget('omp', showConversation({ file: c.file, meta: c.meta, cwd: c.cwd, name: nameOf(c) }));
+    read(c);
+  }
+
+  /** @param {Listed} c */
+  function read(c) {
+    const id = ompIdOf(c);
+    const since = daemon.unreadSince(id);
+    if (id !== null && since !== null) daemon.markRead(id, since).catch(() => {});
+  }
+
+  /** Archives the conversation, as the Sessions window's Archive does. @param {Listed} c */
+  async function archive(c) {
+    actionError = null;
+    try {
+      if (isEmpty(c)) {
+        // A new session nothing was sent to has no journal: archiving it ends it, once it is idle.
+        if (stateOf(c) !== 'idle') throw new Error('it is still starting or working; archive it once it is done');
+        await daemon.end(/** @type {NonNullable<Listed['meta']>} */ (c.meta).id);
+      } else {
+        await daemon.archivePastSession(c.file);
+      }
+    } catch (err) {
+      actionError = `Could not archive “${nameOf(c)}”: ${errorMessage(err)}`;
+    }
+    await load();
+  }
+
+  /** @param {ScheduledTask} task */
+  async function unschedule(task) {
+    actionError = null;
+    try {
+      await daemon.unschedule(task.id);
+    } catch (err) {
+      actionError = `Could not delete the scheduled prompt: ${errorMessage(err)}`;
+    }
+    draw();
+  }
+
+  root.addEventListener('pointerdown', (event) => {
+    const chip = chipAt(event.target);
+    const what = chip && shown.get(chip);
+    if (event.button !== 0 || !what) return;
+    hideFace();
+    const { conversation, task } = what;
+    bin.textContent = task ? 'Delete' : 'Archive';
+    bin.title = task ? 'Drop here to delete the scheduled prompt' : 'Drop here to archive the conversation';
+    const params = showConversation({ file: conversation.file, meta: conversation.meta, cwd: conversation.cwd, name: nameOf(conversation) });
+    ctx.dragWidget('omp', params, event, {
+      label: nameOf(conversation),
+      into: true,
+      target: bin,
+      onEnd: ({ dropped, onTarget }) => {
+        if (onTarget) void (task ? unschedule(task) : archive(conversation));
+        // Dropped, it shows in an agent window: that reads it, as a click does.
+        else if (dropped) read(conversation);
+      },
+    });
+  });
+  /** @param {HTMLElement} chip */
+  function activate(chip) {
+    const what = shown.get(chip);
+    if (!what) return;
+    if (what.task) editor.open(what.task, chip);
+    else show(what.conversation);
+  }
+  root.addEventListener('click', (event) => {
+    const chip = chipAt(event.target);
+    if (chip) activate(chip);
+  });
+  root.addEventListener('keydown', (event) => {
+    const chip = /** @type {HTMLElement} */ (event.target);
+    if (!chip.classList?.contains('timeline-chip') || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    activate(chip);
+  });
+
+  /**
+   * The editor of a scheduled prompt, opened in place under its label: its prompt and when it
+   * runs. Saved, it is no longer marked missed or failed: its user has looked at it.
+   */
+  function createEditor() {
+    const form = el('div', 'timeline-editor');
+    form.popover = 'manual';
+    form.setAttribute('role', 'dialog');
+    form.setAttribute('aria-label', 'Edit scheduled prompt');
+    const prompt = el('textarea', 'timeline-editor-prompt');
+    prompt.rows = 5;
+    prompt.setAttribute('aria-label', 'Prompt');
+    const when = el('input', 'timeline-editor-when');
+    when.type = 'datetime-local';
+    when.setAttribute('aria-label', 'Runs at');
+    const problem = el('p', 'timeline-editor-error');
+    const cancel = button('timeline-editor-cancel', 'Cancel');
+    const save = button('timeline-editor-save', 'Save');
+    const actions = el('div', 'timeline-editor-actions');
+    actions.append(when, cancel, save);
+    form.append(prompt, actions, problem);
+
+    /** The time the field showed when it opened: unchanged, the prompt keeps its exact time. */
+    let opened = '';
+    /** @type {HTMLElement | null} */
+    let from = null;
+    const state = {
+      el: form,
+      /** The scheduled prompt being edited. @type {string | null} */
+      editing: /** @type {string | null} */ (null),
+      /** @param {ScheduledTask} task @param {HTMLElement} chip */
+      open(task, chip) {
+        state.editing = task.id;
+        from = chip;
+        prompt.value = task.prompt;
+        when.value = opened = toLocalInput(task.dueAt);
+        problem.textContent = '';
+        save.disabled = false;
+        const box = chip.getBoundingClientRect();
+        form.style.left = `${Math.max(8, Math.min(box.left, innerWidth - 368))}px`;
+        form.style.top = `${box.bottom + 6}px`;
+        if (!form.matches(':popover-open')) form.showPopover();
+        // Room below the label, else above it.
+        const height = form.offsetHeight;
+        if (box.bottom + 6 + height > innerHeight) form.style.top = `${Math.max(8, box.top - 6 - height)}px`;
+        prompt.focus();
+      },
+      close() {
+        state.editing = null;
+        if (form.matches(':popover-open')) form.hidePopover();
+        if (from?.isConnected) from.focus();
+        from = null;
+      },
+    };
+
+    async function commit() {
+      const id = state.editing;
+      if (!id) return;
+      /** @type {{ prompt: string, dueAt?: number }} */
+      const patch = { prompt: prompt.value };
+      if (when.value !== opened) {
+        const at = new Date(when.value).getTime();
+        if (!Number.isFinite(at)) {
+          problem.textContent = 'Pick a date and time.';
+          return;
+        }
+        patch.dueAt = at;
+      }
+      save.disabled = true;
+      try {
+        await daemon.editScheduled(id, patch);
+        state.close();
+      } catch (err) {
+        problem.textContent = `Not saved: ${errorMessage(err)}`;
+        save.disabled = false;
+      }
+    }
+    save.addEventListener('click', () => void commit());
+    cancel.addEventListener('click', () => state.close());
+    form.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        state.close();
+      } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        void commit();
+      }
+    });
+    return state;
+  }
+
+  const offSchedule = daemon.onSchedule(scheduleDraw);
+  const offSessions = daemon.onSessions(scheduleDraw);
+  const offActivity = daemon.onActivity(scheduleDraw);
+  const offUnread = daemon.onUnread(scheduleDraw);
+  const offHistory = daemon.onHistory(() => void load());
+  const offStatus = daemon.onStatus((s) => {
+    if (s === 'open') void load();
+  });
+  const clock = setInterval(scheduleDraw, CLOCK_MS);
+  const resized = new ResizeObserver(scheduleDraw);
+  resized.observe(future);
+
+  draw();
+  void load();
+
+  return {
+    destroy() {
+      requestSeq++; // drop any answer still on its way
+      offSchedule();
+      offSessions();
+      offActivity();
+      offUnread();
+      offHistory();
+      offStatus();
+      clearInterval(clock);
+      resized.disconnect();
+      cancelAnimationFrame(frame);
+      editor.close();
+      hideFace();
+      root.remove();
+    },
+  };
+}

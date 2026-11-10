@@ -13,6 +13,7 @@ import { OMP_ID } from './unread.js';
 import { isSettingsPatch } from './settings.js';
 import { TextFileRefused, listDirectory, readTextFile, resolvePath, writeTextFile } from './files.js';
 import { DeliveryRefused } from './deliver.js';
+import { ScheduleRefused } from './schedule.js';
 import { GithubError } from './github.js';
 import { LoginRefused } from './setup.js';
 import { REPO } from '../src/github/pr-refs.js';
@@ -22,7 +23,7 @@ import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
 import { isValidTree } from '../src/layout/grid-model.js';
 import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion } from './ui-files.js';
 /** @import { BunRequest, Server } from 'bun' */
-/** @import { BugbotWatch, ConversationTarget, DaemonConfig, RemoteState, Scratchpad, SessionActivity, SessionEvent } from './wire.js' */
+/** @import { BugbotWatch, ConversationTarget, DaemonConfig, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent } from './wire.js' */
 /** @import { Hub } from './hub.js' */
 /** @import { RemoteAccess } from './remote.js' */
 /** @typedef {ReturnType<typeof import('./history.js').createHistory>} History */
@@ -36,6 +37,7 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Github } from './github.js' */
 /** @import { Delivery } from './deliver.js' */
 /** @import { BugbotStore } from './bugbot.js' */
+/** @import { Schedule } from './schedule.js' */
 /** @import { DecisionReviews } from './decisions.js' */
 /** @import { LoginState, Setup } from './setup.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
@@ -234,7 +236,7 @@ async function compressed(req, res) {
 /** @param {unknown} err */
 function errorResponse(err) {
   const status =
-    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused
+    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused
       ? err.status
       : err instanceof SessionNotRunning
         ? 409
@@ -249,14 +251,14 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, setup: Setup, remote: RemoteAccess, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, setup, remote, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, schedule, setup, remote, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -275,7 +277,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
       start(controller) {
         const write = (/** @type {string} */ chunk) => controller.enqueue(chunk);
         write('retry: 1000\n\n');
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state() })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state() })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         const lastSeen = lastSeenSeq(req.headers.get('last-event-id'), hub.bootId);
         if (!cursors) {
@@ -290,7 +292,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
-        // No id: scratchpad, history, unread, pins, forks, decisions, settings, bugbot, login, activity and remote events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, forks, decisions, settings, bugbot, schedule, login, activity and remote events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
@@ -303,6 +305,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         );
         const offSettings = settings.subscribe((/** @type {DaemonSettings} */ all) => write(`data: ${JSON.stringify({ kind: 'settings', settings: all })}\n\n`));
         const offBugbot = bugbot.subscribe((/** @type {readonly BugbotWatch[]} */ watches) => write(`data: ${JSON.stringify({ kind: 'bugbot', watches })}\n\n`));
+        const offSchedule = schedule.subscribe((/** @type {readonly ScheduledTask[]} */ tasks) => write(`data: ${JSON.stringify({ kind: 'schedule', tasks })}\n\n`));
         const offLogin = setup.login.subscribe((/** @type {LoginState | null} */ login) => write(`data: ${JSON.stringify({ kind: 'login', login })}\n\n`));
         const offActivity = hub.onActivity((/** @type {string} */ session, /** @type {SessionActivity | null} */ activity) =>
           write(`data: ${JSON.stringify({ kind: 'activity', session, activity })}\n\n`),
@@ -320,6 +323,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           offDecisions();
           offSettings();
           offBugbot();
+          offSchedule();
           offLogin();
           offActivity();
           offRemote();
@@ -618,6 +622,13 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
             const body = (await readJson(req)) ?? {};
             if (typeof body.message !== 'string' || !body.message.trim()) throw new HttpError(400, 'expected a message to send');
             return json({ session: await delivery.deliver(asTarget(body.target), body.message) }, 202);
+          },
+        }),
+        '/api/schedule/:id': api({
+          PATCH: async (req) => json(await schedule.edit(req.params.id, (await readJson(req)) ?? {})),
+          DELETE: async (req) => {
+            await schedule.remove(req.params.id);
+            return noContent();
           },
         }),
         '/api/github/pulls': api({

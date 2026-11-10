@@ -6,6 +6,7 @@ import scratchpad from './scratchpad.js';
 import github from './github.js';
 import file from './file.js';
 import setup from './setup.js';
+import timeline from './timeline.js';
 
 /**
  * Widgets the palette can add, keyed by type.
@@ -24,7 +25,9 @@ import setup from './setup.js';
  * (merging them into its settings), or opens one if there is none;
  * `ctx.dragWidget(type, params, pointerdown)` lets the user drop it where they want, exactly
  * like dragging from the palette (a plain click does nothing); with `into`, it may also be
- * dropped onto the middle of a window of `type`, which then shows it.
+ * dropped onto the middle of a window of `type`, which then shows it; with `target`, onto that
+ * element of the window's own instead (a bin), which then gets `is-drop-armed` while the drag
+ * runs and `is-drop-over` while the pointer is over it, and `onEnd` hears `onTarget`.
  * `ctx.setUnread(true)` lights the window's border: it has news its user has not seen.
  * `ctx.setLabel(text)` names what the window shows (e.g. the agent window's conversation) in
  * its top bar, beside its type's title; null removes the name. `ctx.headActions` is where the
@@ -53,7 +56,7 @@ import setup from './setup.js';
  *   addWidget(type: string, params: LeafParams): void,
  *   showWidget(type: string, params: LeafParams): void,
  *   openBeside(type: string, params: LeafParams): void,
- *   dragWidget(type: string, params: LeafParams, event: PointerEvent, options?: { label?: string, into?: boolean, onEnd?: (result: DragEndResult) => void }): void,
+ *   dragWidget(type: string, params: LeafParams, event: PointerEvent, options?: { label?: string, into?: boolean, onEnd?: (result: DragEndResult) => void, target?: HTMLElement }): void,
  *   setUnread(unread: boolean): void,
  *   setLabel(text: string | null): void,
  *   readonly headActions: HTMLElement,
@@ -69,7 +72,7 @@ import setup from './setup.js';
  */
 
 /** @type {readonly WidgetDef[]} */
-const DEFS = [pane, omp, sessions, scratchpad, github, file, setup];
+const DEFS = [pane, omp, sessions, timeline, scratchpad, github, file, setup];
 
 /** @type {Readonly<Record<string, WidgetDef>>} */
 export const WIDGETS = Object.freeze(Object.fromEntries(DEFS.map((def) => [def.type, def])));

@@ -144,6 +144,8 @@ const KNOWN_UNRENDERED = new Set([
   'config_warnings_changed', // no payload; warnings are not exposed over rpc
   'cache_warming_start', // background prompt-cache refreshes, not conversation
   'cache_warming_end',
+  'host_tool_call', // omp asks the daemon to run its tool (daemon/schedule.js); the call's own tool frames show it
+  'host_tool_cancel',
 ]);
 
 /** How a message reached a subagent that was not running, and so set it going again. */

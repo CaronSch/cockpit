@@ -7,7 +7,7 @@
  * `onReset` listeners fire before any event from the new daemon is delivered.
  *
  * It keeps which conversations are unread (daemon/unread.js), pinned (daemon/pins.js) and forked from which (daemon/forks.js), the daemon's settings
- * (daemon/settings.js), its Bugbot watches (daemon/bugbot.js), how each awake session is doing (`activity`) and whether
+ * (daemon/settings.js), its Bugbot watches (daemon/bugbot.js), the prompts agents scheduled (daemon/schedule.js), how each awake session is doing (`activity`) and whether
  * Phone access is on (`remote`), as the daemon last said: every window reads them here, so all of
  * them, and every page, agree. So are the decision reviews (daemon/decisions.js) of the conversations windows show,
  * asked for when a window first shows one, and again after a reconnect.
@@ -26,7 +26,7 @@
  * being, or become again, those.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TextFile, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TextFile, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -106,6 +106,10 @@ export class DaemonError extends Error {
  *   bugbot(): readonly BugbotWatch[],
  *   onBugbot(fn: () => void): () => void,
  *   askBugbot(request: { repo: string, number: number, target: ConversationTarget }): Promise<BugbotWatch>,
+ *   schedule(): readonly ScheduledTask[],
+ *   onSchedule(fn: () => void): () => void,
+ *   editScheduled(id: string, patch: { prompt?: string, dueAt?: number }): Promise<ScheduledTask>,
+ *   unschedule(id: string): Promise<void>,
  *   setup(): Promise<SetupStatus>,
  *   login(): LoginState | null,
  *   onLogin(fn: () => void): () => void,
@@ -212,6 +216,15 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
     watches = next;
     for (const fn of bugbotListeners) fn();
   };
+  /** @type {readonly ScheduledTask[]} */
+  let scheduled = [];
+  /** @type {Set<() => void>} */
+  const scheduleListeners = new Set();
+  /** @param {readonly ScheduledTask[]} next */
+  const setScheduled = (next) => {
+    scheduled = next;
+    for (const fn of scheduleListeners) fn();
+  };
   /** @type {LoginState | null} */
   let login = null;
   /** @type {Set<() => void>} */
@@ -294,6 +307,7 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
     setForks(hello.forks);
     setSettings(hello.settings);
     setWatches(hello.bugbot);
+    setScheduled(hello.schedule);
     setLogin(hello.login);
     activities = new Map(Object.entries(hello.activity));
     activityChanged();
@@ -319,6 +333,7 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (event.kind === 'forks') return setForks(event.forks);
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'bugbot') return setWatches(event.watches);
+    if (event.kind === 'schedule') return setScheduled(event.tasks);
     if (event.kind === 'login') return setLogin(event.login);
     if (event.kind === 'remote') return setRemote({ state: event.state, error: event.error });
     if (event.kind === 'activity') {
@@ -665,6 +680,15 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
       return () => bugbotListeners.delete(fn);
     },
     askBugbot: ({ repo, number, target }) => request('/api/github/bugbot', { method: 'POST', body: JSON.stringify({ repo, number, target }) }),
+    schedule: () => scheduled,
+    onSchedule(fn) {
+      scheduleListeners.add(fn);
+      return () => scheduleListeners.delete(fn);
+    },
+    editScheduled: (id, patch) => request(`/api/schedule/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+    async unschedule(id) {
+      await request(`/api/schedule/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
     setup: () => request('/api/setup'),
     login: () => login,
     onLogin(fn) {

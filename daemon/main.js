@@ -13,7 +13,8 @@
  * address at `--remote-port`, the daemon's port unless given.
  * Environment: COCKPIT_PORT, COCKPIT_OMP, COCKPIT_GH, COCKPIT_CWD, COCKPIT_TAILSCALE, COCKPIT_REMOTE_PORT, COCKPIT_STATE_DIR (default ~/.cockpit; holds the
  * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), forks.json
- * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), decisions/
+ * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), schedule.json
+ * (the prompts agents scheduled), decisions/
  * (each conversation's decision reviews), fork-sources/ (journals forked mid-turn, cut to their last response, while
  * their fork starts), scratchpads/, attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
@@ -28,6 +29,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { JournalRefused, createHistory } from './history.js';
 import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
+import { loadSchedule, scheduleTools } from './schedule.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
 import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
@@ -99,16 +101,21 @@ const hub = createHub({
     minTokens: compactFrom > 0 ? Math.max(IDLE_COMPACT_TOKENS_FLOOR, compactFrom) : IDLE_COMPACT_MIN_TOKENS,
   },
   // The journal a rewind left keeps what was set aside: archived, out of the list, restorable.
-  // One outside omp's sessions (400) is not listed, so there is nothing to put away.
-  onRewound: (file) =>
+  // One outside omp's sessions (400) is not listed, so there is nothing to put away. What is
+  // scheduled for the conversation goes on with it.
+  onRewound: (file, next) => {
+    if (next) void schedule.moved(file, next);
     void history.archive(file).catch((err) => {
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
-    }),
+    });
+  },
   // A rewound conversation goes on under a new id: its forks are still its forks.
   onRewoundId: (from, to) => void forks.moved(from, to),
   onTurnEnded: decisions.turnEnded,
   // "I have ADHD" adds its rules to every agent's system prompt; the browser choice, its environment.
   launchWith: () => ({ appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd), env: browserEnv(settings.all().browser) }),
+  // Every agent may schedule prompts for its own conversation.
+  hostTools: scheduleTools(() => schedule),
 });
 // Switched, a setting reaches a conversation as it next wakes: idle ones go to sleep now.
 settings.subscribe(() => hub.launchChanged());
@@ -121,6 +128,11 @@ const bugbot = await loadBugbot({
   github,
   delivery,
   pollMs: bugbotPoll > 0 ? bugbotPoll : BUGBOT_POLL_MS,
+}).catch(unreadable);
+const schedule = await loadSchedule({
+  file: join(stateDir, 'schedule.json'),
+  deliver: delivery.deliver,
+  archivedFrom: (file) => history.archivedFrom(file),
 }).catch(unreadable);
 const scratchpadDir = join(stateDir, 'scratchpads');
 const setup = createSetup({ ompPath, ghPath, tailscalePath });
@@ -146,6 +158,7 @@ const daemon = createDaemon({
   github,
   delivery,
   bugbot,
+  schedule,
   setup,
   remote,
   token,
