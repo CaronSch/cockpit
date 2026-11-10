@@ -348,6 +348,20 @@ export function createHistory({ root, archive }) {
       }
     },
     /**
+     * Whether the journal omp kept at `file` (in its sessions) has been archived: it is in the
+     * archive now, and no longer where it was.
+     * @param {string} file
+     */
+    async archivedFrom(file) {
+      let rel;
+      try {
+        rel = journalUnder(root, file);
+      } catch {
+        return false;
+      }
+      return !(await exists(join(root, rel))) && (await exists(join(archive, rel)));
+    },
+    /**
      * Moves a journal listed by `list()` into the archive; returns where it is now.
      * @param {unknown} file untrusted: refused unless it is a journal in omp's sessions directory
      */

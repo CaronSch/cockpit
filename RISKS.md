@@ -178,11 +178,21 @@ is newer. The daemon prints its version at start.
   `src/omp/visibility.js`, `src/widgets/omp.js` and the fake.
 
 - **Messages from outside an agent window lean on `prompt`'s `streamingBehavior`.** The pull
-  request window's review and Bugbot's findings reach a conversation through the daemon
+  request window's review, Bugbot's findings and scheduled prompts reach a conversation through the daemon
   (`daemon/deliver.js`) as a `prompt` with `streamingBehavior: 'followUp'`, which omp 18.10.3
   runs at once when idle and queues after the turn while the agent works. A change shows up as
   a review refused mid-turn ("Agent is already processing") or one that interrupts the turn.
   *Response:* re-read `session/agent-session.ts` (`prompt`) and update `deliver.js`.
+
+- **Scheduled prompts lean on omp's RPC host tools.** Every agent's `schedule` tool is a host tool
+  (`daemon/schedule.js`, `daemon/omp-session.js`): sent with `set_host_tools` as the session is set
+  up (`loadMode: 'essential'`, so it is in the agent's own tools rather than behind tool discovery),
+  called through `host_tool_call` (`id`, `toolCallId`, `toolName`, `arguments`) and answered with
+  `host_tool_result` (`{ content, details }`, `isError`), as omp 18.10.3's `modes/rpc/host-tools.ts`
+  and `rpc-types.ts` have them; a live 18.10.3 session accepted the tool and called it unprompted
+  for a CI check. The fake omp's frames follow that source. A change shows up as a `set_host_tools
+  failed` note in every agent window, or an agent whose schedule calls never answer. *Response:*
+  re-read those files and `tools/essential-tools.ts`, then update `omp-session.js` and the fake.
 
 - **Decision reviews lean on `omp -p` and message timestamps.** `daemon/decisions.js` runs
   `omp -p --no-session --no-tools … --model @smol --thinking off --system-prompt <prompt> <turn>`

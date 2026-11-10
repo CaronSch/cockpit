@@ -20,6 +20,7 @@ import { nameFork } from '../daemon/fork-title.js';
 import { createGithub } from '../daemon/github.js';
 import { createDelivery } from '../daemon/deliver.js';
 import { loadBugbot } from '../daemon/bugbot.js';
+import { loadSchedule, scheduleTools } from '../daemon/schedule.js';
 import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
 import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 import { withAdhdRules } from '../daemon/adhd.js';
@@ -61,6 +62,8 @@ let github;
 let delivery;
 /** @type {import('../daemon/bugbot.js').BugbotStore} */
 let bugbot;
+/** @type {import('../daemon/schedule.js').Schedule} */
+let schedule;
 /** @type {import('../daemon/decisions.js').DecisionReviews} */
 let decisions;
 /** @type {import('../daemon/setup.js').Setup} */
@@ -186,7 +189,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -199,12 +202,13 @@ beforeAll(async () => {
     on: () => settings.all().decisionReview,
     ask: (turn) => askReviewer(turn, { ompPath: FAKE_OMP }),
   });
-  hub = createHub({ ompPath: FAKE_OMP, unread, onRewoundId: (from, to) => void forks.moved(from, to), onTurnEnded: decisions.turnEnded });
+  hub = createHub({ ompPath: FAKE_OMP, unread, onRewoundId: (from, to) => void forks.moved(from, to), onTurnEnded: decisions.turnEnded, hostTools: scheduleTools(() => schedule) });
   forker = createForker({ hub, forks, scratchDir: join(cwd, 'state', 'fork-sources'), nameFork: (prompt, title) => nameFork(prompt, title, { ompPath: FAKE_OMP }) });
   const history = createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') });
   github = createGithub({ ghPath: FAKE_GH });
   delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
   bugbot = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 100 });
+  schedule = await loadSchedule({ file: join(cwd, 'state', 'schedule.json'), deliver: delivery.deliver, archivedFrom: (file) => history.archivedFrom(file) });
   // Setup's fake omp keeps who is signed in in a file of the suite's own, with nobody to start with.
   setup = createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, tailscalePath: FAKE_TAILSCALE, env: { ...process.env, FAKE_OMP_AUTH: join(cwd, 'fake-omp-auth') } });
   tailscaleStatus = join(cwd, 'tailscale-status.json');
@@ -230,6 +234,7 @@ beforeAll(async () => {
     github,
     delivery,
     bugbot,
+    schedule,
     setup,
     remote,
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
@@ -247,6 +252,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await remote.stop();
   bugbot.stop();
+  schedule.stop();
   await hub.closeAll();
   await server.stop(true);
 });
@@ -357,7 +363,7 @@ describe('sessions', () => {
     const mine = forSession(hub.since(0), id);
     const readyAt = mine.findIndex((e) => e.kind === 'session' && e.meta.status === 'ready');
     const sent = mine.slice(0, readyAt).flatMap((e) => (e.kind === 'sent' ? [e.command.type] : []));
-    assert.deepEqual(sent, SETUP_COMMANDS.map((c) => c.type));
+    assert.deepEqual(sent, [...SETUP_COMMANDS.map((c) => c.type), 'set_host_tools']);
   });
 
   test('every session is asked to say what it is doing as it works', async () => {
@@ -384,7 +390,7 @@ describe('sessions', () => {
     const before = mine.slice(0, readyAt);
     assert.deepEqual(
       before.flatMap((e) => (e.kind === 'sent' ? [e.command.type] : [])),
-      [...SETUP_COMMANDS, HISTORY_COMMAND].map((c) => c.type),
+      [...SETUP_COMMANDS.map((c) => c.type), 'set_host_tools', HISTORY_COMMAND.type],
     );
     const history = before.find((e) => e.kind === 'frame' && e.frame.command === 'get_messages');
     assert.ok(history?.kind === 'frame' && history.frame.data.messages.length === 2, 'its answer too');
@@ -871,6 +877,7 @@ describe('unread conversations', () => {
       github,
       delivery,
       bugbot,
+      schedule,
       setup,
       remote,
       token: TOKEN,
@@ -1909,6 +1916,63 @@ describe('GitHub', () => {
     const next = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 60_000 });
     assert.deepEqual(next.all(), bugbot.all());
     next.stop();
+  });
+});
+
+describe('scheduled prompts', () => {
+  /**
+   * The scheduled prompts once `done` holds of them.
+   * @param {(tasks: readonly import('../daemon/wire.js').ScheduledTask[]) => boolean} done
+   * @returns {Promise<readonly import('../daemon/wire.js').ScheduledTask[]>}
+   */
+  function scheduled(done) {
+    if (done(schedule.all())) return Promise.resolve(schedule.all());
+    return new Promise((resolve) => {
+      const off = schedule.subscribe((tasks) => {
+        if (!done(tasks)) return;
+        off();
+        resolve(tasks);
+      });
+    });
+  }
+
+  test('an agent schedules a prompt with its tool; when due it reaches the conversation, woken from its journal if it slept', async () => {
+    const id = await readySession();
+    await rpc(id, { type: 'prompt', message: 'schedule {"op":"add","in":"3s","prompt":"check the build"}' });
+    const [task] = await scheduled((tasks) => tasks.some((t) => t.target.session === id));
+    const meta = /** @type {SessionMeta} */ (hub.get(id)?.meta());
+    assert.deepEqual(task.target, { sessionFile: meta.sessionFile, session: id, cwd });
+    const answered = await logged((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'tool_execution_end' && e.frame.toolName === 'schedule');
+    assert.ok(answered.kind === 'frame' && answered.frame.isError === false && /^Scheduled \w+: it runs .*, in 3 s\./.test(answered.frame.result.content[0].text));
+
+    // Asleep when it comes due: it wakes from its journal, and the agent is sent the prompt.
+    await call({ method: 'DELETE', path: `/api/sessions/${id}` });
+    const delivered = await logged((e) => e.kind === 'sent' && e.command.type === 'prompt' && String(e.command.message).endsWith('check the build'));
+    assert.match(/** @type {any} */ (delivered).command.message, /^Scheduled prompt, set /);
+    assert.equal(hub.get(delivered.session)?.meta().resume, meta.sessionFile);
+    await scheduled((tasks) => !tasks.some((t) => t.id === task.id));
+    await call({ method: 'DELETE', path: `/api/sessions/${delivered.session}` });
+  });
+
+  test('a refused call reaches the agent as a failed tool call; the user edits and deletes what is scheduled', async () => {
+    const id = await readySession();
+    await rpc(id, { type: 'prompt', message: 'schedule {"op":"add","at":"tomorrow at nine","prompt":"x"}' });
+    const refused = await logged((e) => e.session === id && e.kind === 'frame' && e.frame.type === 'tool_execution_end' && e.frame.toolName === 'schedule');
+    assert.ok(refused.kind === 'frame' && refused.frame.isError === true);
+    assert.ok(!schedule.all().some((t) => t.target.session === id));
+
+    await rpc(id, { type: 'prompt', message: 'schedule {"op":"add","in":"1h","prompt":"later"}' });
+    const [task] = (await scheduled((tasks) => tasks.some((t) => t.target.session === id))).filter((t) => t.target.session === id);
+    const dueAt = Date.now() + 2 * 3_600_000;
+    const edited = await call({ method: 'PATCH', path: `/api/schedule/${task.id}`, body: { prompt: 'later still', dueAt } });
+    assert.equal(edited.status, 200);
+    assert.deepEqual([edited.json.prompt, edited.json.dueAt], ['later still', dueAt]);
+    assert.equal((await call({ method: 'PATCH', path: `/api/schedule/${task.id}`, body: { prompt: ' ' } })).status, 400);
+    assert.equal((await call({ method: 'PATCH', path: `/api/schedule/${task.id}`, body: { dueAt: Date.now() - 1 } })).status, 400);
+    assert.equal((await call({ method: 'DELETE', path: `/api/schedule/${task.id}` })).status, 204);
+    assert.equal((await call({ method: 'DELETE', path: `/api/schedule/${task.id}` })).status, 404);
+    assert.equal((await call({ method: 'PATCH', path: `/api/schedule/${task.id}`, body: { prompt: 'x' } })).status, 404);
+    await call({ method: 'DELETE', path: `/api/sessions/${id}` });
   });
 });
 

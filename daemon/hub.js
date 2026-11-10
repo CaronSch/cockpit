@@ -21,8 +21,9 @@
  * all their events.
  *
  * A rewind (`branch`) moves a session onto a new journal holding the conversation up to the
- * rewind; the one before keeps the path that was set aside. `onRewound` hears of that one
- * once the session reports its new journal, so it can be put away (archived: restorable), and
+ * rewind; the one before keeps the path that was set aside. `onRewound` hears of that one, and
+ * of the new one, once the session reports its new journal, so the old one can be put away
+ * (archived: restorable) and what follows the conversation by its journal can move with it; and
  * `onRewoundId` of the conversation's new id once omp reports it (what is kept under the old one
  * moves to it).
  *
@@ -30,12 +31,13 @@
  * it adds to its environment, which the daemon's settings change (adhd.js, browser.js) and omp
  * keeps for the life of the process. A session started otherwise goes to sleep as soon as it is
  * idle (when the settings change, when its turn ends, or at the next sweep), so the next message
- * wakes its conversation as an omp launched now would run it.
+ * wakes its conversation as an omp launched now would run it. Every omp is given the daemon's
+ * own tools (`hostTools`, omp-session.js), however it was launched.
  */
 import { randomBytes } from 'node:crypto';
 import { daemonNow } from './clock.js';
 import { IDLE_COMPACT, createIdleCompaction, followIdleCompaction, idleCompactionNow } from './idle-compaction.js';
-import { APPEND_SYSTEM_PROMPT, launchOmp } from './omp-session.js';
+import { APPEND_SYSTEM_PROMPT, NO_HOST_TOOLS, launchOmp } from './omp-session.js';
 import { SLEEP_AFTER_MS, sleepsNow } from './sleep.js';
 import { OMP_ID } from './unread.js';
 import { awaitsUser } from '../src/omp/activity.js';
@@ -44,7 +46,7 @@ import { applyEvent, conversationName, createTranscript, handsTurnBack } from '.
 import { runningWork } from '../src/omp/running-work.js';
 /** @import { SessionActivity, SessionEvent, SessionMeta } from './wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
-/** @import { LaunchWith, OmpSession, SessionEventBody } from './omp-session.js' */
+/** @import { HostTools, LaunchWith, OmpSession, SessionEventBody } from './omp-session.js' */
 /** @import { IdleCompaction, IdleCompactionOptions } from './idle-compaction.js' */
 /** @import { UnreadStore } from './unread.js' */
 
@@ -86,15 +88,15 @@ const sameActivity = (a, b) => a.working === b.working && a.asking === b.asking 
 /**
  * @param {{
  *   ompPath: string, unread: Pick<UnreadStore, 'awaited'>, now?: () => number, launch?: typeof launchOmp,
- *   sleepAfterMs?: number, idleCompaction?: IdleCompactionOptions & { on(): boolean } | null, onRewound?: (file: string) => void,
+ *   sleepAfterMs?: number, idleCompaction?: IdleCompactionOptions & { on(): boolean } | null, onRewound?: (file: string, next: string | null) => void,
  *   onRewoundId?: (from: string, to: string) => void, onTurnEnded?: (transcript: Transcript) => void,
- *   launchWith?: () => LaunchWith,
+ *   launchWith?: () => LaunchWith, hostTools?: HostTools,
  * }} options `idleCompaction`: compacts while `on()` (the user's setting); none when null.
  *   `onTurnEnded` hears each time a session's agent hands its turn back, with the session as its events tell it.
  *   `launchWith` is how an omp launched now runs.
  * @returns {Hub}
  */
-export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, launchWith = () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {} }) }) {
+export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, launchWith = () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {} }), hostTools = NO_HOST_TOOLS }) {
   const bootId = randomBytes(6).toString('hex');
   /** @type {SessionEvent[]} */
   let log = [];
@@ -131,7 +133,7 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
         seen.rewoundId = seen.transcript.meta?.ompId ?? null;
       } else if (event.kind === 'session') {
         if (seen.rewoundFrom && event.meta.sessionFile !== seen.rewoundFrom) {
-          onRewound(seen.rewoundFrom);
+          onRewound(seen.rewoundFrom, event.meta.sessionFile);
           seen.rewoundFrom = null;
         }
         if (seen.rewoundId && event.meta.ompId && event.meta.ompId !== seen.rewoundId) {
@@ -203,7 +205,7 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       activity.set(id, { transcript: createTranscript(), usedAt: now(), compaction: createIdleCompaction() });
       const how = launchWith();
       launchedWith.set(id, launchKey(how));
-      const session = launch({ id, cwd, resume, fork, ompPath, now, ...how, emit: (body) => emit(id, body) });
+      const session = launch({ id, cwd, resume, fork, ompPath, now, ...how, hostTools, emit: (body) => emit(id, body) });
       sessions.set(id, session);
       return session.meta();
     },

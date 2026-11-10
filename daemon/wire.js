@@ -87,6 +87,12 @@
  *                                      it is asleep, queued after the turn if its agent works (see
  *                                      `deliver.js`); 404 when no session holds it and it has no
  *                                      journal, 409 when it is archived
+ *   PATCH  /api/schedule/:id           { prompt?, dueAt? } → ScheduledTask: the user changed a scheduled
+ *                                      prompt (its text, its time in epoch ms, or both; it is no longer
+ *                                      missed); 400 for an empty prompt or a time past
+ *   DELETE /api/schedule/:id           → 204: the user deleted it; both 404 for one that is not
+ *                                      scheduled, 409 while it is being sent (see `schedule.js`; agents
+ *                                      schedule them with their `schedule` tool)
  *   GET    /api/github/pulls?cwd=dir, or ?repo=owner/name → PullList: the pull requests of the
  *                                      GitHub repository `dir` (as `cwd` above) is in, or of the one
  *                                      named, newest first, or why there are none to list (`gh`
@@ -114,9 +120,9 @@
  * Errors are `{ error: string }` with a 4xx/5xx status. The stream's SSE ids are
  * `<bootId>:<seq>`, so a reconnect resumes after the last event it saw; the first message
  * on every connection is a `hello` carrying the current boot id, the newest event's seq (the
- * events up to it that follow are a replay), session list, unread conversations, forks, settings, Bugbot watches, the
- * Setup window's login, UI version, awake sessions' activity and Phone access. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
- * `bugbot`, `login`, `activity` and `remote` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
+ * events up to it that follow are a replay), session list, unread conversations, forks, settings, Bugbot watches,
+ * scheduled prompts, the Setup window's login, UI version, awake sessions' activity and Phone access. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
+ * `bugbot`, `schedule`, `login`, `activity` and `remote` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
  * GET /api/history and GET /api/decisions/:ompId instead, and its `hello` carries the rest.
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
@@ -205,10 +211,11 @@
  * conversations with news their user has not read: when each became unread, by omp id.
  * `pinned` holds the pinned conversations' omp ids; `forks` every fork: the conversation it
  * came from and its title (see `forks.js`). `settings` are the daemon's (see `settings.js`).
- * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`); `login` the Setup window's
+ * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`); `schedule` the prompts agents
+ * scheduled (see `schedule.js`); `login` the Setup window's
  * `omp login`, null if none ran since the daemon started (see `setup.js`). `activity` holds
  * how every awake session is doing, by session id; `remote` how Phone access is (`remote.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState }} HelloEvent
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState }} HelloEvent
  */
 
 /**
@@ -250,9 +257,11 @@
 
 /** Sent to every page after a Bugbot watch started or changed, with all of them. @typedef {{ kind: 'bugbot', watches: BugbotWatch[] }} BugbotEvent */
 
+/** Sent to every page after a prompt was scheduled, changed, sent or deleted, with all of them. @typedef {{ kind: 'schedule', tasks: ScheduledTask[] }} ScheduleEvent */
+
 /** Sent to every page as the Setup window's `omp login` starts, prints, is answered or ends. @typedef {{ kind: 'login', login: LoginState | null }} LoginEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | LoginEvent | ActivityEvent | RemoteEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle
@@ -327,6 +336,14 @@
  * conversation), `timed-out` when it never did, or `failed` (`error` says why). `error` while
  * watching is the last poll's failure, retried. `at`: when it last changed, epoch milliseconds.
  * @typedef {{ id: string, repo: string, number: number, url: string, since: string, target: ConversationTarget, status: 'watching' | 'delivered' | 'timed-out' | 'failed', error: string | null, at: number }} BugbotWatch
+ */
+
+/**
+ * A prompt an agent scheduled for its own conversation (`target`, see `schedule.js`), to be sent
+ * at `dueAt`; `createdAt` is when it was scheduled (epoch milliseconds, both). `missedAt`: when it
+ * was first due, for one missed while the daemon was off or the Mac slept and moved to later;
+ * `error`: why its last delivery failed, retried at `dueAt`. Null when neither.
+ * @typedef {{ id: string, target: ConversationTarget, prompt: string, dueAt: number, createdAt: number, missedAt: number | null, error: string | null }} ScheduledTask
  */
 
 export {};

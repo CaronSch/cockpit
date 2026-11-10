@@ -48,8 +48,12 @@ Planned capabilities:
   launches each omp session as `omp --mode rpc-ui` in the chosen directory
   (`Bun.spawn`), owning those processes, with `--append-system-prompt` asking the
   agent for progress updates as it works, in Claude Code's wording, and telling it
-  what the window renders, inviting visuals (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has),
-  and with the `PI_BROWSER_*` variables the Agents’ browser setting picks (`daemon/browser.js`). omp is the `omp` on PATH unless `--omp`
+  what the window renders, inviting visuals, and to schedule a check rather than ask its user to
+  come back for it (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has),
+  and with the `PI_BROWSER_*` variables the Agents’ browser setting picks (`daemon/browser.js`).
+  Every omp is also given the daemon's own tools (omp's RPC host tools: `set_host_tools` as it is
+  set up, `host_tool_call` answered with `host_tool_result`; `HostTools` in
+  `daemon/omp-session.js`): today the `schedule` tool (`daemon/schedule.js`). omp is the `omp` on PATH unless `--omp`
   says otherwise. Prefer Bun's own APIs where they make the code smaller.
   The workbench is self-contained: it shows agents it launched and does not attach
   to sessions started in other terminals. Later it also samples process trees,
@@ -334,6 +338,31 @@ What runs today:
   unread** or **Mark as read**, **Pin to top** or **Unpin**, with Show and Archive /
   Restore. Pinned conversations come first, in the window's order, with a ★ (a row's ☆,
   shown on hover, pins it too).
+- Scheduled prompts and the Timeline window (the `timeline` widget). Every agent has a
+  `schedule` tool (`daemon/schedule.js`, given to omp as an RPC host tool): it sends its own
+  conversation a prompt later, at a time (`at`, this machine's time zone unless it carries an
+  offset) or after a while (`in`: `1h 30m`), and `list`s or `cancel`s what it scheduled there.
+  Its description tells the agent to use it when the user asks for something later and instead
+  of asking them to ping it (CI, a deploy, a review), and to ask (the `ask` tool) when a time the
+  user gave is unclear rather than guess. When one comes due the daemon sends it as `Scheduled
+  prompt, set <when>:` and the prompt (`daemon/deliver.js`: woken from its journal if asleep,
+  after the turn if the agent works), so it runs in whatever agent window shows that
+  conversation. One due while the daemon was off or the Mac slept (found over a minute late) is
+  missed: moved to ten minutes after the daemon found it, keeping when it was first due, so its
+  user can decide whether it is still wanted; a failed delivery is tried again as late, with its
+  reason kept; one for an archived conversation waits (missed once restored), and one whose
+  journal is gone is dropped. They are kept in `~/.cockpit/schedule.json`; every page hears them
+  (`hello`, `schedule` events). The Timeline window shows, left of now, every conversation not
+  archived by how recently it was active (in order, not to scale; the latest beside now), and
+  right of now the scheduled prompts, each where it runs on a log scale (`src/timeline/scale.js`:
+  the next hour spread out, the next month squeezed in), in lanes so none covers another, a stem
+  down to its time; a missed one is marked so. A label is the start of its conversation's name,
+  and pointing at one shows the whole (a popover over it). Dragged onto the grid, a label opens
+  its conversation as a Sessions row does; while one is dragged a bin shows below the timeline
+  (the drag controller's `target`), which archives the conversation (a past label) or deletes the
+  scheduled prompt (a future one, `DELETE /api/schedule/:id`). A click on a past label shows its
+  conversation; on a future one it edits its prompt and time in place (`PATCH
+  /api/schedule/:id`; saved, it is no longer missed).
 - Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
   deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
@@ -643,6 +672,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/sessions/running.js` — Conversations as the Sessions window lists them, kept free of the DOM so they can be tested: every journal with the session holding it while one is awake, how each is doing, and what an agent window is given to show one.
 - `src/sessions/snippet.js` — The passage a search matched, as a line of DOM, shared by the Sessions window and Spotlight.
 - `src/state/atom.js` — Tiny observable cell: get/set/subscribe.
+- `src/timeline/scale.js` — The timeline window's arithmetic, kept free of the DOM so it can be tested: where a moment in the future sits on its log scale (the next hour spread out, next month squeezed in), the times its axis marks, how labels share lanes without covering one another, and how long until a scheduled prompt runs, and when, said briefly (the daemon's schedule tool says it the same way).
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
 - `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key, Shift+F10 or a ⋯ button opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
@@ -665,6 +695,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
 - `src/widgets/sessions.js` — omp conversations, one list, searchable and sortable.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
+- `src/widgets/timeline.js` — A timeline of the agents: on its left, conversations by how recently they were active (in order, not to scale), the latest beside now; on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js): the next hour spread out, the next month squeezed in.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
@@ -688,6 +719,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
 - `daemon/remote.js` — Phone access (settings.js `remote`): while it is on, the daemon also serves the owner's own devices on their tailnet, through a second listener bound to the Mac's Tailscale IPv4 with the same routes as loopback (server.js), behind a whois gate.
+- `daemon/schedule.js` — Scheduled prompts: an agent sends its own conversation a prompt later, at a set time or after a while, through the `schedule` tool the daemon gives every omp it launches (omp's RPC host tools: omp-session.js `HostTools`).
 - `daemon/scratchpad.js` — Scratchpads: plain Markdown files the daemon keeps, one per pad, with pasted screenshots and files stored beside them.
 - `daemon/search.js` — Ranked search over conversations: a question in plain words ("in which session did we find that Binance bundle exclusivity dropped…") finds the conversations that talk about it.
 - `daemon/server.js` — HTTP face of the daemon: the workbench's static files, the JSON API and the event stream (routes in `wire.js`), the same on each listener: loopback, and the remote one Phone access opens on the tailnet (remote.js), whose whois gate runs before anything else; then the guard of the listener's names (guard.js) on all of them.
@@ -706,6 +738,7 @@ particular, move a capability into "Current state" when it ships.
 - `pane` — Pane: An empty window
 - `omp` — Agent: Chat with a coding agent in a directory
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
+- `timeline` — Timeline: Agents by when they were last active, and the prompts they scheduled: drag one out to open it, or onto the bin to archive or delete
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
 - `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
 - `file` — File: Read and edit a text file (Markdown, CSV, JSON, text, code); a path in an agent’s reply opens one with a click
@@ -724,6 +757,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/remote.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/phone-access.spec.js`, `e2e/phone.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/setup.spec.js`, `e2e/sleep.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/remote.test.js`, `tests/schedule.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/settings.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/timeline-scale.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/phone-access.spec.js`, `e2e/phone.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/setup.spec.js`, `e2e/sleep.spec.js`, `e2e/timeline.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
 
 <!-- END GENERATED -->

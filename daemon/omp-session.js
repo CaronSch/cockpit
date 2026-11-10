@@ -10,6 +10,9 @@
  * opening request, which a fork shares with its source; forks.js names it from its own first
  * prompt instead. A bare continue (`.`, omp/message.js) names nothing: the title waits for a
  * prompt that says something.
+ *
+ * The daemon gives the agent tools of its own (omp's RPC host tools, `HostTools`: the
+ * `schedule` tool, schedule.js), which omp asks the daemon to run when the agent calls one.
  */
 import { readFileSync } from 'node:fs';
 import { conversationOf } from './conversation.js';
@@ -38,9 +41,11 @@ export const SETUP_COMMANDS = Object.freeze([
  * Appended to every session's system prompt (`--append-system-prompt`): an agent window shows
  * the agent's text, while its thinking and tool calls sit in collapsed cards or are hidden, so
  * the agent is asked to say what it is doing as it goes (Claude Code's own wording), and told
- * what the window can show (diagrams, charts, images). It takes the place of any APPEND_SYSTEM.md the
- * user has: omp reads one or the other. With "I have ADHD" on, that project's rules follow it
- * (adhd.js); they give way to it where they disagree (their "a rule fights the harness").
+ * what the window can show (diagrams, charts, images), and to schedule a check it would
+ * otherwise ask its user to come back for (the `schedule` tool: schedule.js). It takes the place
+ * of any APPEND_SYSTEM.md the user has: omp reads one or the other. With "I have ADHD" on, that
+ * project's rules follow it (adhd.js); they give way to it where they disagree (their "a rule
+ * fights the harness").
  */
 export const APPEND_SYSTEM_PROMPT =
   "Your text output is what the user reads between tool calls; they usually can't see your thinking or the raw tool results. Write it for a teammate who stepped away and is catching up, not for a log file: they don't know the codenames or shorthand you created along the way, and they didn't watch your process unfold. Before your first tool call, say in a sentence what you're about to do; while working, give brief updates when you find something load-bearing or change direction.\n\n" +
@@ -48,7 +53,8 @@ export const APPEND_SYSTEM_PROMPT =
   '- Diagrams (flows, sequences, architecture, states, timelines): a ```mermaid block in your reply. Draw flowcharts left to right (flowchart LR) and keep node labels to a few words; put details in the text around the diagram. Put every node or link label holding punctuation (. / = : and the like) in double quotes: A["/sign-in/create"], A -. "tag v1.1.72" .-> B. Keep colons out of timeline times (11h50, not 11:50).\n' +
   '- Charts of numbers: a ```vega-lite block holding a Vega-Lite JSON spec, its data inline ("data": {"values": [...]}); for many points, write them to a JSON or CSV file and use "data": {"url": "/absolute/path.json"}.\n' +
   "- Anything else (screenshots, plots you render yourself): an image file, shown with ![what it shows](/absolute/path/to/image.png) (png, jpeg, gif, webp or avif).\n" +
-  "Everything shown must be on this machine: remote URLs are not loaded.";
+  "Everything shown must be on this machine: remote URLs are not loaded.\n\n" +
+  "When something has to happen later (CI to finish, a deploy to settle, a review to come in, a long job), schedule the check yourself with the schedule tool rather than asking the user to ping you or come back.";
 
 /** Successful responses after which omp is logged in to other providers. */
 const LOGIN_CHANGING_COMMANDS = new Set(['login', 'logout']);
@@ -92,6 +98,21 @@ export class SessionNotRunning extends Error {}
  */
 
 /**
+ * What a tool the daemon runs for omp answers the agent: `text`, `details` for whoever reads the
+ * tool's result, `isError` when the call is refused.
+ * @typedef {{ text: string, details?: unknown, isError?: boolean }} HostToolResult
+ */
+/**
+ * Tools the daemon gives an omp (omp's RPC host tools): `tools` are their definitions, sent with
+ * `set_host_tools` as the session is set up, and the agent calls them as its own; omp then asks
+ * the daemon to run one (`host_tool_call`), and `call` answers, for the session as it is then.
+ * @typedef {{ tools: readonly Record<string, unknown>[], call(meta: SessionMeta, name: string, args: Record<string, unknown>): Promise<HostToolResult> }} HostTools
+ */
+
+/** @type {HostTools} */
+export const NO_HOST_TOOLS = Object.freeze({ tools: [], call: () => Promise.resolve({ text: 'no such tool', isError: true }) });
+
+/**
  * How an omp is launched, for the life of the process: `appendSystemPrompt` is appended to its
  * system prompt (the workbench's own, with whatever the daemon's settings add: adhd.js), and
  * `env` is added to the daemon's environment for it (browser.js).
@@ -100,14 +121,15 @@ export class SessionNotRunning extends Error {}
 
 /**
  * `resume` continues a journal; `fork` starts a new one from a copy of it (omp's `--fork`
- * only reads the source). At most one of them is set.
+ * only reads the source). At most one of them is set. `hostTools` are the daemon's tools the
+ * agent may call.
  * @param {{
  *   id: string, cwd: string, resume: string | null, fork: string | null, ompPath: string,
- *   emit: (body: SessionEventBody) => void, now?: () => number,
+ *   emit: (body: SessionEventBody) => void, now?: () => number, hostTools?: HostTools,
  * } & Partial<LaunchWith>} options
  * @returns {OmpSession}
  */
-export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now, appendSystemPrompt = APPEND_SYSTEM_PROMPT, env = {} }) {
+export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now, appendSystemPrompt = APPEND_SYSTEM_PROMPT, env = {}, hostTools = NO_HOST_TOOLS }) {
   const startedAt = now();
   /** @type {SessionMeta} */
   let meta = { id, cwd, resume, fork, sessionFile: resume, status: 'starting', pid: null, exitCode: null, error: null, startedAt, ompId: null };
@@ -190,6 +212,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     if (frame.type === 'response' && frame.id === historyId && frame.success === true) withWholeHistory(frame);
     emit({ kind: 'frame', frame });
     if (frame.type === 'ready' && meta.status === 'starting') void setup();
+    if (frame.type === 'host_tool_call' && typeof frame.id === 'string') void runHostTool(frame);
     // Every window shows the session's state from the log: the daemon asks for it again
     // whenever it changes, once for all of them.
     if (meta.status === 'ready' && changesState(frame)) send({ type: 'get_state' }).response.catch(() => {});
@@ -258,10 +281,30 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     return { id: frame.id, response: response.promise };
   }
 
+  /**
+   * Runs the daemon's tool the agent called, and gives omp its answer; a tool that throws is a
+   * refused call, its message the agent's to read.
+   * @param {Record<string, any>} frame omp's `host_tool_call`
+   */
+  async function runHostTool(frame) {
+    /** @type {HostToolResult} */
+    let result;
+    try {
+      const args = frame.arguments && typeof frame.arguments === 'object' ? frame.arguments : {};
+      result = await hostTools.call(meta, String(frame.toolName), args);
+    } catch (err) {
+      result = { text: `${frame.toolName} failed: ${err instanceof Error ? err.message : err}`, isError: true };
+    }
+    if (finished) return;
+    const answer = { content: [{ type: 'text', text: result.text }], ...(result.details === undefined ? {} : { details: result.details }) };
+    writeFrame({ type: 'host_tool_result', id: frame.id, result: answer, ...(result.isError ? { isError: true } : {}) });
+  }
+
   async function setup() {
     // A refused setup command leaves its failure in the log; the session still works on
     // the protocol omp does support, so it becomes ready either way.
-    const commands = resume || fork ? [...SETUP_COMMANDS, HISTORY_COMMAND] : SETUP_COMMANDS;
+    const tools = hostTools.tools.length ? [{ type: 'set_host_tools', tools: hostTools.tools }] : [];
+    const commands = [...SETUP_COMMANDS, ...tools, ...(resume || fork ? [HISTORY_COMMAND] : [])];
     for (const command of commands) {
       const sent = send(command);
       if (command === HISTORY_COMMAND) historyId = sent.id;
