@@ -1082,7 +1082,8 @@
   padding: var(--space-1) var(--space-2) 0;
 }
 
-.omp-running {
+.omp-running,
+.omp-scheduled {
   flex: none;
   display: flex;
   flex-wrap: wrap;
@@ -1093,6 +1094,25 @@
 
 .omp-chip.is-running {
   padding-right: 6px;
+}
+
+/* A prompt scheduled for this conversation: when it runs, then the prompt. */
+.omp-chip.is-scheduled {
+  max-width: min(100%, 48ch);
+  padding-right: 8px;
+}
+
+.omp-chip.is-scheduled .omp-chip-kind {
+  flex: none;
+  white-space: nowrap;
+}
+
+.omp-chip.is-scheduled.is-missed {
+  border-color: var(--color-accent);
+}
+
+.omp-chip.is-scheduled.is-failed {
+  border-color: var(--color-danger);
 }
 
 .omp-chip-time {

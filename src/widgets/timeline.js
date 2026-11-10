@@ -1,15 +1,18 @@
 /**
- * A timeline of the agents: on its left, conversations by how recently they were active (in
- * order, not to scale), the latest beside now; on its right, the prompts agents scheduled for
- * their conversations (daemon/schedule.js), each where it runs, on a log scale
- * (timeline/scale.js): the next hour spread out, the next month squeezed in.
+ * A timeline of the agents: on its left, idle conversations by how recently they were active (in
+ * order, not to scale), the latest beside now; at now, those whose agents are busy (starting,
+ * working, asking their user something, or running work in the background); on its right, the
+ * prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a
+ * log scale (timeline/scale.js) that reaches as far as the furthest one: the next hour spread
+ * out, the next month squeezed in. Laid out for a wide, short window: everything on one axis
+ * along its bottom, labels of scheduled prompts above it in as many lanes as fit.
  *
- * A label is the start of its conversation's name; pointing at it shows the whole. Dragged onto
- * the grid it opens the conversation in an agent window, as a Sessions row does; dragged onto the
- * bin that appears below the timeline meanwhile, it archives the conversation (a past label) or
- * deletes the scheduled prompt (a future one). A click on a past label shows its conversation in
- * the agent window this screen used last; on a future one it edits the prompt and its time, in
- * place.
+ * A label is the start of its conversation's name; pointing at it shows the whole. One with news
+ * its user has not read (a scheduled prompt that ran, say) is ringed in blue until it is read,
+ * here or anywhere. Dragged onto the grid a label opens the conversation in an agent window, as a
+ * Sessions row does; dragged onto the bin that appears meanwhile, it archives the conversation or
+ * deletes the scheduled prompt (a future one). A click on a conversation shows it in the agent
+ * window this screen used last; on a scheduled prompt it edits the prompt and its time, in place.
  *
  * Archived conversations are not shown, nor the prompts scheduled for them, which wait until the
  * conversation is restored. A prompt missed while the daemon was off or the Mac slept is marked
@@ -20,18 +23,17 @@ import { button, el } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { displayTitle, relativeTime, sortSessions } from '../sessions/order.js';
-import { listConversations, runningState, showConversation } from '../sessions/running.js';
-import { duration, futureSpan, lanes, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
+import { STATE_LABELS, listConversations, runningState, showConversation } from '../sessions/running.js';
+import { duration, futureSpan, pack, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { PastSession, ScheduledTask } from '../../daemon/wire.js' */
-/** @import { Listed } from '../sessions/running.js' */
+/** @import { Listed, RunningState } from '../sessions/running.js' */
 
 /** How often the future side is redrawn as now moves on. */
 const CLOCK_MS = 30_000;
 /** Space between two labels in one lane of the future side, and between lanes. */
 const GAP_PX = 6;
-const HINT = 'Click a scheduled prompt to edit it · drag a label onto the grid to open it';
 
 export default {
   type: 'timeline',
@@ -51,10 +53,12 @@ function createTimeline(body, ctx, daemon) {
   const track = el('div', 'timeline-track');
   const past = el('div', 'timeline-past');
   const pastList = el('ol', 'timeline-list timeline-past-list');
-  pastList.setAttribute('aria-label', 'Recently active conversations, the latest last');
+  pastList.setAttribute('aria-label', 'Idle conversations by when they were last active, the latest last');
   past.append(pastList);
   const now = el('div', 'timeline-now');
-  now.append(el('span', 'timeline-now-label', 'now'));
+  const nowList = el('ol', 'timeline-list timeline-now-list');
+  nowList.setAttribute('aria-label', 'Conversations whose agents are busy now');
+  now.append(nowList, el('span', 'timeline-now-label', 'now'));
   const future = el('div', 'timeline-future');
   const axis = el('div', 'timeline-axis');
   const futureList = el('ol', 'timeline-list timeline-future-list');
@@ -62,19 +66,18 @@ function createTimeline(body, ctx, daemon) {
   const nothing = el('p', 'timeline-empty', 'Nothing scheduled');
   future.append(axis, futureList, nothing);
   track.append(past, now, future);
-  const foot = el('div', 'timeline-foot');
   const bin = el('div', 'timeline-bin');
   bin.setAttribute('aria-hidden', 'true');
-  const status = el('p', 'timeline-status', HINT);
+  // Only when something went wrong: what a label does says its tooltip.
+  const status = el('p', 'timeline-status');
   status.setAttribute('aria-live', 'polite');
-  foot.append(bin, status);
   // The whole name over a label pointed at, and the editor of a scheduled prompt: both in the
   // top layer (popovers), so neither is cut off by the timeline's edges.
   const face = el('div', 'timeline-face');
   face.popover = 'manual';
   face.setAttribute('aria-hidden', 'true');
   const editor = createEditor();
-  root.append(track, foot, face, editor.el);
+  root.append(track, status, bin, face, editor.el);
   body.append(root);
 
   /** @type {PastSession[]} */
@@ -84,8 +87,12 @@ function createTimeline(body, ctx, daemon) {
   /** Why the last archive or delete failed, until the next one. @type {string | null} */
   let actionError = null;
   let requestSeq = 0;
-  /** Past labels by conversation key, future ones by scheduled prompt id: each made once, then kept up to date. @type {Map<string, HTMLElement>} */
-  const pastNodes = new Map();
+  /**
+   * Conversations' labels by key (one keeps its label as it moves between the past and now),
+   * scheduled prompts' by id: each made once, then kept up to date.
+   * @type {Map<string, HTMLElement>}
+   */
+  const conversationNodes = new Map();
   /** @type {Map<string, HTMLElement>} */
   const futureNodes = new Map();
   /** What each label shows, as last drawn: its conversation, and for a future one its prompt. @type {Map<HTMLElement, { conversation: Listed, task: ScheduledTask | null }>} */
@@ -129,6 +136,17 @@ function createTimeline(body, ctx, daemon) {
   const stateOf = (c) => (c.meta ? runningState(daemon.activity(c.meta.id), c.meta, isUnread(c)) : null);
   /** An awake session with no listed journal: a new one nothing was sent to. @param {Listed} c */
   const isEmpty = (c) => c.meta !== null && !sessions.some((s) => s.file === c.file);
+  /** Work an awake conversation's agent runs in the background (shells, subagents). @param {Listed} c */
+  const workOf = (c) => (c.meta ? (daemon.activity(c.meta.id)?.work ?? 0) : 0);
+  /**
+   * Whether its agent is busy, so it is at now: starting, working, asking its user something, or
+   * with work running in the background after its turn.
+   * @param {Listed} c
+   */
+  const isBusy = (c) => {
+    const state = stateOf(c);
+    return state === 'starting' || state === 'working' || state === 'asking' || workOf(c) > 0;
+  };
 
   /**
    * The conversation a prompt is scheduled for, if it is listed: by its journal, else (a new one
@@ -175,25 +193,45 @@ function createTimeline(body, ctx, daemon) {
     put(chip, 'title', title);
   }
 
-  /** @param {Listed[]} conversations @param {number} at */
-  function drawPast(conversations, at) {
+  /**
+   * The conversations: idle ones in the past, the least recently active first; busy ones at now,
+   * the one woken first first (so none moves as its agent writes).
+   * @param {Listed[]} conversations @param {number} at
+   */
+  function drawConversations(conversations, at) {
+    const busy = conversations.filter(isBusy).sort((a, b) => (a.meta?.startedAt ?? 0) - (b.meta?.startedAt ?? 0));
+    const busyOnes = new Set(busy);
+    const idle = conversations.filter((c) => !busyOnes.has(c));
     const live = new Set();
-    conversations.forEach((c, i) => {
-      live.add(c.key);
-      let chip = pastNodes.get(c.key);
-      if (!chip) pastNodes.set(c.key, (chip = newLabel(false)));
-      paint(chip, c, 'is-past', `${nameOf(c)}\n${c.cwd ?? ''}\nLast active ${relativeTime(c.modifiedAt, at)}\nClick to show it; drag it onto the grid to open it, or onto Archive below`);
-      shown.set(chip, { conversation: c, task: null });
-      if (pastList.children[i] !== chip) pastList.insertBefore(chip, pastList.children[i] ?? null);
+    /**
+     * Puts `cs` in `list`, in order. A label in the other list is moved: the past is drawn first,
+     * then now, so one moving either way is where it belongs by the end.
+     * @param {HTMLElement} list @param {Listed[]} cs @param {string} where @param {(c: Listed) => string} doing
+     */
+    const place = (list, cs, where, doing) =>
+      cs.forEach((c, i) => {
+        live.add(c.key);
+        let chip = conversationNodes.get(c.key);
+        if (!chip) conversationNodes.set(c.key, (chip = newLabel(false)));
+        paint(chip, c, where, `${nameOf(c)}\n${c.cwd ?? ''}\n${doing(c)}\nClick to show it; drag it onto the grid to open it, or onto Archive`);
+        shown.set(chip, { conversation: c, task: null });
+        if (list.children[i] !== chip) list.insertBefore(chip, list.children[i] ?? null);
+      });
+    place(pastList, idle, 'is-past', (c) => `Last active ${relativeTime(c.modifiedAt, at)}`);
+    place(nowList, busy, 'is-now', (c) => {
+      const state = /** @type {RunningState} */ (stateOf(c));
+      const work = workOf(c);
+      return state === 'idle' || state === 'done' ? `${work} running in the background` : STATE_LABELS[state];
     });
-    for (const [key, chip] of pastNodes) {
+    for (const [key, chip] of conversationNodes) {
       if (live.has(key)) continue;
       chip.remove();
-      pastNodes.delete(key);
+      conversationNodes.delete(key);
     }
+    now.classList.toggle('is-busy', busy.length > 0);
     // The latest stays beside now, unless the user scrolled back to look at older ones; a
     // conversation newly the latest is shown there either way.
-    const latest = conversations.at(-1)?.key ?? null;
+    const latest = idle.at(-1)?.key ?? null;
     if (followNow || latest !== shownLatest) past.scrollLeft = past.scrollWidth;
     shownLatest = latest;
   }
@@ -208,15 +246,6 @@ function createTimeline(body, ctx, daemon) {
       })
       .sort((a, b) => a.task.dueAt - b.task.dueAt);
     const width = future.clientWidth;
-    const span = futureSpan(Math.max(0, ...tasks.map(({ task }) => task.dueAt - at)));
-    axis.replaceChildren(
-      ...ticks(span, width).map((t) => {
-        const tick = el('span', 'timeline-tick', t.label);
-        tick.style.left = `${t.x}px`;
-        return tick;
-      }),
-    );
-    nothing.hidden = tasks.length > 0;
 
     const live = new Set();
     tasks.forEach(({ task, conversation }, i) => {
@@ -231,7 +260,7 @@ function createTimeline(body, ctx, daemon) {
         '',
         task.prompt.length > 400 ? `${task.prompt.slice(0, 399)}…` : task.prompt,
         '',
-        'Click to edit; drag it onto the grid to open its conversation, or onto Delete below',
+        'Click to edit; drag it onto the grid to open its conversation, or onto Delete',
       ].join('\n');
       paint(chip, conversation, `is-future${task.missedAt === null ? '' : ' is-missed'}${task.error ? ' is-failed' : ''}`, title);
       const when = whenLabel(task.dueAt, at);
@@ -245,6 +274,20 @@ function createTimeline(body, ctx, daemon) {
       futureNodes.delete(id);
     }
 
+    // The scale reaches past the furthest prompt, however far, by as much as its label needs to
+    // start at its time.
+    const furthest = tasks.at(-1);
+    const room = furthest && width > 0 ? (/** @type {HTMLElement} */ (futureNodes.get(furthest.task.id)).offsetWidth + GAP_PX) / width : 0;
+    const span = futureSpan(furthest ? furthest.task.dueAt - at : 0, room);
+    axis.replaceChildren(
+      ...ticks(span, width).map((t) => {
+        const tick = el('span', 'timeline-tick', t.label);
+        tick.style.left = `${t.x}px`;
+        return tick;
+      }),
+    );
+    nothing.hidden = tasks.length > 0;
+
     // Each label starts at its time, or as near as it fits; a stem joins it to its time on the axis.
     const placed = tasks.map(({ task }) => {
       const node = /** @type {HTMLElement} */ (futureNodes.get(task.id));
@@ -252,13 +295,25 @@ function createTimeline(body, ctx, daemon) {
       const w = node.offsetWidth;
       return { node, x, left: Math.max(0, Math.min(x, width - w)), width: w, height: node.offsetHeight };
     });
-    const lane = lanes(placed.map((p) => ({ x: p.left, width: p.width })), GAP_PX);
-    root.style.setProperty('--timeline-lanes', String(Math.max(1, ...lane.map((l) => l + 1))));
+    const boxes = placed.map((p) => ({ x: p.left, width: p.width }));
+    let packed = pack(boxes, GAP_PX);
+    const needed = Math.max(1, ...packed.map((p) => p.lane + 1));
+    root.style.setProperty('--timeline-lanes', String(needed));
+    // As many lanes as the window is tall enough for (the track grows to `needed`, up to the
+    // window's height); past that, a label goes on past the one in the lane free soonest, its
+    // stem bent back along the axis to its time.
+    const tall = placed[0]?.height ?? 0;
+    const fits = tall ? Math.max(1, Math.floor((futureList.clientHeight + GAP_PX) / (tall + GAP_PX))) : needed;
+    if (needed > fits) packed = pack(boxes, GAP_PX, fits, width);
     placed.forEach((p, i) => {
-      const rise = lane[i] * (p.height + GAP_PX);
-      p.node.style.left = `${p.left}px`;
+      const { lane, x: left } = packed[i];
+      const rise = lane * (p.height + GAP_PX);
+      p.node.style.left = `${left}px`;
       p.node.style.bottom = `${rise}px`;
-      p.node.style.setProperty('--stem-x', `${p.x - p.left}px`);
+      // Lower lanes over higher ones' stems.
+      p.node.style.zIndex = String(needed - lane);
+      p.node.style.setProperty('--stem-x', `${Math.max(0, p.x - left)}px`);
+      p.node.style.setProperty('--stem-w', `${Math.max(0, left - p.x)}px`);
       p.node.style.setProperty('--stem-h', `${rise + GAP_PX}px`);
     });
     return tasks.length;
@@ -268,13 +323,12 @@ function createTimeline(body, ctx, daemon) {
     const at = Date.now();
     const conversations = listed();
     shown = new Map();
-    drawPast(conversations, at);
+    drawConversations(conversations, at);
     const scheduled = drawFuture(conversations, at);
     // A label pointed at keeps its name shown, where it is now; one drawn anew loses it.
     if (faceFor?.isConnected) showFace(faceFor);
     else hideFace();
-    status.textContent = actionError ?? error ?? HINT;
-    status.classList.toggle('is-error', Boolean(actionError ?? error));
+    status.textContent = actionError ?? error ?? '';
     ctx.setLabel(scheduled ? `${scheduled} scheduled` : null);
     if (editor.editing && !daemon.schedule().some((t) => t.id === editor.editing)) editor.close();
   }
@@ -285,11 +339,13 @@ function createTimeline(body, ctx, daemon) {
 
   /** The label whose whole name shows over it. @type {HTMLElement | null} */
   let faceFor = null;
-  /** Shows the whole name of `chip` over it. @param {HTMLElement} chip */
+  /** Shows the whole name of `chip` over it, and for a scheduled prompt when it runs, under it, as the label has it. @param {HTMLElement} chip */
   function showFace(chip) {
     faceFor = chip;
     const box = chip.getBoundingClientRect();
-    face.textContent = chip.dataset.name ?? '';
+    const when = chip.querySelector('.timeline-when')?.textContent ?? '';
+    face.replaceChildren(el('span', 'timeline-face-name', chip.dataset.name ?? ''), ...(when ? [el('span', 'timeline-face-when', when)] : []));
+    face.classList.toggle('is-future', when !== '');
     face.style.left = `${box.left}px`;
     face.style.top = `${box.top}px`;
     face.style.minHeight = `${box.height}px`;

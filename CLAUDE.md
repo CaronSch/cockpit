@@ -207,7 +207,9 @@ What runs today:
   and subagents running now with how long each has run (`omp/running-work.js`): the
   calls the turn waits on, and the background jobs omp handed them off to (a
   result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`), which
-  run on after the turn and keep the session awake; Sessions counts them per row. A Markdown table in a reply has a Copy button (on
+  run on after the turn and keep the session awake; Sessions counts them per row. A Scheduled
+  line under it lists the prompts scheduled for the conversation (its agent's `schedule` tool,
+  below), each with when it runs, the whole prompt on hover; a missed one says so. A Markdown table in a reply has a Copy button (on
   hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
   (not its language label), pinned to its corner while long lines scroll. Selected
   reply text can be commented on (the comment goes quoted with the next prompt)
@@ -347,22 +349,29 @@ What runs today:
   user gave is unclear rather than guess. When one comes due the daemon sends it as `Scheduled
   prompt, set <when>:` and the prompt (`daemon/deliver.js`: woken from its journal if asleep,
   after the turn if the agent works), so it runs in whatever agent window shows that
-  conversation. One due while the daemon was off or the Mac slept (found over a minute late) is
+  conversation; until then that window's Scheduled line shows it. One due while the daemon was off or the Mac slept (found over a minute late) is
   missed: moved to ten minutes after the daemon found it, keeping when it was first due, so its
   user can decide whether it is still wanted; a failed delivery is tried again as late, with its
   reason kept; one for an archived conversation waits (missed once restored), and one whose
   journal is gone is dropped. They are kept in `~/.cockpit/schedule.json`; every page hears them
-  (`hello`, `schedule` events). The Timeline window shows, left of now, every conversation not
-  archived by how recently it was active (in order, not to scale; the latest beside now), and
-  right of now the scheduled prompts, each where it runs on a log scale (`src/timeline/scale.js`:
-  the next hour spread out, the next month squeezed in), in lanes so none covers another, a stem
-  down to its time; a missed one is marked so. A label is the start of its conversation's name,
-  and pointing at one shows the whole (a popover over it). Dragged onto the grid, a label opens
-  its conversation as a Sessions row does; while one is dragged a bin shows below the timeline
-  (the drag controller's `target`), which archives the conversation (a past label) or deletes the
-  scheduled prompt (a future one, `DELETE /api/schedule/:id`). A click on a past label shows its
-  conversation; on a future one it edits its prompt and time in place (`PATCH
-  /api/schedule/:id`; saved, it is no longer missed).
+  (`hello`, `schedule` events). The Timeline window is laid out for a wide, short window: one
+  axis along its bottom. Left of now, every idle conversation not archived, by how recently it
+  was active (in order, not to scale; the latest beside now; a wheel scrolls back, older ones
+  fading out at the edge); at now, a band of those whose agents are busy (starting, working,
+  asking, or with work running in the background), the line alone while none is; right of now
+  the scheduled prompts, each where it runs on a log scale (`src/timeline/scale.js`: the next
+  hour spread out, the next month squeezed in) that reaches past the furthest, however far, by
+  as much as its label needs to start at its time. Each label there says the conversation and,
+  under it, when; they stack in as many lanes as the window is tall enough for, a stem down to
+  their time, and past that one goes on beside the one before it, its stem bent back along the
+  axis; a missed one is marked so. A label is the start of its conversation's name, and pointing
+  at one shows the whole (a popover over it); a conversation with news its user has not read (a
+  scheduled prompt that ran, say) is ringed in blue, as an unread window is, until it is read
+  anywhere. Dragged onto the grid, a label opens its conversation as a Sessions row does; while
+  one is dragged a bin shows over the axis (the drag controller's `target`), which archives the
+  conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a
+  conversation shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
+  /api/schedule/:id`; saved, it is no longer missed). Only a failure is written under the axis.
 - Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
   deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
@@ -672,7 +681,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/sessions/running.js` — Conversations as the Sessions window lists them, kept free of the DOM so they can be tested: every journal with the session holding it while one is awake, how each is doing, and what an agent window is given to show one.
 - `src/sessions/snippet.js` — The passage a search matched, as a line of DOM, shared by the Sessions window and Spotlight.
 - `src/state/atom.js` — Tiny observable cell: get/set/subscribe.
-- `src/timeline/scale.js` — The timeline window's arithmetic, kept free of the DOM so it can be tested: where a moment in the future sits on its log scale (the next hour spread out, next month squeezed in), the times its axis marks, how labels share lanes without covering one another, and how long until a scheduled prompt runs, and when, said briefly (the daemon's schedule tool says it the same way).
+- `src/timeline/scale.js` — The timeline window's arithmetic, kept free of the DOM so it can be tested: where a moment in the future sits on its log scale (the next hour spread out, next month squeezed in), how far ahead the scale reaches, the times its axis marks, how labels share lanes without covering one another, and how long until a scheduled prompt runs, and when, said briefly (the daemon's schedule tool says it the same way).
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
 - `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key, Shift+F10 or a ⋯ button opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
@@ -695,7 +704,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
 - `src/widgets/sessions.js` — omp conversations, one list, searchable and sortable.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
-- `src/widgets/timeline.js` — A timeline of the agents: on its left, conversations by how recently they were active (in order, not to scale), the latest beside now; on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js): the next hour spread out, the next month squeezed in.
+- `src/widgets/timeline.js` — A timeline of the agents: on its left, idle conversations by how recently they were active (in order, not to scale), the latest beside now; at now, those whose agents are busy (starting, working, asking their user something, or running work in the background); on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js) that reaches as far as the furthest one: the next hour spread out, the next month squeezed in.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
