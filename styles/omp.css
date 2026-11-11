@@ -78,7 +78,6 @@
 }
 
 /* ── Setup / status screens ─────────────────────────── */
-.omp-center,
 .omp-setup {
   display: flex;
   flex-direction: column;
@@ -89,8 +88,28 @@
   width: 100%;
 }
 
+/* A few lines saying what the window waits on (connecting, forking) or why it cannot go on,
+   in the middle of the window, as the drop hint of an empty grid is. */
+.omp-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: auto;
+  padding: var(--space-4);
+  max-width: 32rem;
+  text-align: center;
+}
+
 .omp-center p {
   margin: 0;
+}
+
+/* What it waits on, after the spinner the agent shows while it works. */
+.omp-waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .omp-setup-title {

@@ -309,7 +309,9 @@ function createPane(body, ctx, daemon) {
     } else if (status === 'down') {
       box.append(el('p', 'omp-error', 'Daemon not reachable.'), el('p', 'omp-muted', 'Start it with `bun start`; this pane reconnects by itself.'));
     } else {
-      box.append(el('p', 'omp-muted', 'Connecting to the daemon…'));
+      const waiting = el('p', 'omp-muted omp-waiting');
+      waiting.append(el('span', 'omp-spin'), 'Connecting…');
+      box.append(waiting);
     }
     return [box];
   }
