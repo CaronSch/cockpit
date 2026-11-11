@@ -269,8 +269,15 @@ function createScratchpadWindow(body, ctx, daemon) {
     event.preventDefault();
     void addFiles(files, Number(area.dataset.index), /** @type {HTMLTextAreaElement} */ (area).selectionStart);
   });
+  // Where the last press began: a drag that selects text and is let go below it ends in a click
+  // on the pad itself, which must not move the caret away from the selection.
+  let pressedOnPad = false;
+  doc.addEventListener('pointerdown', (event) => {
+    pressedOnPad = event.target === doc;
+  });
   doc.addEventListener('click', (event) => {
     if (event.target === doc) {
+      if (!pressedOnPad) return;
       // A click below the last block types at the end, as in any editor.
       const last = textAreas().at(-1);
       last?.focus();
