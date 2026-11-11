@@ -1473,7 +1473,6 @@ function createPane(body, ctx, daemon) {
       if (key === runningKey) return;
       runningKey = key;
       running.replaceChildren(
-        ...(work.length ? [el('span', 'omp-label', 'Running')] : []),
         ...work.map((w) => {
           const c = el('span', `omp-chip is-running${w.background ? ' is-background' : ''}`);
           c.title = `${w.label}\n${w.background ? 'In the background: the agent goes on meanwhile' : 'The agent waits for it'}`;
