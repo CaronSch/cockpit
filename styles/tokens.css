@@ -69,10 +69,12 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --radius-s: 5px;
-  --radius-m: 6px;
+  /* Corners are squircles where the browser draws them (`corner-shape`, app.css), which read
+     tighter than circular ones of the same radius. */
+  --radius-s: 6px;
+  --radius-m: 8px;
   /* Windows, the message box and other panels (render/drop-indicator.js draws the same). */
-  --radius-l: 8px;
+  --radius-l: 12px;
   --topbar-h: 40px;
 
   /* Motion */

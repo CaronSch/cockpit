@@ -32,7 +32,7 @@ import { addNote, applyEvent, conversationName, createTranscript, needsLogin, se
 import { renderItem, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
-import { composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
+import { composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand, splitAttachments } from '../omp/message.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
@@ -1430,8 +1430,12 @@ function createPane(body, ctx, daemon) {
       /** @param {string} text @param {'steering' | 'followUp'} which */
       const chip = (text, which) => {
         const c = el('span', `omp-chip is-${which}`);
-        // A queued continue reads as the `.` it was sent as, not omp's directive.
-        const shown = isContinueDirective(text) ? '. (continue)' : text;
+        // A queued continue reads as the `.` it was sent as, not omp's directive; files as
+        // their names, not the mentions they were sent as.
+        const { text: said, files } = splitAttachments(text);
+        const shown = isContinueDirective(text)
+          ? '. (continue)'
+          : [said, ...files.map((path) => `+ ${path.split('/').pop()}`)].filter(Boolean).join('  ');
         const kind = el('span', 'omp-chip-kind', which === 'steering' ? 'Steering' : 'Queued');
         kind.title = which === 'steering' ? 'Reaches the agent at its next step, in this turn' : 'Sent once this turn ends';
         c.append(kind, el('span', 'omp-chip-text', shown));

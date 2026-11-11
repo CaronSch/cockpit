@@ -10,7 +10,7 @@
 /** @typedef {ReturnType<typeof createDropIndicator>} DropIndicator */
 
 /** The windows' corner radius (`--radius-l`, tokens.css). */
-const RADIUS = 8;
+const RADIUS = 12;
 const BORDER = 2;
 const LABEL_OFFSET = 10;
 
