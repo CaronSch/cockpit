@@ -1427,7 +1427,9 @@
   border-color: var(--color-line-strong);
 }
 
-/* Send: a small accent square with an up arrow (a terminal prompt in shell mode). */
+/* Send: a small accent square with an up arrow (a terminal prompt in shell mode). Its corners
+   follow the message box's: round, the box's radius less the 6px between them (padding and
+   edge), so the two curves run alongside. */
 .omp-send {
   flex: none;
   display: grid;
@@ -1436,7 +1438,8 @@
   height: 28px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-m);
+  border-radius: calc(var(--radius-l) - 6px);
+  corner-shape: round;
   background: var(--color-accent-fill);
   color: var(--color-accent-ink);
   cursor: pointer;
