@@ -8,7 +8,7 @@
   gap: var(--space-1);
   min-height: 0;
   margin: calc(-1 * var(--space-2));
-  font: var(--text-sm) / var(--leading-read) var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / var(--leading-read) var(--font-ui);
   color: var(--color-text);
 }
 
@@ -28,7 +28,7 @@
     linear-gradient(45deg, transparent 50%, var(--color-text-faint) 50%) calc(100% - 11px) 55% / 4px 4px no-repeat,
     linear-gradient(135deg, var(--color-text-faint) 50%, transparent 50%) calc(100% - 7px) 55% / 4px 4px no-repeat;
   color: var(--color-text-dim);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   text-overflow: ellipsis;
   cursor: pointer;
 }
@@ -152,13 +152,9 @@
 
 .sessions-title {
   overflow: hidden;
-  color: var(--color-text-dim);
+  color: var(--color-text);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sessions-item:is(:hover, .is-current, .is-unread, .is-asking, .is-working) .sessions-title {
-  color: var(--color-text);
 }
 
 .sessions-meta {

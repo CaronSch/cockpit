@@ -20,7 +20,7 @@
   justify-content: center;
   min-height: 0;
   padding: var(--space-1) 0 2px;
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   color: var(--color-text);
 }
 
@@ -315,7 +315,7 @@
   border-radius: var(--radius-s);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -385,7 +385,7 @@
   border-radius: var(--radius-m);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .timeline-editor-prompt,
@@ -394,7 +394,7 @@
   border-radius: var(--radius-s);
   background: var(--color-bg);
   color: var(--color-text);
-  font: var(--text-sm) / var(--leading-read) var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / var(--leading-read) var(--font-ui);
 }
 
 .timeline-editor-prompt {
@@ -431,7 +431,7 @@
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text-dim);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   cursor: pointer;
 }
 

@@ -42,7 +42,7 @@ function load(src) {
 const drawings = new Map();
 
 /** The app's neutral greys (tokens.css) in sRGB, which every SVG renderer takes. */
-const INK = { text: '#ebebed', dim: '#9e9ea3', faint: '#68686f', line: '#2e2e31' };
+const INK = { text: '#fafafb', dim: '#bdbdc1', faint: '#85858b', line: '#2e2e31' };
 /** The transcript's typeface (read when first drawing, not on import). */
 const font = () => getComputedStyle(document.documentElement).getPropertyValue('--font-ui').trim() || 'monospace';
 /** The transcript's reading size, in pixels (`--text-sm`, which follows the text size the top bar sets). */

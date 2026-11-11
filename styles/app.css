@@ -22,8 +22,10 @@ body {
   overflow: hidden;
   background: var(--color-bg);
   color: var(--color-text);
-  font: 400 var(--text-base) / 1.4 var(--font-ui);
-  -webkit-font-smoothing: antialiased;
+  font: var(--weight-regular) var(--text-base) / 1.4 var(--font-ui);
+  /* Optical sizes: Inter draws small text with its small-size shapes (the font link asks for the axis). */
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
 }
 
 button {
@@ -76,7 +78,7 @@ button {
 .palette-hint {
   margin: 0 0 var(--space-2);
   padding-inline: 4px;
-  font: var(--text-xs) / 1.3 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.3 var(--font-ui);
   color: var(--color-text-faint);
 }
 
@@ -279,7 +281,7 @@ button {
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
 }
@@ -399,7 +401,7 @@ button {
   border-radius: var(--radius-l);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
-  font: var(--text-sm) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / 1.4 var(--font-ui);
 }
 
 .config-setting {
@@ -519,7 +521,7 @@ button {
   border: 1px solid var(--color-line);
   border-radius: var(--radius-s);
   background: var(--color-inset);
-  font: var(--text-xs) / 1.5 var(--font-code);
+  font: var(--weight-regular) var(--text-xs) / 1.5 var(--font-code);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -613,7 +615,7 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-faint);
-  font: var(--text-2xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-2xs) / 1.4 var(--font-ui);
 }
 
 .screen-row-where {
@@ -667,7 +669,7 @@ button {
   margin: 0;
   border-radius: var(--radius-l);
   color: var(--color-text-faint);
-  font: var(--text-sm) / 1 var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / 1 var(--font-ui);
 }
 
 .widget {
@@ -740,7 +742,7 @@ button {
   display: flex;
   align-items: center;
   gap: 2px;
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   cursor: default;
 }
 

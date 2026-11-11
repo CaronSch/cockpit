@@ -10,7 +10,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  font: var(--text-xs) / 1.5 var(--font-code);
+  font: var(--weight-regular) var(--text-xs) / 1.5 var(--font-code);
 }
 
 .fv-head {
@@ -114,7 +114,7 @@
 
 .fv-rendered {
   padding: var(--space-2) var(--space-3);
-  font: var(--text-sm) / var(--leading-read) var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / var(--leading-read) var(--font-ui);
 }
 
 .fv-pick {
