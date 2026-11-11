@@ -103,11 +103,7 @@
 .spotlight-open {
   min-width: 11rem;
   border-color: var(--color-line);
-  color: var(--color-text-faint);
+  color: var(--color-text);
   font-weight: var(--weight-regular);
-}
-
-.spotlight-open:hover {
-  color: var(--color-text-dim);
 }
 
