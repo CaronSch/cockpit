@@ -1,0 +1,286 @@
+/* Processes window: what agents left running, grouped by project, each with its owners, facts and actions. */
+
+.processes {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-height: 0;
+  margin: calc(-1 * var(--space-2));
+  font: var(--weight-regular) var(--text-sm) / var(--leading-read) var(--font-ui);
+  color: var(--color-text);
+}
+
+/* Loading, failing, empty or an action's failure; hidden while the list speaks for itself. */
+.processes-status {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.processes-status.is-error {
+  color: var(--color-danger);
+}
+
+.processes-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* A project's name, Unowned, or the Ended toggle. */
+.processes-group {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-2) 2px;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.processes-toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.processes-toggle::before {
+  content: '▸ ';
+}
+
+.processes-toggle[aria-expanded='true']::before {
+  content: '▾ ';
+}
+
+.processes-toggle:hover {
+  color: var(--color-text);
+}
+
+.processes-item {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px var(--space-2) 6px var(--space-4);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+}
+
+.processes-item:is(:hover, :focus-within, .is-expanded) {
+  background: var(--color-surface-raised);
+}
+
+:is(.processes-item, .processes-toggle, .processes-open, .processes-action):focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: -1px;
+}
+
+/* A leftover flagged since the user last looked: a bar at its left edge, as an unread session's. */
+.processes-item.is-new::before {
+  content: '';
+  position: absolute;
+  top: 28%;
+  bottom: 28%;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--color-warn);
+}
+
+.processes-item.is-ended {
+  color: var(--color-text-dim);
+}
+
+.processes-line {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.processes-name {
+  flex: 0 1 auto;
+  min-width: 4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.processes-chip {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-s);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+}
+
+.processes-item.is-leftover .processes-chip {
+  color: var(--color-warn);
+}
+
+.processes-item.is-undeclared .processes-chip {
+  border-color: var(--color-line-strong);
+  color: var(--color-text-dim);
+}
+
+.processes-item.is-kept .processes-chip {
+  border-color: var(--color-line);
+  color: var(--color-text-dim);
+}
+
+/* What the OS saw: numbers in the code font, faint. */
+.processes-facts {
+  flex: 1 1 auto;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  font: var(--text-xs) var(--font-code);
+}
+
+.processes-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  margin-left: auto;
+}
+
+.processes-actions:not(.is-confirming) {
+  visibility: hidden;
+}
+
+.processes-item:is(:hover, :focus-within) .processes-actions {
+  visibility: visible;
+}
+
+.processes-actions.is-confirming {
+  white-space: normal;
+}
+
+.processes-confirm {
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}
+
+.processes-action {
+  padding: 1px 8px;
+  font-size: var(--text-xs);
+}
+
+/* Each owner: its conversation, asleep or not, and how it holds the process in its own words. */
+.processes-owners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--space-3);
+  min-width: 0;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.processes-owner {
+  min-width: 0;
+}
+
+.processes-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.processes-open:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.processes-open.is-gone {
+  cursor: default;
+}
+
+.processes-asleep {
+  font-style: italic;
+}
+
+/* The agent's own words, told apart from what the OS saw. */
+.processes-says-label {
+  color: var(--color-text-faint);
+}
+
+.processes-says {
+  color: var(--color-text-dim);
+}
+
+.processes-how {
+  color: var(--color-text-faint);
+}
+
+.processes-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+  cursor: auto;
+  user-select: text;
+}
+
+.processes-command {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-s);
+  background: var(--color-code-bg);
+  color: var(--color-code);
+  font: var(--text-xs) / var(--leading-read) var(--font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.processes-detail-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 var(--space-2);
+  margin: 0;
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}
+
+.processes-detail-facts dt {
+  color: var(--color-text-faint);
+}
+
+.processes-detail-facts dd {
+  margin: 0;
+  font-family: var(--font-code);
+  overflow-wrap: anywhere;
+}
+
+.processes-trend {
+  display: grid;
+  grid-template-columns: auto 120px;
+  gap: 2px var(--space-2);
+  align-items: center;
+  justify-content: start;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.processes-spark {
+  width: 120px;
+  height: 24px;
+  color: var(--color-accent);
+}

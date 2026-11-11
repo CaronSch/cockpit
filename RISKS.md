@@ -203,6 +203,18 @@ is newer. The daemon prints its version at start.
   failed` note in every agent window, or an agent whose schedule calls never answer. *Response:*
   re-read those files and `tools/essential-tools.ts`, then update `omp-session.js` and the fake.
 
+- **The process ledger leans on how omp runs commands.** `daemon/processes.js` finds a named
+  service by the pid omp's `bash` result names (`details.service.pid`), and a background job as a
+  process under the session's omp that started during one of its `bash` calls (omp runs commands
+  in the shell it embeds, so they are its own children; its helpers carry `__omp_worker_`), timed
+  by the `tool_execution_start`/`_end` frames; the gate is an omp extension (`-e
+  daemon/process-gate.js`) whose `tool_call` refuses a call by returning `{ block, reason }`, and
+  learns the conversation from `ctx.sessionManager.getSessionId()`. All checked live against omp
+  18.10.3 (a named service, an `async` job and a `cmd &` each followed, the refusal read and obeyed
+  by the agent). A change shows up as processes agents started missing from the Processes window,
+  or long-running starts no longer refused. *Response:* rerun that check (an agent starting the
+  three) and follow omp's change.
+
 - **Spotlight's Ask leans on `omp -p` with `--tools` and `--auto-approve`.** `daemon/ask.js` runs
   `omp -p --no-session … --tools read,grep,find --auto-approve --thinking low` in a temporary
   directory holding `index.tsv`, and reads the conversations it names from `CONVERSATION: <path>`
@@ -263,6 +275,15 @@ is newer. The daemon prints its version at start.
   that they had forgotten, or the daemon's omp processes use noticeable memory.
   *Response:* show each running session's age and memory in Sessions; offer to
   stop sessions that no window shows and that have been idle for a day.
+
+## When agents start long-running processes from subagents
+
+- **A subagent's processes are not followed.** The daemon sees the tool calls of each session's
+  main agent only, so a named service or background job a `task` subagent starts is not in the
+  ledger (omp loads extensions into subagents too, so the gate should still ask it to declare;
+  not checked). It shows up only if it is left behind as an orphan in the project. *Response:*
+  follow subagents' tool calls (omp's subagent events), or read omp's launch broker registry
+  (`~/.omp/run/daemons/<hash>/daemons/*/meta.json`, which names each service's owning session).
 
 ## When the session history reaches thousands of journals
 
