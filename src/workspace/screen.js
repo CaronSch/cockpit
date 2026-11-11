@@ -3,7 +3,8 @@
  * from the daemon, and saved back as its layout changes.
  *
  * Claiming: a window holds the Web Lock `cockpit:<workspace>:<screen>` until it goes away,
- * and tries screens in `claimOrder`: the one its tab showed before (kept in sessionStorage),
+ * and tries screens in `claimOrder`: the one its address names (`?screen=`, a tab New screen
+ * opened, which the address then drops), else the one its tab showed before (kept in sessionStorage),
  * then each saved screen, else a new one. A page going away notes in sessionStorage which
  * screen it lets go of, with its navigation entry; the page that replaces it in the tab (a
  * reload) finds that entry as `navigation.activation.from` and waits for the lock, which the
@@ -24,17 +25,26 @@
 import { DaemonError } from '../daemon/client.js';
 import { isValidTree } from '../layout/grid-model.js';
 import { errorMessage } from '../ui/format.js';
-import { DEFAULT_WORKSPACE, SCREEN_ID, claimOrder, lockName, newScreenId, workspaceFrom } from './model.js';
+import { DEFAULT_WORKSPACE, SCREEN_ID, claimOrder, copyLayout, lockName, newScreenId, workspaceFrom } from './model.js';
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { Screen } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 
+/**
+ * One screen as the switcher lists it; `open` is where it is shown: in this window, in
+ * another one, or nowhere.
+ * @typedef {{ id: string, rev: number | null, tree: Tree, open: 'here' | 'elsewhere' | null }} ScreenEntry
+ */
 /**
  * @typedef {{
  *   workspace: string,
  *   tree(): Tree,
  *   saveError(): string | null,
  *   update(tree: Tree): void,
+ *   list(): Promise<ScreenEntry[]>,
+ *   openHere(id: string): void,
+ *   openCopy(): Promise<void>,
+ *   remove(entry: ScreenEntry): Promise<boolean>,
  *   onChange(fn: () => void): () => void,
  * }} WindowScreen
  */
@@ -137,9 +147,19 @@ async function claimScreen(daemon, workspace, saved) {
     }
   }
 
+  /** The screen the address names, once: the address drops it, so a reload goes by the tab's. */
+  function named() {
+    const url = new URL(location.href);
+    const id = url.searchParams.get('screen');
+    if (id === null) return null;
+    url.searchParams.delete('screen');
+    history.replaceState(history.state, '', url);
+    return SCREEN_ID.test(id) ? id : null;
+  }
+
   async function claim() {
     const remembered = sessionStorage.getItem(tabKey);
-    const own = remembered && SCREEN_ID.test(remembered) ? remembered : null;
+    const own = named() ?? (remembered && SCREEN_ID.test(remembered) ? remembered : null);
     for (const id of claimOrder(own, saved.map((s) => s.id))) {
       const name = lockName(workspace, id);
       const got = await hold(name, { wait: id === own && handedOver(name) });
@@ -250,6 +270,54 @@ async function claimScreen(daemon, workspace, saved) {
       dirty = true;
       clearTimeout(timer);
       timer = setTimeout(flush, SAVE_DELAY_MS);
+    },
+
+    async list() {
+      const [{ screens }, { held = [] }] = await Promise.all([daemon.workspace(workspace), navigator.locks.query()]);
+      const prefix = lockName(workspace, '');
+      const open = new Set(held.flatMap((lock) => (lock.name?.startsWith(prefix) ? [lock.name.slice(prefix.length)] : [])));
+      /** @type {ScreenEntry} */
+      const here = { id, rev, tree: latest, open: 'here' };
+      /** @type {ScreenEntry[]} */
+      const entries = screens.map((s) => (s.id === id ? here : { ...s, open: open.has(s.id) ? 'elsewhere' : null }));
+      // A new window's screen is not stored until it holds a window; it still is one.
+      if (!entries.includes(here)) entries.push(here);
+      return entries;
+    },
+
+    openHere(target) {
+      // A reload, not a remount: unmounting this screen's windows would end their agents.
+      sessionStorage.setItem(tabKey, target);
+      location.reload();
+    },
+
+    async openCopy() {
+      // The tab opens at once, while the click still lets it; it goes to the copy once it is stored.
+      const tab = open('', '_blank');
+      if (!tab) throw new Error('the browser blocked the new tab');
+      try {
+        const url = new URL(location.href);
+        // An empty screen is not stored: a new tab starts one of its own anyway.
+        if (latest) {
+          const copy = newScreenId();
+          const saved = await daemon.saveScreen(workspace, copy, copyLayout(latest), null);
+          if (!saved.ok) throw new Error('a screen with its id was stored meanwhile');
+          url.searchParams.set('screen', copy);
+        }
+        tab.opener = null;
+        tab.location.href = url.href;
+      } catch (err) {
+        tab.close();
+        throw err;
+      }
+    },
+
+    remove(entry) {
+      // Held while deleting, so no window at this address opens the screen meanwhile.
+      return navigator.locks.request(lockName(workspace, entry.id), { ifAvailable: true }, async (lock) => {
+        if (!lock || entry.rev === null) return false;
+        return (await daemon.saveScreen(workspace, entry.id, null, entry.rev)).ok;
+      });
     },
 
     onChange(fn) {
