@@ -290,6 +290,26 @@ button {
   background: var(--color-hover);
 }
 
+/* A switch: its tick in a gutter of its own, shown while it is on. */
+.context-menu-item[role='menuitemcheckbox']::before {
+  /* Drawn, not read: `aria-checked` says it, and the item keeps its own name. */
+  content: '✓' / '';
+  display: inline-block;
+  width: 1.4em;
+  color: var(--color-accent);
+  visibility: hidden;
+}
+
+.context-menu-item[aria-checked='true']::before {
+  visibility: visible;
+}
+
+.context-menu-sep {
+  height: 1px;
+  margin: var(--space-1) 4px;
+  background: var(--color-line);
+}
+
 /* ── Palette ─────────────────────────────────────────── */
 .palette {
   position-area: bottom span-left;

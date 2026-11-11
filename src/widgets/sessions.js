@@ -1,5 +1,5 @@
 /**
- * omp conversations, one list, searchable and sortable. A click shows a conversation in the
+ * omp conversations, one list, sortable and narrowed to a directory. A click shows a conversation in the
  * agent window this screen used last (or a new one); dragging it shows it in the agent window it
  * is dropped on, or in a new window where it is dropped.
  *
@@ -8,18 +8,17 @@
  * the list's. Showing a conversation needs no omp: its window shows the journal until
  * something is sent.
  *
- * Search runs in the daemon (daemon/search.js), over titles, directories, prompts and the
- * agents' replies: a question in plain words finds the conversations that answer it, best
- * first, each with the passage that matched and its words marked. While searching the list is
- * in that order; otherwise sorting runs here. Narrowing to one directory runs here too. The query, directory and sort order are
- * this window's own settings, so two Sessions windows can show different slices.
+ * The window's top bar holds its controls: a directory menu (narrowing runs here) and View, a
+ * menu of the sort order, its direction and the archived list. They are this window's own
+ * settings, so two Sessions windows can show different slices. Searching is Spotlight's
+ * (ui/spotlight.js). The list follows the daemon as journals change, so nothing refreshes it.
  *
  * Archive moves a conversation out of omp's sessions into the daemon's archive (omp's own
  * resume no longer offers it); "Archived" switches the window to the archived ones, each with
  * Restore. An archived one shows as any other, to read: carrying it on means restoring it. One whose agent is working is not archived until it is done. A new session
  * nothing was sent to has no journal yet: archiving it ends it, and it is gone, not archived.
  *
- * A conversation with news its user has not read (daemon/unread.js) has a blue dot and a bold
+ * A conversation with news its user has not read (daemon/unread.js) has a cyan dot and a bold
  * title, archived or not, and the window's top bar counts those it lists. Showing one from
  * here reads it. Each row's menu (a right-click, the ContextMenu key, Shift+F10, or its ⋯
  * button) marks it read or unread, beside the row's other actions.
@@ -27,11 +26,12 @@
  * Pinned conversations (daemon/pins.js) come first, in the window's order, each with a ★; the
  * ☆ on a row pointed at, or its menu, pins it.
  *
- * Rows show where their conversations are on this screen (sessions/links.js): a bar at the
- * left edge for one shown in an agent window, brighter for the one in the agent window used last
- * (where a click shows conversations). Pointing at a row (hover, or keyboard focus: a click
- * also focuses a row, but that is not pointing at it once the pointer moves on) outlines its
- * windows, and pointing at an agent window lights its conversation's row.
+ * Rows show how their conversations are doing (working, needs you, done) and where they are on
+ * this screen (sessions/links.js): the one in the agent window used last (where a click shows
+ * conversations) is highlighted, and one shown in another agent window is ringed. Pointing at
+ * a row (hover, or keyboard focus: a click also focuses a row, but that is not pointing at it
+ * once the pointer moves on) outlines its windows, and pointing at an agent window lights its
+ * conversation's row.
  */
 import { button, el } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
@@ -39,15 +39,12 @@ import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
 import { STATE_LABELS, listConversations, runningState, showConversation } from '../sessions/running.js';
 import { sessionLinks } from '../sessions/links.js';
-import { snippetLine } from '../sessions/snippet.js';
 import { openContextMenu, opensContextMenu } from '../ui/context-menu.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { PastSession, SessionMeta } from '../../daemon/wire.js' */
 /** @import { Listed, RunningState } from '../sessions/running.js' */
 /** @import { SortDir, SortKey } from '../sessions/order.js' */
-
-const SEARCH_DEBOUNCE_MS = 200;
 
 export default {
   type: 'sessions',
@@ -70,42 +67,25 @@ function createSessionsWindow(body, ctx, daemon) {
   const sortKey = () => (isSortKey(ctx.params.sort) ? ctx.params.sort : 'active');
   /** @returns {SortDir} */
   const sortDir = () => (ctx.params.dir === 'asc' || ctx.params.dir === 'desc' ? ctx.params.dir : naturalDir(sortKey()));
-  const query = () => (typeof ctx.params.query === 'string' ? ctx.params.query : '');
   const showArchived = () => ctx.params.archived === true;
   /** The one directory this window shows, or null for all. */
   const directory = () => (typeof ctx.params.directory === 'string' && ctx.params.directory ? ctx.params.directory : null);
 
-  // ── toolbar ──
-  const bar = el('div', 'sessions-bar');
-  const search = el('input', 'sessions-search');
-  search.type = 'search';
-  search.placeholder = 'Search, or ask: where did we find…';
-  search.setAttribute('aria-label', 'Search sessions');
-  search.value = query();
-  const directories = el('select', 'sessions-sort sessions-directory');
+  // ── controls, in the window's top bar ──
+  const directories = el('select', 'sessions-directory');
   directories.setAttribute('aria-label', 'Directory');
   /** What the directory options were last built from, so an open menu is not rebuilt for nothing. */
   let directoriesSignature = '';
-  const sort = el('select', 'sessions-sort');
-  sort.setAttribute('aria-label', 'Sort by');
-  for (const { key, label } of SORT_KEYS) {
-    const option = el('option', '', label);
-    option.value = key;
-    sort.append(option);
-  }
-  const direction = button('sessions-icon-btn');
-  direction.setAttribute('aria-label', 'Reverse sort order');
-  const refresh = button('sessions-icon-btn', '⟳');
-  refresh.title = 'Refresh';
-  refresh.setAttribute('aria-label', 'Refresh');
-  const archivedToggle = button('sessions-toggle', 'Archived');
-  archivedToggle.title = 'Show archived sessions instead';
-  bar.append(search, directories, sort, direction, archivedToggle, refresh);
+  const view = button('omp-tool-btn sessions-view', 'View');
+  view.title = 'Sort order and archived sessions';
+  view.setAttribute('aria-haspopup', 'menu');
+  ctx.headActions.replaceChildren(directories, view);
+  // Loading, failing, empty: said once, above the list; a full list says nothing.
   const status = el('p', 'sessions-status');
   status.setAttribute('aria-live', 'polite');
   const list = el('ul', 'sessions-list');
   list.setAttribute('aria-label', 'Sessions');
-  root.append(bar, status, list);
+  root.append(status, list);
 
   /** @type {PastSession[]} */
   let sessions = [];
@@ -148,7 +128,7 @@ function createSessionsWindow(body, ctx, daemon) {
     loading = true;
     drawStatus();
     try {
-      const next = await daemon.history(query(), { archived: showArchived() });
+      const next = await daemon.history('', { archived: showArchived() });
       if (seq !== requestSeq) return;
       sessions = next;
       error = null;
@@ -171,8 +151,7 @@ function createSessionsWindow(body, ctx, daemon) {
   }
 
   /** The conversations this window lists: archived ones on their own, else every one, awake or not. */
-  const listed = () =>
-    listConversations(sessions, showArchived() ? [] : daemon.sessions(), { searching: query() !== '', directory: directory() });
+  const listed = () => listConversations(sessions, showArchived() ? [] : daemon.sessions(), { directory: directory() });
 
   /** What a row's conversation is called: its awake session's name, else its journal's. @param {Listed} c */
   const nameOf = (c) => (c.meta && daemon.activity(c.meta.id)?.name) ?? (c.title || c.firstPrompt ? displayTitle(c) : null);
@@ -352,7 +331,6 @@ function createSessionsWindow(body, ctx, daemon) {
     if (state && SAID.has(state)) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', STATE_LABELS[state]));
     const work = workOf(c);
     if (work) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', `${work} running`));
-    if (c.match?.snippet) main.append(snippetLine(c.match, 'sessions-snippet'));
     const actions = el('div', 'sessions-actions');
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
     else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
@@ -385,39 +363,66 @@ function createSessionsWindow(body, ctx, daemon) {
 
   /** @param {number} count how many conversations are listed */
   function drawStatus(count = shown.size) {
-    const kind = showArchived() ? 'archived session' : 'session';
     status.classList.toggle('is-error', error !== null || moveError !== null);
     if (error) status.textContent = `Could not list sessions: ${error}`;
     else if (moveError) status.textContent = moveError;
     else if (!loaded) status.textContent = 'Loading sessions…';
-    else if (count === 0) status.textContent = query() || directory() ? 'No session matches.' : showArchived() ? 'No archived sessions.' : 'No sessions yet.';
-    else status.textContent = `${count} ${kind}${count === 1 ? '' : 's'}${loading ? ' · refreshing…' : ''}`;
+    else if (count === 0) status.textContent = directory() ? 'No session matches.' : showArchived() ? 'No archived sessions.' : 'No sessions yet.';
+    else status.textContent = '';
+    status.hidden = status.textContent === '';
+  }
+
+  /** View's menu: what the list is sorted by, which way, and whether it lists the archive. */
+  function openView() {
+    const key = sortKey();
+    openContextMenu(view, [
+      ...SORT_KEYS.map((s) => ({
+        label: s.label,
+        checked: s.key === key,
+        run: () => {
+          ctx.setParams({ sort: s.key, dir: naturalDir(s.key) });
+          draw();
+        },
+      })),
+      'separator',
+      {
+        label: 'Reverse order',
+        checked: sortDir() !== naturalDir(key),
+        run: () => {
+          ctx.setParams({ dir: sortDir() === 'asc' ? 'desc' : 'asc' });
+          draw();
+        },
+      },
+      'separator',
+      { label: 'Archived sessions', checked: showArchived(), run: toggleArchived },
+    ]);
+  }
+
+  function toggleArchived() {
+    ctx.setParams({ archived: !showArchived() });
+    // The other list's rows are not these; show none until it arrives.
+    sessions = [];
+    loaded = false;
+    moveError = null;
+    draw();
+    void load();
   }
 
   function draw() {
-    sort.value = sortKey();
-    const dir = sortDir();
-    direction.textContent = dir === 'asc' ? '↑' : '↓';
-    direction.title = `${dir === 'asc' ? 'Ascending' : 'Descending'}: click to reverse`;
-    archivedToggle.setAttribute('aria-pressed', String(showArchived()));
     list.setAttribute('aria-label', showArchived() ? 'Archived sessions' : 'Sessions');
     drawDirectories();
 
     const now = Date.now();
-    // A search lists by relevance, as the daemon ranked it; otherwise pinned ones come first.
-    const searching = query().trim() !== '';
-    const sorted = searching ? listed() : sortSessions(listed(), sortKey(), dir);
-    const conversations = searching ? sorted : [...sorted.filter(isPinned), ...sorted.filter((c) => !isPinned(c))];
-    sort.disabled = direction.disabled = searching;
-    sort.title = searching ? 'Sorted by relevance while searching' : '';
-    if (searching) direction.title = sort.title;
+    // Pinned ones come first.
+    const sorted = sortSessions(listed(), sortKey(), sortDir());
+    const conversations = [...sorted.filter(isPinned), ...sorted.filter((c) => !isPinned(c))];
     shown = new Map(conversations.map((c) => [c.key, c]));
     drawStatus(conversations.length);
     // Rows are rebuilt only when what they show changed, so a redraw does not steal focus.
     const live = new Set();
     conversations.forEach((c, i) => {
       live.add(c.key);
-      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.match?.snippet, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), isPinned(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
+      const signature = JSON.stringify([nameOf(c), c.firstPrompt, c.cwd, c.prompts, relativeTime(c.modifiedAt, now), home, showArchived(), isUnread(c), isPinned(c), stateOf(c), workOf(c), sessions.some((s) => s.file === c.file)]);
       let entry = rows.get(c.key);
       if (!entry || entry.signature !== signature) {
         const node = renderRow(c, now);
@@ -440,7 +445,7 @@ function createSessionsWindow(body, ctx, daemon) {
     }
     drawLinks();
     const unread = conversations.filter(isUnread).length;
-    ctx.setLabel(unread ? `${unread} unread` : null);
+    ctx.setLabel([showArchived() ? 'Archived' : '', unread ? `${unread} unread` : ''].filter(Boolean).join(' · ') || null);
   }
 
   // ── interaction ──
@@ -491,38 +496,11 @@ function createSessionsWindow(body, ctx, daemon) {
     }
   });
 
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let searchTimer;
-  search.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      ctx.setParams({ query: search.value.trim() });
-      void load();
-    }, SEARCH_DEBOUNCE_MS);
-  });
   directories.addEventListener('change', () => {
     ctx.setParams({ directory: directories.value || null });
     draw();
   });
-  sort.addEventListener('change', () => {
-    const key = isSortKey(sort.value) ? sort.value : 'active';
-    ctx.setParams({ sort: key, dir: naturalDir(key) });
-    draw();
-  });
-  direction.addEventListener('click', () => {
-    ctx.setParams({ dir: sortDir() === 'asc' ? 'desc' : 'asc' });
-    draw();
-  });
-  refresh.addEventListener('click', () => void load());
-  archivedToggle.addEventListener('click', () => {
-    ctx.setParams({ archived: !showArchived() });
-    // The other list's rows are not these; show none until it arrives.
-    sessions = [];
-    loaded = false;
-    moveError = null;
-    draw();
-    void load();
-  });
+  view.addEventListener('click', openView);
 
   const offUnread = daemon.onUnread(scheduleDraw);
   const offPins = daemon.onPins(scheduleDraw);
@@ -584,7 +562,7 @@ function createSessionsWindow(body, ctx, daemon) {
       offHistory();
       offScreen();
       ctx.outline([]);
-      clearTimeout(searchTimer);
+      ctx.headActions.replaceChildren();
       requestSeq++; // drop any answer still on its way
       offSessions();
       offUnread();

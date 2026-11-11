@@ -224,7 +224,7 @@ test('a reply draws its mermaid diagrams and vega-lite charts, reading data only
   problems = problems.filter((p) => !/mermaid|Parse error|Syntax error/i.test(p)); // Mermaid logs what it could not parse
 });
 
-test('the conversation reads like a terminal: no "you" label, one font for the whole app', async ({ page }) => {
+test('the conversation has no "you" label, and one font for the conversation, its message box and the chrome', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   await send(pane, 'hello');
@@ -240,7 +240,7 @@ test('the conversation reads like a terminal: no "you" label, one font for the w
   });
   const box = pane.locator('textarea');
   const text = await font(reply);
-  expect(text.family).toMatch(/^"IBM Plex Mono"/);
+  expect(text.family).toMatch(/^Inter/);
   expect(await font(user.locator('.omp-md p'))).toEqual(text);
   expect(await font(box)).toEqual(text);
   for (const chrome of [pane.locator('.widget-title'), pane.getByRole('button', { name: 'Send' }), page.locator('#palette-toggle')]) {
@@ -361,7 +361,7 @@ test('a code block in a reply copies its code, not its language label, from a bu
   await expect(copy).toHaveText('Copy');
 });
 
-test('the message box is set like scratchpad text and starts one line high, placeholder and all', async ({ page }) => {
+test('the message box is set like the transcript, notes stay monospace, and the box starts one line high, placeholder and all', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   const draft = pane.locator('textarea');
@@ -371,15 +371,15 @@ test('the message box is set like scratchpad text and starts one line high, plac
       const s = getComputedStyle(el);
       return { family: s.fontFamily, size: s.fontSize, lineHeight: s.lineHeight };
     });
-  const padText = await page.evaluate(() => {
+  expect(await font(draft)).toEqual(await font(pane.locator('.omp-transcript')));
+  const padFamily = await page.evaluate(() => {
     const probe = document.body.appendChild(document.createElement('textarea'));
     probe.className = 'pad-text';
-    const s = getComputedStyle(probe);
-    const style = { family: s.fontFamily, size: s.fontSize, lineHeight: s.lineHeight };
+    const family = getComputedStyle(probe).fontFamily;
     probe.remove();
-    return style;
+    return family;
   });
-  expect(await font(draft)).toEqual(padText);
+  expect(padFamily).toMatch(/^"IBM Plex Mono"/);
 
   // One line of text tall, even in a pane too narrow for the whole placeholder.
   const lines = () =>
@@ -939,23 +939,23 @@ test('the top bar sizes all text up and down, resets it, and keeps it across a r
   await level.click();
 });
 
-test('the response arrows, New, Forks, Accounts and Stop sit in the window’s top bar; pressing them never drags the window, its title still does', async ({ page }) => {
+test('the response arrows, New, Forks and Accounts sit in the window’s top bar, Esc stops a turn; pressing them never drags the window, its title still does', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   const head = pane.locator('.widget-head');
   const toolbar = pane.locator('.omp-toolbar');
   // PRs shows only in a GitHub repository, which the test project is not.
-  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Forks', 'Accounts', 'Stop']);
+  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Forks', 'Accounts']);
   for (const name of ['New', 'Forks', 'Accounts', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
   await expect(head.getByRole('button', { name: 'More actions' }), 'no menu of the rest: there is no rest').toHaveCount(0);
 
-  // Stop is live while a turn runs.
-  const stopBtn = head.getByRole('button', { name: 'Stop', exact: true });
-  await expect(stopBtn).toBeDisabled();
+  // No Stop button on the desktop (the phone keeps one): Esc in the message box stops a turn.
+  await expect(head.getByRole('button', { name: 'Stop', exact: true })).toBeHidden();
   await send(pane, 'slow');
-  await expect(stopBtn).toBeEnabled();
-  await stopBtn.click();
-  await expect(stopBtn).toBeDisabled();
+  const transcript = pane.locator('.omp-transcript');
+  await expect(transcript).toHaveClass(/is-streaming/);
+  await pane.locator('textarea').press('Escape');
+  await expect(transcript).not.toHaveClass(/is-streaming/);
 
   // Accounts opens its menu under its button, keyboard too.
   await head.getByRole('button', { name: 'Accounts', exact: true }).focus();

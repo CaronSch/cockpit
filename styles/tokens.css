@@ -47,18 +47,19 @@
   --color-family-5: oklch(82% 0.15 110);
   --color-family-6: oklch(72% 0.13 355);
 
-  /* Type: `--font-ui` sets chrome and conversation, `--font-code` code, diffs and files; today
-     both are one monospace face, and hierarchy comes from size, weight and colour.
-     `--text-sm` is reading text: the omp transcript, its message box and scratchpads. Every
-     size follows `--font-scale`, the text size the top bar sets (ui/zoom.js). */
-  --font-ui: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  /* Type: `--font-ui` (Inter) sets chrome and conversation; `--font-code` (IBM Plex Mono) sets
+     code, diffs, files, paths, notes and numbers that tick (spend). Hierarchy comes from size,
+     weight and colour. `--text-sm` is reading text: the omp transcript, its message box and
+     scratchpads. Sizes are small by design (sleeker); every one follows `--font-scale`, the
+     text size the top bar sets (ui/zoom.js). */
+  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-code: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   --font-scale: 1;
-  --text-2xs: calc(0.6875rem * var(--font-scale));
-  --text-xs: calc(0.75rem * var(--font-scale));
-  --text-sm: calc(0.8125rem * var(--font-scale));
-  --text-base: calc(0.9375rem * var(--font-scale));
-  --text-lg: calc(1.25rem * var(--font-scale));
+  --text-2xs: calc(0.62rem * var(--font-scale));
+  --text-xs: calc(0.675rem * var(--font-scale));
+  --text-sm: calc(0.73125rem * var(--font-scale));
+  --text-base: calc(0.84375rem * var(--font-scale));
+  --text-lg: calc(1.125rem * var(--font-scale));
   --leading-read: 1.5;
 
   /* Space & shape */

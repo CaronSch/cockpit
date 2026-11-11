@@ -192,7 +192,7 @@
   border: 0;
   background: transparent;
   color: var(--color-text);
-  font: var(--text-sm) / var(--leading-read) var(--font-ui);
+  font: var(--text-sm) / var(--leading-read) var(--font-code);
   tab-size: 4;
 }
 

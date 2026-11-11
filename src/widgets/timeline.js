@@ -124,7 +124,7 @@ function createTimeline(body, ctx, daemon) {
   }
 
   /** Every conversation not archived, the least recently active first. */
-  const listed = () => sortSessions(listConversations(sessions, daemon.sessions(), { searching: false, directory: null }), 'active', 'asc');
+  const listed = () => sortSessions(listConversations(sessions, daemon.sessions(), { directory: null }), 'active', 'asc');
 
   /** @param {Listed} c */
   const nameOf = (c) => (c.meta && daemon.activity(c.meta.id)?.name) ?? (c.title || c.firstPrompt ? displayTitle(c) : 'New session');

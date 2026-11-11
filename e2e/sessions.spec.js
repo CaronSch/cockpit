@@ -207,48 +207,31 @@ async function turn(pane, text) {
   await expect(pane.locator('.omp-assistant').last()).toContainText(`You said: ${text}`);
 }
 
-test('sessions are listed newest first, searchable across prompts and directories, and sortable', async ({ page }) => {
+/** Picks `label` in a Sessions window's View menu (sort order, its direction, the archive). @param {Locator} window @param {string} label */
+async function pickView(window, label) {
+  await window.getByRole('button', { name: 'View', exact: true }).click();
+  await window.page().getByRole('menuitemcheckbox', { name: label, exact: true }).click();
+}
+
+test('sessions are listed newest first and sorted from View, which the window keeps', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
   // Separate words, not "2h ago2 prompts": what copy-paste and screen readers get.
   await expect(row(window, 'Fix the login flow').locator('.sessions-meta')).toHaveText(`${ALPHA} 2h ago 2 prompts`);
+  await expect(window.getByRole('searchbox'), 'searching is Spotlight’s').toHaveCount(0);
 
-  const search = window.getByRole('searchbox', { name: 'Search sessions' });
-  await search.fill('tests');
-  await expect(titles(window)).toHaveText(['Fix the login flow'], { timeout: 3000 }); // a later prompt, not the title
-  await search.fill(BRAVO.split('/').pop() ?? '');
-  await expect(titles(window)).toHaveText(['deploy staging']);
-  await search.fill('');
-  await expect(titles(window)).toHaveCount(3);
-
-  await window.getByRole('combobox', { name: 'Sort by' }).selectOption('title');
+  await pickView(window, 'Title');
   await expect(titles(window)).toHaveText(['deploy staging', 'Fix the login flow', 'Zebra cleanup']);
-  await window.getByRole('button', { name: 'Reverse sort order' }).click();
+  await pickView(window, 'Reverse order');
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'Fix the login flow', 'deploy staging']);
+  await window.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Title', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Last active', exact: true })).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
 
-  await search.fill('zebra');
-  await expect(titles(window)).toHaveText(['Zebra cleanup']);
   await page.reload();
   const again = page.locator('.widget[data-widget="sessions"]');
-  await expect(again.getByRole('searchbox', { name: 'Search sessions' })).toHaveValue('zebra');
-  await expect(again.getByRole('combobox', { name: 'Sort by' })).toHaveValue('title');
-  await expect(titles(again)).toHaveText(['Zebra cleanup']);
-});
-
-test('a question in plain words finds the conversation whose agent answered it, with the passage that did', async ({ page }) => {
-  const window = await addSessionsWindow(page);
-  const search = window.getByRole('searchbox', { name: 'Search sessions' });
-  await search.fill('In which session did the sign-in loop restart because of a cookie?');
-  await expect(titles(window)).toHaveText(['Fix the login flow']);
-  const snippet = row(window, 'Fix the login flow').locator('.sessions-snippet');
-  await expect(snippet).toHaveText('The session cookie expired before the redirect, so the sign-in loop restarted.');
-  await expect(snippet.locator('mark')).toHaveText(['cookie', 'sign', 'loop', 'restarted']);
-  // The list is by relevance while searching: the sort rests until the search is cleared.
-  await expect(window.getByRole('combobox', { name: 'Sort by' })).toBeDisabled();
-  await search.fill('');
-  await expect(titles(window)).toHaveCount(3);
-  await expect(window.locator('.sessions-snippet')).toHaveCount(0);
-  await expect(window.getByRole('combobox', { name: 'Sort by' })).toBeEnabled();
+  await expect(titles(again)).toHaveText(['Zebra cleanup', 'Fix the login flow', 'deploy staging']);
 });
 
 test('⌘K floats a search over the workbench: a question finds the conversation, Enter shows it, Esc closes', async ({ page }) => {
@@ -403,11 +386,10 @@ test('Archive hides a session from the list (and from omp), Archived lists it to
   expect(existsSync(fileOf('zebra')), 'gone from where omp resumes sessions').toBe(false);
   expect(existsSync(join(ARCHIVE, '-e2e-project', '2026-10-01_zebra', 'Explorer.jsonl')), 'kept, folder and all').toBe(true);
 
-  const toggle = window.getByRole('button', { name: 'Archived' });
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await pickView(window, 'Archived sessions');
+  await expect(window.locator('.widget-label')).toHaveText(/^Archived/);
   await expect(titles(window)).toHaveText(['Zebra cleanup']);
-  await expect(window.locator('.sessions-status')).toHaveText('1 archived session');
+  await expect(window.locator('.sessions-status'), 'a full list needs no count').toBeHidden();
   const archived = row(window, 'Zebra cleanup');
   await expect(archived.getByRole('button', { name: 'Archive' })).toHaveCount(0);
   // Shown, it is to read: no message box until it is restored.
@@ -422,7 +404,8 @@ test('Archive hides a session from the list (and from omp), Archived lists it to
   await expect(pane.locator('textarea')).toBeVisible();
   await expect(pane.locator('.omp-user').first()).toBeVisible();
   await expect(window.locator('.sessions-status')).toHaveText('No archived sessions.');
-  await toggle.click();
+  await pickView(window, 'Archived sessions');
+  await expect(window.locator('.widget-label')).not.toHaveText(/Archived/);
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);
   expect(existsSync(join(fileOf('zebra').replace(/\.jsonl$/, ''), 'Explorer.jsonl'))).toBe(true);
 });
@@ -453,12 +436,6 @@ test('a conversation is listed once, awake or not, even with its window closed; 
   const deploy = keyRow(window, fileOf('deploy'));
   await expect(deploy).toHaveCount(1);
   expect(await awake(page, fileOf('deploy'))).toHaveLength(1);
-  const search = window.getByRole('searchbox', { name: 'Search sessions' });
-  await search.fill('deploy');
-  await expect(titles(window)).toHaveText([/deploy staging/], { timeout: 3000 }); // titled by omp since it woke
-  await search.fill('login');
-  await expect(titles(window)).toHaveText(['Fix the login flow'], { timeout: 3000 });
-  await search.fill('');
 
   await deploy.getByRole('button', { name: 'Archive' }).click();
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'Fix the login flow']);
@@ -484,7 +461,7 @@ test('a new session nothing was sent to is archived by ending it: gone from the 
   await expect(fresh.locator('.sessions-title')).toHaveText('New session');
   await fresh.getByRole('button', { name: 'Archive' }).click();
   await expect(fresh).toHaveCount(0);
-  await window.getByRole('button', { name: 'Archived' }).click();
+  await pickView(window, 'Archived sessions');
   await expect(window.locator('.sessions-title', { hasText: 'New session' })).toHaveCount(0);
 });
 
@@ -549,21 +526,15 @@ test('the directory menu narrows the list to one directory, with search, sort an
 
   await menu.selectOption(ALPHA);
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'Fix the login flow']);
-  await window.getByRole('combobox', { name: 'Sort by' }).selectOption('title');
+  await pickView(window, 'Title');
   await expect(titles(window)).toHaveText(['Fix the login flow', 'Zebra cleanup']);
-  await window.getByRole('searchbox', { name: 'Search sessions' }).fill('tests');
-  await expect(titles(window)).toHaveText(['Fix the login flow'], { timeout: 3000 });
-  await window.getByRole('searchbox', { name: 'Search sessions' }).fill('deploy');
-  await expect(window.locator('.sessions-status')).toHaveText('No session matches.');
-  await expect(menu, 'the choice stays while nothing there matches').toHaveValue(ALPHA);
-  await window.getByRole('searchbox', { name: 'Search sessions' }).fill('');
 
   await row(window, 'Zebra cleanup').getByRole('button', { name: 'Archive' }).click();
   await expect(titles(window)).toHaveText(['Fix the login flow']);
-  await window.getByRole('button', { name: 'Archived' }).click();
+  await pickView(window, 'Archived sessions');
   await expect(titles(window)).toHaveText(['Zebra cleanup']);
   await expect(menu.locator('option')).toHaveText(['All directories', `${ALPHA} (1)`]);
-  await window.getByRole('button', { name: 'Archived' }).click();
+  await pickView(window, 'Archived sessions');
 
   // A second Sessions window starts on all directories and keeps a choice of its own.
   const id = await window.getAttribute('data-id');
@@ -630,11 +601,11 @@ test('a turn that ends while nobody looks stays unread, across reloads and aslee
 
   // Archived, it keeps the mark; restored, it still has it.
   await deploy.getByRole('button', { name: 'Archive' }).click();
-  await window.getByRole('button', { name: 'Archived' }).click();
+  await pickView(window, 'Archived sessions');
   const archived = row(window, 'deploy staging');
   await expect(archived).toHaveClass(/is-unread/);
   await archived.getByRole('button', { name: 'Restore' }).click();
-  await window.getByRole('button', { name: 'Archived' }).click();
+  await pickView(window, 'Archived sessions');
   await expect(deploy).toHaveClass(/is-unread/);
 
   // Showing it from Sessions reads it.
@@ -683,7 +654,7 @@ test('a row’s menu, from a right-click or its ⋯ button, marks a session read
   await zebra.click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Archive' }).click();
   await expect(titles(window)).toHaveText(['Fix the login flow']);
-  await window.getByRole('button', { name: 'Archived' }).click();
+  await pickView(window, 'Archived sessions');
   await zebra.click({ button: 'right' });
   await expect(menu.getByRole('menuitem')).toHaveText(['Show', 'Mark as unread', 'Pin to top', 'Restore']);
   await page.keyboard.press('Escape');
@@ -717,9 +688,9 @@ test('a pinned session is listed first, whatever the sort, in every window and a
   await row(window, 'deploy staging').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Pin to top' }).click();
   await expect(titles(window)).toHaveText(['deploy staging', 'Fix the login flow', 'Zebra cleanup']);
-  await window.getByRole('combobox', { name: 'Sort by' }).selectOption('title');
+  await pickView(window, 'Title');
   await expect(titles(window)).toHaveText(['deploy staging', 'Fix the login flow', 'Zebra cleanup']);
-  await window.getByRole('button', { name: 'Reverse sort order' }).click();
+  await pickView(window, 'Reverse order');
   await expect(titles(window)).toHaveText(['Fix the login flow', 'deploy staging', 'Zebra cleanup']);
 
   await page.reload();
@@ -851,6 +822,6 @@ test('a rewind moves the conversation onto a new journal: the window and its row
   // The journal before the rewind keeps what was set aside, archived: listed there, not here.
   await expect(keyRow(window, fileOf('zebra'))).toHaveCount(0);
   expect(existsSync(join(ARCHIVE, '-e2e-project', '2026-10-01_zebra.jsonl'))).toBe(true);
-  await window.getByRole('button', { name: 'Archived' }).click();
+  await pickView(window, 'Archived sessions');
   await expect(titles(window)).toHaveText(['Zebra cleanup']);
 });

@@ -1,119 +1,60 @@
-/* Sessions window: running sessions, then past ones; quiet controls, row actions shown on
-   hover or focus. */
+/* Sessions window: every conversation, its controls in the window's top bar; row actions shown
+   on hover or focus. */
 
 .sessions {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
   min-height: 0;
+  margin: calc(-1 * var(--space-2));
   font: var(--text-sm) / var(--leading-read) var(--font-ui);
   color: var(--color-text);
 }
 
-.sessions-bar {
-  display: flex;
-  gap: var(--space-1);
-  align-items: center;
-}
-
-.sessions-search,
-.sessions-sort,
-.sessions-icon-btn,
-.sessions-toggle {
-  height: 28px;
-  border: 1px solid var(--color-line);
+/* ── controls, in the window's top bar ── */
+/* The directory: a quiet menu showing which one, no native chrome, a thin chevron. */
+.sessions-directory {
+  /* As wide as the directory it shows, not its longest one. */
+  field-sizing: content;
+  min-width: 0;
+  max-width: 14em;
+  height: 24px;
+  padding: 0 20px 0 8px;
+  border: 0;
   border-radius: var(--radius-s);
-  background: transparent;
+  appearance: none;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--color-text-faint) 50%) calc(100% - 11px) 55% / 4px 4px no-repeat,
+    linear-gradient(135deg, var(--color-text-faint) 50%, transparent 50%) calc(100% - 7px) 55% / 4px 4px no-repeat;
   color: var(--color-text-dim);
   font: var(--text-xs) / 1.4 var(--font-ui);
-}
-
-.sessions-search,
-.sessions-sort {
-  min-width: 0;
-  padding: 0 8px;
-}
-
-/* While searching the list is by relevance: the sort controls rest. */
-:is(.sessions-sort, .sessions-icon-btn):disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.sessions-search {
-  flex: 1 1 8em;
-  min-width: 8em;
-  color: var(--color-text);
-}
-
-.sessions-search::placeholder {
-  color: var(--color-text-faint);
-}
-
-/* Paths can be long: the directory menu gives way to the search box first. */
-.sessions-directory {
-  flex: 0 100 auto;
-  max-width: 16em;
-}
-
-/* No native control chrome, a thin chevron. */
-.sessions-sort {
-  appearance: none;
-  padding-right: 22px;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--color-text-faint) 50%),
-    linear-gradient(135deg, var(--color-text-faint) 50%, transparent 50%);
-  background-position: calc(100% - 12px) 55%, calc(100% - 8px) 55%;
-  background-size: 4px 4px;
-  background-repeat: no-repeat;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
-.sessions-sort option {
+.sessions-directory:hover {
+  background-color: var(--color-hover);
+  color: var(--color-text);
+}
+
+.sessions-directory option {
   background: var(--color-surface-raised);
   color: var(--color-text);
 }
 
-.sessions-icon-btn {
-  flex: none;
-  width: 28px;
-  cursor: pointer;
-}
-
-/* Archived ⇄ past sessions: lit while the window lists the archive. */
-.sessions-toggle {
-  flex: none;
-  padding: 0 8px;
-  cursor: pointer;
-}
-
-:is(.sessions-search, .sessions-sort, .sessions-icon-btn, .sessions-toggle):hover {
-  border-color: var(--color-line-strong);
-  color: var(--color-text);
-}
-
-.sessions-toggle[aria-pressed='true'] {
-  border-color: var(--color-line-strong);
-  color: var(--color-text);
-}
-
-.sessions-search:focus-visible {
-  outline: none;
-  border-color: var(--color-line-focus);
-}
-
-:is(.sessions-sort, .sessions-icon-btn, .sessions-toggle, .sessions-action):focus-visible,
+:is(.sessions-directory, .sessions-action):focus-visible,
 .sessions-item:focus-visible {
   outline: 1px solid var(--color-accent);
   outline-offset: -1px;
 }
 
+/* Loading, failing or empty; hidden while the list speaks for itself. */
 .sessions-status {
   margin: 0;
-  padding: 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
   color: var(--color-text-faint);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 
 .sessions-status.is-error {
@@ -129,6 +70,7 @@
   list-style: none;
   display: flex;
   flex-direction: column;
+  gap: 1px;
 }
 
 .sessions-item {
@@ -137,8 +79,8 @@
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  padding: 5px var(--space-2);
-  border-radius: var(--radius-s);
+  padding: 6px var(--space-2);
+  border-radius: var(--radius-m);
   cursor: grab;
   user-select: none;
 }
@@ -147,44 +89,51 @@
   background: var(--color-surface-raised);
 }
 
-/* A session shown in an agent window: a quiet bar at the row's left edge, brighter for the one
-   in the agent window used last (where a click shows sessions). */
+/* Where the conversation is on this screen: the one in the agent window used last (where a
+   click shows sessions) is filled; one shown in another agent window is ringed. */
 .sessions-item.is-shown {
-  box-shadow: inset 2px 0 var(--color-line-strong);
+  box-shadow: inset 0 0 0 1px var(--color-line-strong);
 }
 
 .sessions-item.is-current {
-  box-shadow: inset 2px 0 var(--color-text-dim);
+  background: var(--color-surface-raised);
+  box-shadow: none;
 }
 
-/* How a running session is doing, or that a session is unread: a small dot (rows with
-   nothing to say keep its space, empty). */
+/* How an awake conversation is doing, or that it is unread: a mark before its title (rows with
+   nothing to say keep its space, empty). Working spins in the accent; needing its user is a
+   warm dot; unread news is cyan. */
 .sessions-dot {
   flex: none;
-  width: 6px;
-  height: 6px;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: transparent;
 }
 
-.sessions-item.is-idle .sessions-dot {
-  background: var(--color-text-faint);
+.sessions-item:is(.is-starting, .is-working) .sessions-dot {
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
+  animation: sessions-spin 0.9s linear infinite;
 }
 
-.sessions-item.is-starting .sessions-dot,
-.sessions-item.is-working .sessions-dot {
-  background: var(--color-text-dim);
-  animation: sessions-pulse 1.2s ease-in-out infinite;
+.sessions-item.is-starting .sessions-dot {
+  border-top-color: var(--color-text-dim);
 }
 
-.sessions-item:is(.is-unread, .is-asking) .sessions-dot {
+.sessions-item.is-asking .sessions-dot {
+  background: var(--color-warn);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-warn) 20%, transparent);
+}
+
+.sessions-item.is-unread:not(.is-asking, .is-working, .is-starting) .sessions-dot {
   background: var(--color-unread);
-  animation: none;
 }
 
-@keyframes sessions-pulse {
-  50% {
-    opacity: 0.35;
+@keyframes sessions-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -203,13 +152,18 @@
 
 .sessions-title {
   overflow: hidden;
+  color: var(--color-text-dim);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.sessions-item:is(:hover, .is-current, .is-unread, .is-asking, .is-working) .sessions-title {
+  color: var(--color-text);
+}
+
 .sessions-meta {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
   color: var(--color-text-faint);
   font-size: var(--text-xs);
@@ -226,28 +180,15 @@
   color: var(--color-text-dim);
 }
 
-.sessions-item:is(.is-asking, .is-done) .sessions-state {
-  color: var(--color-unread);
+.sessions-item.is-working .sessions-state {
+  color: var(--color-accent);
+}
+
+.sessions-item.is-asking .sessions-state {
+  color: var(--color-warn);
 }
 
 /* Unread: news the user has not read yet (daemon/unread.js). */
-/* The passage a search matched: two lines at most, its matched words marked. */
-.sessions-snippet {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  margin-top: 2px;
-  color: var(--color-text-dim);
-  font-size: var(--text-xs);
-}
-
-.sessions-snippet mark {
-  background: none;
-  color: var(--color-text);
-  font-weight: 600;
-}
-
 .sessions-item.is-unread .sessions-title {
   font-weight: 600;
 }
@@ -283,7 +224,6 @@
 .sessions-item:is(:hover, :focus-within) .sessions-actions {
   opacity: 1;
 }
-
 
 .sessions-action {
   padding: 2px 6px;

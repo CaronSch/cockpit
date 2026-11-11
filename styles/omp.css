@@ -134,7 +134,7 @@
   max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
 }
 
 /* ── Session layout ─────────────────────────────────── */
@@ -215,6 +215,12 @@
   color: var(--color-text);
 }
 
+/* The desktop stops a turn with Esc in the message box; the phone, with no Esc, keeps Stop
+   (its actions are not a window's: phone.js). */
+.widget-actions .omp-stop {
+  display: none;
+}
+
 /* The previous/next response arrows in the top bar, before New: narrow. */
 .omp-nav-btn {
   padding-inline: 4px;
@@ -240,16 +246,19 @@
   color: var(--color-accent);
 }
 
+/* Working: the same spinner as a working row in Sessions. */
 .omp-activity.is-streaming::before,
 .omp-working::before {
-  background: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-glow);
-  animation: omp-pulse 1.2s ease-in-out infinite;
+  box-sizing: border-box;
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
+  background: transparent;
+  animation: omp-spin 0.9s linear infinite;
 }
 
-@keyframes omp-pulse {
-  50% {
-    opacity: 0.35;
+@keyframes omp-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -290,8 +299,11 @@
   background: var(--color-accent);
 }
 
+/* Context and spend: monospace figures, so they tick over without the toolbar shifting. */
 .omp-meter {
   color: var(--color-text-dim);
+  font-family: var(--font-code);
+  font-variant-numeric: tabular-nums;
 }
 
 .omp-meter:empty {
@@ -595,14 +607,14 @@
   font-weight: 600;
 }
 
-/* Markers sit in the gutter like a terminal's: `-` for bullets, numbers right after. */
+/* Bullets and numbers hang in the gutter. */
 .omp-md ul {
-  padding-left: 2ch;
-  list-style: '- ';
+  padding-left: 1.4em;
+  list-style: disc;
 }
 
 .omp-md ol {
-  padding-left: 3ch;
+  padding-left: 1.8em;
 }
 
 .omp-md li::marker {
@@ -1247,7 +1259,7 @@
 
 /*
  * One line to start, growing with its text (composer.js sets the height, up to half the
- * pane), so no resize grip. Its text is set like a scratchpad's (`.pad-text`).
+ * pane), so no resize grip. Its text is set like the transcript's.
  */
 .omp-draft {
   flex: 1;

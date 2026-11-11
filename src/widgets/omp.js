@@ -17,8 +17,9 @@
  * (ui/settings.js), the same in every agent window. Each turn's decision review, when the
  * daemon made one (daemon/decisions.js), shows where the turn ends (omp/decisions.js).
  *
- * New, Fork, PRs (shown while the conversation's directory is in a GitHub repository), Accounts
- * and Stop sit in the window's top bar, beside its close button. PRs lists the repository's pull
+ * New, Fork, PRs (shown while the conversation's directory is in a GitHub repository) and
+ * Accounts sit in the window's top bar, beside its close button; Stop is there too, shown on the
+ * phone only (phone.css): on the desktop, Esc in the message box stops a turn. PRs lists the repository's pull
  * requests: a click opens one beside this window, to review for this conversation
  * (widgets/github.js); dragging one places it where it is dropped. Typing `#` in the message box
  * suggests them too (omp/pr-suggest.js).
@@ -373,7 +374,7 @@ function createPane(body, ctx, daemon) {
     const recent = el('div', 'omp-recent');
     Promise.all([daemon.config(), daemon.history()])
       .then(([c, past]) => {
-        const dirs = recentDirs(listConversations(past, daemon.sessions(), { searching: false, directory: null }));
+        const dirs = recentDirs(listConversations(past, daemon.sessions(), { directory: null }));
         if (!dirs.length) return;
         recent.setAttribute('role', 'group');
         recent.setAttribute('aria-label', 'Recent directories');

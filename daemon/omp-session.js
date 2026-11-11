@@ -15,6 +15,7 @@
  * `schedule` tool, schedule.js), which omp asks the daemon to run when the agent calls one.
  */
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { conversationOf } from './conversation.js';
 import { isContinueDirective } from '../src/omp/message.js';
 import { contentText } from '../src/omp/transcript.js';
@@ -55,6 +56,9 @@ export const APPEND_SYSTEM_PROMPT =
   "- Anything else (screenshots, plots you render yourself): an image file, shown with ![what it shows](/absolute/path/to/image.png) (png, jpeg, gif, webp or avif).\n" +
   "Everything shown must be on this machine: remote URLs are not loaded.\n\n" +
   "When something has to happen later (CI to finish, a deploy to settle, a review to come in, a long job), schedule the check yourself with the schedule tool rather than asking the user to ping you or come back.";
+
+/** omp settings every session runs with, over the user's own (`--config`): plain titles. */
+const OMP_OVERLAY = join(import.meta.dir, 'omp-overlay.yml');
 
 /** Successful responses after which omp is logged in to other providers. */
 const LOGIN_CHANGING_COMMANDS = new Set(['login', 'logout']);
@@ -156,7 +160,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   let child = null;
   try {
     const from = resume ? ['--resume', resume] : fork ? ['--fork', fork] : [];
-    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--append-system-prompt', appendSystemPrompt, ...from], {
+    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--config', OMP_OVERLAY, '--append-system-prompt', appendSystemPrompt, ...from], {
       cwd,
       env: { ...process.env, ...env },
       stdin: 'pipe',

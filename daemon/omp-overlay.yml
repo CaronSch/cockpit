@@ -1,0 +1,6 @@
+# omp settings for the sessions the workbench runs, over the user's own (`omp --config`,
+# daemon/omp-session.js). Their omp elsewhere (its TUI, other terminals) is untouched.
+
+# Plain titles: no icon or ALL-CAPS code before them (omp's title cards).
+title:
+  icons: boring
