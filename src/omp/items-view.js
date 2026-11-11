@@ -77,6 +77,13 @@ export function renderItem(item, ctx) {
     case 'note': {
       // A slash command's multi-line output is the answer to what was asked: show it open.
       if (item.source === 'command' && item.detail) return el('pre', 'omp-pre omp-command-output', item.detail);
+      // Compaction marks a line across the conversation: above it, what the agent now has as a
+      // summary (a click shows it), whether omp compacted near its context's limit or the daemon
+      // while idle.
+      if (item.source === 'compaction') {
+        const cls = `omp-compaction is-${item.level}`;
+        return item.detail ? collapsible(ctx, item.key, cls, [item.text], () => [el('div', 'omp-compaction-summary', item.detail ?? '')]) : el('div', cls, item.text);
+      }
       const cls = `omp-note is-${item.level}${item.hidden ? ' is-hidden' : ''}`;
       const label = [item.source, item.text].filter(Boolean).join(': ');
       const [firstLine, ...moreLines] = label.split('\n');

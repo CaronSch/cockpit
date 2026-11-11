@@ -549,6 +549,7 @@ export async function createApp(root) {
 
   palette = createPalette({
     panel: query(root, '#palette'),
+    toggle: query(root, '#palette-toggle'),
     widgets: WIDGETS,
     drag,
     onAdd: addWidget,

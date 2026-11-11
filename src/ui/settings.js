@@ -14,6 +14,7 @@
 import { button, el } from './dom.js';
 import { createAtom } from '../state/atom.js';
 import { createLogin } from './login.js';
+import { openOnHover } from './hover-menu.js';
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { Notifier } from '../sessions/notify.js' */
 /** @import { BrowserChoice } from '../../daemon/browser.js' */
@@ -278,6 +279,8 @@ export function createConfigMenu({ daemon, notifier }) {
   toggle.popoverTargetElement = menu;
   root.append(toggle, menu);
 
+  // Opened while the pointer rests on it (ui/hover-menu.js); a click pins it open.
+  openOnHover({ toggle, menu, areas: [root] });
   menu.addEventListener('toggle', (event) => {
     const opened = /** @type {ToggleEvent} */ (event).newState === 'open';
     toggle.setAttribute('aria-expanded', String(opened));

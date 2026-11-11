@@ -164,9 +164,11 @@ What runs today:
   tool calls with output), pick model and thinking level, log in to
   providers, use slash commands, answer approval and `ask` dialogs, steer or stop
   a running turn, and carry on a conversation whatever became of its omp (asleep,
-  a daemon restart). A long conversation compacted while idle says so in its
-  transcript while it runs ("Compacting while idle…") and once done ("Compacted while
-  idle, before the prompt cache expired"), with the summary. Past that cutoff (54 minutes after
+  a daemon restart). Compaction draws a line across the transcript, in every view (*Only
+  prompts and responses* too), with what happened in its middle and the summary a click away:
+  omp's own near its context's limit ("Compacting context…", "Context compacted") and the
+  daemon's while idle ("Compacting while idle…", "Compacted while idle, before the prompt cache
+  expired"). Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
   works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **Forks**
@@ -196,7 +198,7 @@ What runs today:
   session of its own (omp's `--fork`: a new journal, the original runs on untouched),
   started by the daemon (`daemon/forks.js`) once omp has saved the conversation (a new
   session does once the model has replied). `/fork <prompt>` (the workbench's own command,
-  never sent to omp) starts one in the background with that prompt, no window of its own;
+  never sent to omp) opens one as a new tab beside it with that prompt;
   dragging **Send** (the message box's small up-arrow button) onto the grid starts one in a new window placed where it is dropped, with
   the message in the box (the box empties once the fork is placed; a click still sends here).
   Forking while the agent works copies the conversation as of its last completed response.
@@ -234,7 +236,8 @@ What runs today:
   without a list shows none. A line of chips above the message box lists the shells
   and subagents running now with how long each has run, a light circling each chip's outline (`omp/running-work.js`): the
   calls the turn waits on, and the background jobs omp handed them off to (a
-  result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`), which
+  result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`
+  naming the job or, for a subagent, its agent: omp runs a revival as a job of its own, `<agent>-2`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Scheduled
   line under it lists the prompts scheduled for the conversation (its agent's `schedule` tool,
   below), each with when it runs; a missed one says so. A Markdown table in a reply has a Copy button (on
@@ -246,7 +249,9 @@ What runs today:
   question goes to omp's `btw`, whose answer streams into that box, outside the chat, where
   follow-up questions continue the same topic, one at a time (every question asks
   for an answer of at most three sentences); pasted text goes into the
-  message box as typed, and pasted or dropped files are stored in
+  message box as typed, and pasted or dropped files wait over the box as cards (a thumbnail
+  for an image, the name and size, a × on the corner while pointed at; a click previews one:
+  an image in the image viewer, another file as a file tab), are stored in
   `~/.cockpit/attachments/` and sent as omp `@"<path>"` mentions, which the prompt in the transcript shows as the files themselves (images as thumbnails, others by name: `splitAttachments`). Typing `@`
   suggests the entries of the session's directory, or of the folder the path after
   it names (`@src/`, `@../`, `@~/`, `@/abs`), filtered by what follows the last `/`;
@@ -281,7 +286,7 @@ What runs today:
   focused tab: never for events replayed on (re)connecting (the `hello` carries the seq
   they run to), one per session (tagged with its id, so tabs replace each other's), closed
   once the session is read; a click shows it in the agent window used last. The top
-  bar's Config menu (opened by a click) holds the app's
+  bar's Config menu (open while pointed at, or pinned by a click) holds the app's
   switches, kept per browser (`src/ui/settings.js`). Agent windows fold each stretch of
   thinking and tool calls between two things the agent said into one line ("Working · 3 steps
   · read, edit ×2" with a spinner while it runs, "Worked · …" once done, a red "1 failed" if a
@@ -411,8 +416,9 @@ What runs today:
   conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a
   conversation shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
   /api/schedule/:id`; saved, it is no longer missed). Only a failure is written under the axis.
-- Nothing pops up on hover: no tooltips (no `title` attributes) and no menus opened by pointing.
-  Controls named only by a symbol say what they are to screen readers (`aria-label`).
+- Nothing pops up on hover but the top bar's Config and + Widget menus (`src/ui/hover-menu.js`:
+  open while pointed at, pinned by a click): no tooltips (no `title` attributes), and no other
+  menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
 - Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
   deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
@@ -753,6 +759,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/directory-form.js` — The form a window starts something in a directory from (an agent, a shell): a Directory field that suggests folders as the path is typed, a start button, and under them the directories of the latest conversations, each a click from starting there.
 - `src/ui/dom.js` — Element construction helpers: elements, SVG elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
+- `src/ui/hover-menu.js` — Top bar menus that open while the pointer rests on their button (Config, + Widget): the menu follows the pointer, closing a moment after it leaves, and a click on the button or in the menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
 - `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.

@@ -96,8 +96,9 @@
 }
 
 /* Outside what the phone does (no new agents, forks, pull requests, accounts, archiving,
-   pinning or rewinding), or needing a secure context it does not have (Copy). Hover reveals
-   them on the desktop; on a phone they would still take taps while invisible. */
+   pinning, rewinding or decision reviews), or needing a secure context it does not have (Copy).
+   Hover reveals some on the desktop; on a phone they would still take taps while invisible. */
+.phone .omp-decisions,
 .phone .omp-forks,
 .phone .omp-prs,
 .phone .sessions-archive,

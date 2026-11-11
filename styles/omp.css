@@ -244,8 +244,8 @@
 .omp-working::before {
   content: '';
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   margin-right: 5px;
   border-radius: 50%;
   background: var(--color-line-strong);
@@ -260,8 +260,8 @@
 .omp-activity.is-streaming::before,
 .omp-working::before {
   box-sizing: border-box;
-  border: 1.5px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
-  border-top-color: color-mix(in oklch, var(--color-accent) 90%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
   background: transparent;
   animation: omp-spin 1.4s linear infinite;
 }
@@ -518,7 +518,7 @@
 }
 
 .omp-jump.is-working .omp-jump-ring {
-  stroke: color-mix(in oklch, var(--color-accent) 90%, transparent);
+  stroke: var(--color-accent);
   stroke-dasharray: 20 62;
   animation: omp-jump-spin 1.4s linear infinite;
 }
@@ -864,7 +864,8 @@
 }
 
 /* The files a prompt was sent with (message.js `splitAttachments`): images as thumbnails (a
-   click opens one full size), anything else as its name. */
+   click opens one full size), anything else as its name. A screenshot of a few lines shows at its
+   own pixels: shrunk by an odd factor, its text goes soft. */
 .omp-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -878,8 +879,8 @@
 }
 
 .omp-attachments .md-image img {
-  max-width: 240px;
-  max-height: 96px;
+  max-width: min(100%, 480px);
+  max-height: 200px;
   border: 1px solid var(--color-line-strong);
   background: none;
 }
@@ -1014,10 +1015,10 @@
 .omp-spin {
   flex: none;
   box-sizing: border-box;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
-  border-top-color: color-mix(in oklch, var(--color-accent) 90%, transparent);
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   corner-shape: round;
   animation: omp-spin 1.4s linear infinite;
@@ -1047,6 +1048,39 @@
   font: inherit;
   font-family: var(--font-code);
   overflow-wrap: anywhere;
+}
+
+/* Compaction (omp near its context's limit, or the daemon while idle): a line across the
+   transcript with what happened in its middle; the summary opens under it. */
+div.omp-compaction,
+.omp details.omp-compaction > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: none;
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}
+
+div.omp-compaction::before,
+div.omp-compaction::after,
+.omp details.omp-compaction > summary::before,
+.omp details.omp-compaction > summary::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-line-strong);
+}
+
+.omp-compaction.is-error,
+.omp-compaction.is-warning {
+  color: var(--color-danger);
+}
+
+.omp-compaction-summary {
+  color: var(--color-text-dim);
+  white-space: pre-wrap;
 }
 
 .omp-note {
@@ -1292,16 +1326,16 @@
 }
 
 /* A shell or subagent running now: roomier, with a light going round its outline (ui/orbit.js).
-   Its height is fixed so its ends are true half circles the light can follow: its outline runs
-   half a pixel inside the edge, so its corners are the pill's radius less that half pixel. */
+   Its corners are round (not squircles) so the light can follow them: its outline runs half a
+   pixel inside the edge, so its corners are the chip's radius less that half pixel. */
 .omp-running .omp-chip.is-running {
-  --orbit-radius: 12.5px;
+  --orbit-radius: 7.5px;
   position: relative;
   box-sizing: border-box;
   height: 26px;
   gap: var(--space-2);
   padding: 0 12px;
-  border-radius: 13px;
+  border-radius: 8px;
 }
 
 /* A prompt scheduled for this conversation: when it runs, then the prompt. */
@@ -1335,7 +1369,7 @@
   max-width: 100%;
   padding: 1px 2px 1px 6px;
   border: 1px solid var(--color-line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-m);
   font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
@@ -1720,12 +1754,15 @@
   opacity: 0.55;
 }
 
+/* A card above the draft (composer.js): a comment, or a file with its thumbnail; a click edits
+   or previews it. Its × sits on its top-right corner while it is pointed at or focused. */
 .omp-card {
+  position: relative;
   display: flex;
   align-items: stretch;
   max-width: 100%;
   border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
   background: var(--color-surface-raised);
 }
 
@@ -1737,15 +1774,34 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 0;
   min-width: 0;
   max-width: 320px;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border: 0;
+  border-radius: inherit;
   background: transparent;
   color: var(--color-text);
   font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
+}
+
+.omp-card.is-file .omp-card-main {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 10px 4px 4px;
+}
+
+.omp-card-main:hover {
+  background: var(--color-hover);
+}
+
+.omp-card-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .omp-card-quote,
@@ -1761,18 +1817,35 @@
 }
 
 .omp-card-remove {
-  flex: none;
-  width: 22px;
-  border: 0;
-  border-left: 1px solid var(--color-line);
-  background: transparent;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--color-surface-raised);
   color: var(--color-text-dim);
-  font: inherit;
   cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
 }
 
-.omp-card-remove:hover,
-.omp-card-main:hover {
+.omp-card-remove .stroke-icon {
+  width: 7px;
+  height: 7px;
+  stroke-width: 1.75;
+}
+
+.omp-card:is(:hover, :focus-within) .omp-card-remove {
+  opacity: 1;
+}
+
+.omp-card-remove:hover {
   color: var(--color-text);
 }
 
@@ -1792,15 +1865,10 @@
 
 .omp-card-thumb {
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   object-fit: cover;
-  border-right: 1px solid var(--color-line);
-  border-radius: var(--radius-s) 0 0 var(--radius-s);
-}
-
-div.omp-card-main {
-  cursor: default;
+  border-radius: var(--radius-s);
 }
 
 /* A file dragged over the pane: dropping it attaches it to the next message. */
