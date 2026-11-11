@@ -41,6 +41,21 @@ export default {
 
 /** How many lines a terminal keeps above its screen. */
 const SCROLLBACK_LINES = 5000;
+/** The size a shell starts at when its window cannot be measured, as a terminal app's default. */
+const FALLBACK_SIZE = Object.freeze({ cols: 80, rows: 24 });
+
+/**
+ * A terminal as a window draws one in `screen`: the code font at `screen`'s text size, once that
+ * font is in (or its cells are measured from the fallback font's), in the app's colours.
+ * @param {typeof Terminal} XTerm xterm.js's terminal class @param {HTMLElement} screen
+ * @returns {Promise<Terminal>}
+ */
+async function xtermIn(XTerm, screen) {
+  const fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--font-code').trim();
+  const fontSize = parseFloat(getComputedStyle(screen).fontSize);
+  await document.fonts.load(`${fontSize}px ${fontFamily}`).catch(() => {});
+  return new XTerm({ fontFamily, fontSize, theme: appTheme(), cursorBlink: true, scrollback: SCROLLBACK_LINES });
+}
 
 /** xterm.js and its stylesheet, loaded once, when a terminal is first shown. @type {Promise<{ Terminal: typeof Terminal, FitAddon: typeof FitAddon }> | null} */
 let xterm = null;
@@ -143,11 +158,37 @@ function createTerminalWindow(body, ctx, daemon) {
     root.replaceChildren(next.root);
   }
 
-  /** Starts a shell in `dir` and shows it here. @param {string} dir */
+  /** Starts a shell in `dir`, at the size this window draws it at, and shows it here. @param {string} dir */
   async function start(dir) {
-    const terminal = await daemon.startTerminal({ cwd: dir, cols: 80, rows: 24 });
+    const { cols, rows } = await measure().catch(() => FALLBACK_SIZE);
+    const terminal = await daemon.startTerminal({ cwd: dir, cols, rows });
     focusNext = true;
     ctx.setParams({ terminal: terminal.id, cwd: terminal.cwd, startIn: null });
+  }
+
+  /**
+   * The size a terminal is drawn at in this window, measured by laying one out unseen where the
+   * terminal will be: a shell started at another size draws its first prompt for that one (zsh's
+   * end-of-line `%` is left showing in a wider window), before the window's resize reaches it.
+   * `FALLBACK_SIZE` when the window has no size (a tab behind another).
+   */
+  async function measure() {
+    const { Terminal, FitAddon } = await loadXterm();
+    const probe = el('div', 'term-view term-probe');
+    const screen = el('div', 'term-screen');
+    probe.append(screen);
+    root.append(probe);
+    try {
+      const t = await xtermIn(Terminal, screen);
+      const fit = new FitAddon();
+      t.loadAddon(fit);
+      t.open(screen);
+      const size = fit.proposeDimensions();
+      t.dispose();
+      return size && size.cols > 0 && size.rows > 0 ? { cols: size.cols, rows: size.rows } : FALLBACK_SIZE;
+    } finally {
+      probe.remove();
+    }
   }
 
   function render() {
@@ -262,18 +303,9 @@ function createTerminalWindow(body, ctx, daemon) {
     loadXterm()
       .then(async ({ Terminal, FitAddon }) => {
         if (destroyed) return;
-        const fontFamily = getComputedStyle(document.documentElement).getPropertyValue('--font-code').trim();
         const fontSize = () => parseFloat(getComputedStyle(screen).fontSize);
-        // Measured once its font is in, or the cells are the fallback's size.
-        await document.fonts.load(`${fontSize()}px ${fontFamily}`).catch(() => {});
-        if (destroyed) return;
-        const t = new Terminal({
-          fontFamily,
-          fontSize: fontSize(),
-          theme: appTheme(),
-          cursorBlink: true,
-          scrollback: SCROLLBACK_LINES,
-        });
+        const t = await xtermIn(Terminal, screen);
+        if (destroyed) return t.dispose();
         term = t;
         fit = new FitAddon();
         t.loadAddon(fit);
