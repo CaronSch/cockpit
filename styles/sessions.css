@@ -195,10 +195,11 @@
   padding-right: 1.75em;
 }
 
-/* Row actions: quiet text buttons, shown while the row is hovered or holds focus. */
+/* Row actions: bare icons, as the window's close button, shown while the row is hovered or holds
+   focus; a faint fill marks the one under the pointer. */
 .sessions-actions {
   display: flex;
-  gap: var(--space-1);
+  gap: 2px;
   visibility: hidden;
 }
 
@@ -207,13 +208,18 @@
 }
 
 .sessions-action {
-  padding: 2px 8px;
-  border: 1px solid var(--color-line-strong);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-s);
-  background: var(--color-surface);
-  color: var(--color-text);
+  background: transparent;
+  color: var(--color-text-dim);
   font-size: var(--text-xs);
   cursor: pointer;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
 }
 
 .sessions-action:hover:not(:disabled) {
@@ -228,12 +234,6 @@
 
 /* Actions drawn as icons (ui/icons.js): Archive or Restore, and mark unread (a closed envelope)
    or read (an open one), as a mail client has them. */
-.sessions-icon {
-  display: grid;
-  place-items: center;
-  padding: 3px 6px;
-}
-
 .sessions-icon .stroke-icon {
   width: 14px;
   height: 14px;
