@@ -5,7 +5,7 @@
   flex-direction: column;
   gap: var(--space-3);
   max-width: 46rem;
-  font: var(--text-sm) / 1.5 var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / 1.5 var(--font-ui);
 }
 
 .setup p {
@@ -29,7 +29,7 @@
 }
 
 .setup-state {
-  font-weight: normal;
+  font-weight: var(--weight-regular);
   color: var(--color-text-faint);
 }
 

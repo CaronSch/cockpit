@@ -31,7 +31,7 @@
   border-bottom: 1px solid color-mix(in oklch, var(--color-line) 80%, transparent);
   background: transparent;
   color: var(--color-text);
-  font: var(--text-lg) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-lg) / 1.4 var(--font-ui);
   outline: none;
 }
 
@@ -104,7 +104,7 @@
   min-width: 11rem;
   border-color: var(--color-line);
   color: var(--color-text-faint);
-  font-weight: 400;
+  font-weight: var(--weight-regular);
 }
 
 .spotlight-open:hover {

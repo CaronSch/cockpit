@@ -16,7 +16,7 @@
 /* The conversation reads like a terminal: one size and leading for every transcript item. */
 .omp-transcript,
 .omp-draft {
-  font: var(--text-sm) / var(--leading-read) var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / var(--leading-read) var(--font-ui);
 }
 
 .omp [hidden] {
@@ -160,7 +160,7 @@
   gap: var(--space-1) var(--space-2);
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--color-line);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 /* One line: the directory gives way first (ellipsis), then the model's name; the rest keep their size. */
@@ -327,7 +327,7 @@
   gap: var(--space-1);
   width: min(22rem, calc(100vw - 16px));
   max-height: min(60vh, calc(100% - 8px));
-  font: var(--text-sm) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / 1.4 var(--font-ui);
   padding: var(--space-2);
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-m);
@@ -358,7 +358,7 @@
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
 }
@@ -381,7 +381,7 @@
 
 .omp-working {
   color: var(--color-accent);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .omp-strip,
@@ -394,7 +394,7 @@
   gap: var(--space-1) var(--space-3);
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--color-line);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .omp-strip {
@@ -537,7 +537,7 @@
   border-radius: var(--radius-s);
   background: var(--color-surface-raised);
   color: var(--color-text-dim);
-  font: var(--text-2xs) / 1.6 var(--font-ui);
+  font: var(--weight-regular) var(--text-2xs) / 1.6 var(--font-ui);
   cursor: pointer;
   user-select: none;
   opacity: 0;
@@ -700,7 +700,7 @@
   border-radius: var(--radius-s);
   background: var(--color-surface-raised);
   color: var(--color-text-dim);
-  font: var(--text-2xs) / 1.6 var(--font-ui);
+  font: var(--weight-regular) var(--text-2xs) / 1.6 var(--font-ui);
   cursor: pointer;
   user-select: none;
   opacity: 0;
@@ -1016,7 +1016,7 @@
   flex-direction: column;
   align-items: flex-start;
   text-align: left;
-  font-weight: 400;
+  font-weight: var(--weight-regular);
 }
 
 .omp-option-label {
@@ -1082,7 +1082,7 @@
   border-radius: var(--radius-s);
   background: var(--color-accent-glow);
   color: var(--color-accent);
-  font: var(--text-2xs) / 1.5 var(--font-ui);
+  font: var(--weight-regular) var(--text-2xs) / 1.5 var(--font-ui);
 }
 
 .omp-preview {
@@ -1144,7 +1144,7 @@
   padding: 1px 2px 1px 6px;
   border: 1px solid var(--color-line-strong);
   border-radius: 999px;
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .omp-chip-kind {
@@ -1189,7 +1189,7 @@
   border: 0;
   background: transparent;
   color: var(--color-text);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
 }
@@ -1298,7 +1298,7 @@
   gap: var(--space-2);
   min-width: 0;
   color: var(--color-text-dim);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .omp-shell-mark[hidden] {
@@ -1435,7 +1435,7 @@
   border-radius: var(--radius-s);
   background: var(--color-field);
   color: var(--color-text);
-  font: var(--text-sm) / 1.45 var(--font-ui);
+  font: var(--weight-regular) var(--text-sm) / 1.45 var(--font-ui);
 }
 
 .omp-cards {
@@ -1449,7 +1449,7 @@
   flex-basis: 100%;
   margin: 0;
   color: var(--color-text-faint);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .omp-cards.is-held .omp-card {
@@ -1480,7 +1480,7 @@
   border: 0;
   background: transparent;
   color: var(--color-text);
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
 }

@@ -66,7 +66,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font: var(--text-xs) / 1.4 var(--font-ui);
+  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .phone-actions .omp-tool-btn {

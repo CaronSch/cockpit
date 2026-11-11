@@ -1046,7 +1046,7 @@ test('with Animated selection on, a drag shows whole words in its own highlight;
   await expect(reply.locator('li')).toHaveText(['one', 'two']);
   await expect(pane.locator('.widget-label')).toHaveText('About hello'); // settled and titled: nothing redraws it
   const paragraph = reply.locator('.omp-md > p').first();
-  // The middle of "said" and of "one", and where "said" starts.
+  // Inside "said" (just left of its "i", unambiguously before it), the middle of "one", and where "said" starts.
   const points = await reply.evaluate((node) => {
     /** @param {string} selector */
     const textIn = (selector) => /** @type {Node} */ (document.createTreeWalker(/** @type {Node} */ (node.querySelector(selector)), NodeFilter.SHOW_TEXT).nextNode());
@@ -1060,7 +1060,7 @@ test('with Animated selection on, a drag shows whole words in its own highlight;
     const [first, one] = [textIn('.omp-md > p'), textIn('li')];
     const from = box(first, 'You sa'.length);
     const to = box(one, 'o'.length);
-    return { from: { x: from.x + from.width / 2, y: from.y + from.height / 2 }, to: { x: to.x + to.width / 2, y: to.y + to.height / 2 }, wordLeft: box(first, 'You '.length).left };
+    return { from: { x: from.x + from.width / 4, y: from.y + from.height / 2 }, to: { x: to.x + to.width / 2, y: to.y + to.height / 2 }, wordLeft: box(first, 'You '.length).left };
   });
   const lines = pane.locator('.omp-highlight-line:visible');
   const selectionBackground = () => paragraph.evaluate((p) => getComputedStyle(p, '::selection').backgroundColor);

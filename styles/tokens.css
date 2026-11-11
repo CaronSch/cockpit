@@ -14,15 +14,15 @@
   /* Pointed at: a light wash that reads the same on any surface. */
   --color-hover: oklch(100% 0 0 / 0.06);
   /* Edges are translucent white, so a hairline stays a hairline on any surface. */
-  --color-line: oklch(100% 0 0 / 0.08);
-  --color-line-strong: oklch(100% 0 0 / 0.14);
+  --color-line: oklch(100% 0 0 / 0.11);
+  --color-line-strong: oklch(100% 0 0 / 0.18);
   /* A text field being typed in: its border lifts, quieter than the accent outline. */
   --color-line-focus: oklch(100% 0 0 / 0.3);
 
   /* Text */
-  --color-text: oklch(94% 0.003 286);
-  --color-text-dim: oklch(70% 0.008 286);
-  --color-text-faint: oklch(52% 0.01 286);
+  --color-text: oklch(98.5% 0.002 286);
+  --color-text-dim: oklch(80% 0.006 286);
+  --color-text-faint: oklch(62% 0.008 286);
 
   /* Semantic. The accent is light enough to be text; filled controls take its deeper tone. */
   --color-accent: oklch(68% 0.17 277);
@@ -50,16 +50,18 @@
   /* Type: `--font-ui` (Inter) sets chrome and conversation; `--font-code` (IBM Plex Mono) sets
      code, diffs, files, paths, notes and numbers that tick (spend). Hierarchy comes from size,
      weight and colour. `--text-sm` is reading text: the omp transcript, its message box and
-     scratchpads. Sizes are small by design (sleeker); every one follows `--font-scale`, the
-     text size the top bar sets (ui/zoom.js). */
+     scratchpads. Every size follows `--font-scale`, the text size the top bar sets (ui/zoom.js).
+     `--weight-regular` is body text's weight, a touch above 400 so light text on the dark
+     surfaces holds its shape (Inter is variable; IBM Plex Mono rounds it to 400). */
   --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-code: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --weight-regular: 450;
   --font-scale: 1;
-  --text-2xs: calc(0.62rem * var(--font-scale));
-  --text-xs: calc(0.675rem * var(--font-scale));
-  --text-sm: calc(0.73125rem * var(--font-scale));
-  --text-base: calc(0.84375rem * var(--font-scale));
-  --text-lg: calc(1.125rem * var(--font-scale));
+  --text-2xs: calc(0.65rem * var(--font-scale));
+  --text-xs: calc(0.71rem * var(--font-scale));
+  --text-sm: calc(0.77rem * var(--font-scale));
+  --text-base: calc(0.885rem * var(--font-scale));
+  --text-lg: calc(1.18rem * var(--font-scale));
   --leading-read: 1.5;
 
   /* Space & shape */
@@ -67,10 +69,10 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --radius-s: 6px;
-  --radius-m: 8px;
+  --radius-s: 5px;
+  --radius-m: 6px;
   /* Windows, the message box and other panels (render/drop-indicator.js draws the same). */
-  --radius-l: 10px;
+  --radius-l: 8px;
   --topbar-h: 40px;
 
   /* Motion */
