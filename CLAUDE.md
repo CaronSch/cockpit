@@ -419,8 +419,10 @@ What runs today:
 - Nothing pops up on hover but the top bar's Config and + Widget menus (`src/ui/hover-menu.js`:
   open while pointed at, pinned by a click): no tooltips (no `title` attributes), and no other
   menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
-- Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
-  deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
+- Notes windows (the `scratchpad` widget): the pad's text fills the window, as a page; each new
+  window, or the + after its title (a tab beside it), starts its own pad, and the window's title
+  names it by its first line. **All notes** in the title bar reopens, starts or deletes a pad, and
+  two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
   screenshots and files are stored beside them and shown inline. Tab indents pad text
   as in the message box. An edit made
@@ -780,7 +782,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
-- `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
+- `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it, filling its window.
 - `src/widgets/sessions.js` — omp conversations, one list, sortable and narrowed to a directory.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
 - `src/widgets/terminal.js` — A terminal: the user's login shell in a directory, shown as a terminal app shows it (xterm.js).
