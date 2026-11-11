@@ -19,7 +19,9 @@
  *
  * `replayed` tells events the daemon replays on (re)connecting, which happened before this
  * page heard of them, from those happening now: the replay is everything up to the `hello`'s
- * seq.
+ * seq. While a replay is still arriving (the `hello` says how many events it holds), `replaying`
+ * is true, and `afterReplay` waits for its end, so a window draws a conversation once instead
+ * of typing it out again event by event.
  *
  * It also tracks the UI files' version (see daemon/ui-files.js): the first one the daemon
  * reports is the code this page loaded, and `onUiChange` hears when the files served stop
@@ -57,6 +59,8 @@ export class DaemonError extends Error {
  *   onReset(fn: () => void): () => void,
  *   subscribe(session: string, fn: (event: SessionEvent) => void): () => void,
  *   replayed(event: SessionEvent): boolean,
+ *   replaying(): boolean,
+ *   afterReplay(fn: () => void): void,
  *   meta(session: string): SessionMeta | null,
  *   sessions(): SessionMeta[],
  *   onSessions(fn: () => void): () => void,
@@ -146,6 +150,19 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
   let bootId = null;
   /** The newest event's seq when this connection opened: the events up to it are a replay. */
   let replayedTo = 0;
+  /** How many events of the replay this connection opened with are still to come. */
+  let replayLeft = 0;
+  /** Called once the replay is in. @type {Set<() => void>} */
+  const replayWaiters = new Set();
+  function replayDone() {
+    const waiting = [...replayWaiters];
+    replayWaiters.clear();
+    for (const fn of waiting) fn();
+  }
+  /** Counts one replayed event in; the last one calls those waiting for the replay. */
+  function replayArrived() {
+    if (replayLeft > 0 && --replayLeft === 0) replayDone();
+  }
   /** @type {Map<string, SessionEvent[]>} */
   const buffers = new Map();
   /** @type {Map<string, SessionMeta>} */
@@ -299,6 +316,9 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
     }
     bootId = hello.bootId;
     replayedTo = hello.seq;
+    // A daemon from before `replay` says nothing: nothing to wait for.
+    replayLeft = hello.replay > 0 ? hello.replay : 0;
+    if (replayLeft === 0) replayDone();
     for (const meta of hello.sessions) metas.set(meta.id, meta);
     noteUi(hello.ui);
     setStatus('open');
@@ -346,6 +366,7 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
       decisions.set(event.ompId, event.reviews);
       return decisionsChanged();
     }
+    replayArrived();
     const cursor = cursors.get(event.session);
     // Scoped, a reopened stream may repeat what the last one delivered.
     if (cursor !== undefined) {
@@ -520,6 +541,11 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
     },
     subscribe,
     replayed: (event) => event.seq <= replayedTo,
+    replaying: () => replayLeft > 0,
+    afterReplay(fn) {
+      if (replayLeft > 0) replayWaiters.add(fn);
+      else fn();
+    },
     meta: (session) => metas.get(session) ?? null,
     sessions: () => [...metas.values()],
     onSessions(fn) {

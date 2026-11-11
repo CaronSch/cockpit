@@ -1286,40 +1286,12 @@
   padding: var(--space-2) var(--space-3) 0;
 }
 
-/* A shell or subagent running now: roomier, with a light going round its outline. The border is
-   a conic gradient turned by a registered angle, under a fill the colour of the window. */
-@property --omp-orbit {
-  syntax: '<angle>';
-  inherits: false;
-  initial-value: 0deg;
-}
-
+/* A shell or subagent running now: roomier, with a light going round its outline (ui/orbit.js). */
 .omp-running .omp-chip.is-running {
+  --orbit-radius: 13px;
+  position: relative;
   gap: var(--space-2);
   padding: 4px 12px;
-  border-color: transparent;
-  background:
-    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
-    conic-gradient(
-        from var(--omp-orbit),
-        var(--color-line-strong) 0 62%,
-        var(--color-accent) 80%,
-        var(--color-line-strong) 98%
-      )
-      border-box;
-  animation: omp-orbit 2.4s linear infinite;
-}
-
-@keyframes omp-orbit {
-  to {
-    --omp-orbit: 1turn;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .omp-running .omp-chip.is-running {
-    animation: none;
-  }
 }
 
 /* A prompt scheduled for this conversation: when it runs, then the prompt. */
@@ -1447,20 +1419,29 @@
   opacity: 0.6;
 }
 
+/* The message box: a card lifted off the window by a soft shadow, its edge a faint hairline that
+   turns indigo, with a soft glow, while it is typed in. While the agent works, a light goes
+   round it (ui/orbit.js). */
 .omp-compose-row {
+  --orbit-radius: var(--radius-l);
+  --orbit-dash: 6;
+  --orbit-turn: 5s;
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: var(--space-2);
   padding: 5px 5px 5px 6px;
-  border: 1px solid var(--color-line-strong);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-l);
+  corner-shape: round;
   background: var(--color-surface-raised);
-  transition: border-color var(--duration-fast);
+  box-shadow: 0 8px 24px -12px oklch(0% 0 0 / 0.6), 0 1px 2px oklch(0% 0 0 / 0.3);
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
 }
 
-/* The message box is the card: its border lifts while the draft is typed in. */
 .omp-compose-row:focus-within {
-  border-color: var(--color-line-focus);
+  border-color: color-mix(in oklch, var(--color-accent) 55%, transparent);
+  box-shadow: 0 0 0 3px var(--color-accent-glow), 0 8px 24px -12px oklch(0% 0 0 / 0.6);
 }
 
 /* Send: a small accent square with an up arrow (a terminal prompt in shell mode). */
@@ -1608,7 +1589,7 @@
   gap: var(--space-2);
   margin: var(--space-2) 0 var(--space-3);
   padding: var(--space-2);
-  border: 1px solid var(--color-line-strong);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-l);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
@@ -1618,7 +1599,8 @@
 }
 
 .omp-quote-panel:focus-within {
-  border-color: var(--color-line-focus);
+  border-color: color-mix(in oklch, var(--color-accent) 55%, transparent);
+  box-shadow: 0 0 0 3px var(--color-accent-glow), var(--shadow-lift);
 }
 
 .omp-quote-panel .omp-quote-input {

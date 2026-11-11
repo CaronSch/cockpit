@@ -123,7 +123,8 @@
  * Errors are `{ error: string }` with a 4xx/5xx status. The stream's SSE ids are
  * `<bootId>:<seq>`, so a reconnect resumes after the last event it saw; the first message
  * on every connection is a `hello` carrying the current boot id, the newest event's seq (the
- * events up to it that follow are a replay), session list, unread conversations, forks, settings, Bugbot watches,
+ * events up to it that follow are a replay), how many events that replay holds (`replay`, so a
+ * page can draw once it has them all), session list, unread conversations, forks, settings, Bugbot watches,
  * scheduled prompts, the Setup window's login, UI version, awake sessions' activity and Phone access. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
  * `bugbot`, `schedule`, `login`, `activity` and `remote` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
  * GET /api/history and GET /api/decisions/:ompId instead, and its `hello` carries the rest.
@@ -218,7 +219,7 @@
  * scheduled (see `schedule.js`); `login` the Setup window's
  * `omp login`, null if none ran since the daemon started (see `setup.js`). `activity` holds
  * how every awake session is doing, by session id; `remote` how Phone access is (`remote.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState }} HelloEvent
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState }} HelloEvent
  */
 
 /**

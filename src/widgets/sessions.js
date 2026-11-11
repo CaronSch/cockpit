@@ -34,6 +34,7 @@
  * conversation's row.
  */
 import { button, el } from '../ui/dom.js';
+import { orbit } from '../ui/orbit.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
@@ -339,6 +340,8 @@ function createSessionsWindow(body, ctx, daemon) {
     const tools = el('div', 'sessions-tools');
     tools.append(actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
     row.append(rowDot(unread), main, tools);
+    // A conversation whose agent is starting or working has a light going round its row.
+    if (state === 'starting' || state === 'working') row.append(orbit());
     return row;
   }
 

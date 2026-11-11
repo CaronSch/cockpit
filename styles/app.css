@@ -52,6 +52,44 @@ button {
   corner-shape: round;
 }
 
+/* A light going round an element's outline while it works (ui/orbit.js): a dash of an outline
+   100 long, moved by its offset, so it keeps an even pace round any shape. Its host is
+   positioned, round-cornered, and sets `--orbit-radius` to its corner radius. */
+.orbit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  pointer-events: none;
+}
+
+.orbit-path {
+  x: 0.5px;
+  y: 0.5px;
+  width: calc(100% - 1px);
+  height: calc(100% - 1px);
+  rx: var(--orbit-radius, 8px);
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: var(--orbit-dash, 16) calc(100 - var(--orbit-dash, 16));
+  animation: orbit var(--orbit-turn, 2.4s) linear infinite;
+}
+
+@keyframes orbit {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-path {
+    animation: none;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
