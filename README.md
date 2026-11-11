@@ -135,10 +135,8 @@ Pass flags through with `bun start --port 4800 --cwd ~/code/app`.
 ## Develop
 
 ```bash
-bunx playwright install chromium   # once per machine
 bun run typecheck                  # tsc over JSDoc types
-bun run test                       # unit suites + daemon against a fake omp
-bun run test:e2e                   # Playwright: real app and daemon in Chromium
+bun run test                       # the daemon's security checks and a few pure modules
 bun run claude-md:check            # generated part of CLAUDE.md is current
 ```
 
@@ -146,8 +144,7 @@ No build step: the UI is plain ES modules. Its runtime dependencies are Temml,
 which turns agents' TeX math into MathML the browser typesets, Mermaid, Vega
 and Vega-Lite, which draw the diagrams and charts agents write (loaded only when a
 reply has one), and uqr, with which the daemon draws Phone access's QR code. CI runs the type
-check, unit tests and CLAUDE.md check on every push to `main` and every pull request; run the
-browser tests locally.
+check, tests and CLAUDE.md check on every push to `main` and every pull request.
 
 - [`CLAUDE.md`](CLAUDE.md): architecture, conventions, how to add a widget.
 - [`RISKS.md`](RISKS.md): deferred risks and when they bite.

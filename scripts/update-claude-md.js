@@ -61,7 +61,7 @@ async function generate() {
   const { scripts } = await Bun.file(join(ROOT, 'package.json')).json();
   const commands = Object.entries(scripts).map(([name, cmd]) => `- \`bun run ${name}\` — \`${cmd}\``);
 
-  const tests = [...listFiles('tests', '**/*.test.js'), ...listFiles('e2e', '**/*.spec.js')].map((path) => `\`${path}\``);
+  const tests = listFiles('tests', '**/*.test.js').map((path) => `\`${path}\``);
 
   return [
     BEGIN,
