@@ -749,7 +749,7 @@ test('a click in the pane puts the caret in the message box, unless it is on a c
   await reply.locator('a').click();
   await (await popup).close();
   await expect(draft).not.toBeFocused();
-  await pane.getByRole('button', { name: 'Accounts', exact: true }).click();
+  await pane.getByRole('button', { name: 'Forks', exact: true }).click();
   await expect(pane.locator('.omp-head-menu:popover-open')).toBeVisible();
   await expect(draft).not.toBeFocused();
   await page.keyboard.press('Escape');
@@ -880,7 +880,7 @@ test('the toolbar menus open under their button, close on Esc or a click outside
   await expect(thinkingBtn).toHaveText(/high/);
 });
 
-test('Sign in is in the toolbar only while the session’s model needs it; Accounts is always in the top bar', async ({ page }) => {
+test('Sign in is in the toolbar only while the session’s model needs it', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   const toolbar = pane.locator('.omp-toolbar');
@@ -891,9 +891,6 @@ test('Sign in is in the toolbar only while the session’s model needs it; Accou
   await pane.locator('.omp-menu:popover-open').getByRole('button', { name: /Keyed Model/ }).click();
   await expect(pane.getByRole('button', { name: 'keyed-model', exact: true })).toBeVisible();
   await expect(signIn, 'its provider is signed in to').toBeHidden();
-
-  await pane.locator('.widget-head').getByRole('button', { name: 'Accounts', exact: true }).click();
-  await expect(pane.locator('.omp-head-menu:popover-open').getByRole('button', { name: /Keyed Provider/ })).toContainText('logged in');
 });
 
 test('a login under way is shown from the stream, so a reload still shows it', async ({ page }) => {
@@ -939,14 +936,14 @@ test('the top bar sizes all text up and down, resets it, and keeps it across a r
   await level.click();
 });
 
-test('the response arrows, New, Forks and Accounts sit in the window’s top bar, Esc stops a turn; pressing them never drags the window, its title still does', async ({ page }) => {
+test('the response arrows, New and Forks sit in the window’s top bar, Esc stops a turn; pressing them never drags the window, its title still does', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   const head = pane.locator('.widget-head');
   const toolbar = pane.locator('.omp-toolbar');
   // PRs shows only in a GitHub repository, which the test project is not.
-  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Forks', 'Accounts']);
-  for (const name of ['New', 'Forks', 'Accounts', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
+  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Forks']);
+  for (const name of ['New', 'Forks', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
   await expect(head.getByRole('button', { name: 'More actions' }), 'no menu of the rest: there is no rest').toHaveCount(0);
 
   // No Stop button on the desktop (the phone keeps one): Esc in the message box stops a turn.
@@ -957,8 +954,8 @@ test('the response arrows, New, Forks and Accounts sit in the window’s top bar
   await pane.locator('textarea').press('Escape');
   await expect(transcript).not.toHaveClass(/is-streaming/);
 
-  // Accounts opens its menu under its button, keyboard too.
-  await head.getByRole('button', { name: 'Accounts', exact: true }).focus();
+  // Forks opens its menu under its button, keyboard too.
+  await head.getByRole('button', { name: 'Forks', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(pane.locator('.omp-head-menu:popover-open')).toBeVisible();
   await page.keyboard.press('Escape');

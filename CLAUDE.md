@@ -148,16 +148,16 @@ What runs today:
   idle, before the prompt cache expired"), with the summary. Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
-  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New**, **Forks**
-  and **Accounts** sit in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
+  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New** and **Forks**
+  sit in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Before them, **↑** and **↓** (⌘↑ / ⌘↓, Ctrl elsewhere, anywhere in the window, the message box
   too) put the agent's previous or next response (as *Only prompts and responses* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again
   (`src/omp/response-nav.js`).
   **New** starts another one there, in the same directory unless the setup
   screen's Directory is changed, while the one shown before carries on. The
-  toolbar keeps to one line (the directory gives way first). **Accounts** opens
-  omp's providers to log in to; **Sign in** shows in the toolbar while an awake
+  toolbar keeps to one line (the directory gives way first). Another provider or account is
+  signed in from Config's **Accounts** (`src/ui/login.js`: the daemon's `omp login`, as Setup runs it); **Sign in** shows in the toolbar while an awake
   session's model needs a login (no model, or its provider is one omp logs in to
   and is logged out; the daemon asks omp's `get_login_providers` at setup and
   after a login). Several panes can
@@ -246,8 +246,8 @@ What runs today:
   regains it: its session is unread, for every window and page, across reloads and daemon
   restarts, and after it stops, until it is read there or shown from Sessions. A
   session marked unread from Sessions lights its windows too, and waits for a fresh
-  click, keystroke or cursor there. **Notify** in the top bar (off until clicked, which asks the
-  browser's permission; kept per browser) adds a desktop notification for the same
+  click, keystroke or cursor there. *Desktop notifications* in the top bar's Config (off until
+  switched on, which asks the browser's permission; kept per browser) adds a desktop notification for the same
   moments, a second after them if the session is still unread and not shown in a
   focused tab: never for events replayed on (re)connecting (the `hello` carries the seq
   they run to), one per session (tagged with its id, so tabs replace each other's), closed
@@ -436,7 +436,7 @@ What runs today:
   of the page's own (no grid, workspace, screens or Web Locks: plain HTTP is no secure context),
   a top bar with Back, the conversation's name, **Show work** (the per-browser *Only prompts and
   responses*, on by default there) and the Agent window's Stop and ↑ ↓; it starts no agent, and
-  hides what it has no use for (New, Forks, PRs, Accounts, Archive, Pin, rewind, and Copy, which
+  hides what it has no use for (New, Forks, PRs, Archive, Pin, rewind, and Copy, which
   needs a secure context). Its daemon client is scoped (`useScopedDaemon`): the stream carries
   every session's status (`session` events, and the hub's `activity` summary of each awake one:
   working, asking, work running, name) but the events of only the conversations the page
@@ -690,6 +690,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/dom.js` — Element construction helpers: elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
+- `src/ui/login.js` — Signing omp in to a model provider, or another account, without a conversation: `omp login`, run by the daemon (daemon/setup.js) and shown as it goes, its questions answered from a line here.
 - `src/ui/palette.js` — "Add widget" palette.
 - `src/ui/prefs.js` — Per-browser preferences in localStorage.
 - `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it, or to open a copy of this one in a new tab.

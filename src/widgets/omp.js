@@ -17,9 +17,10 @@
  * (ui/settings.js), the same in every agent window. Each turn's decision review, when the
  * daemon made one (daemon/decisions.js), shows where the turn ends (omp/decisions.js).
  *
- * New, Fork, PRs (shown while the conversation's directory is in a GitHub repository) and
- * Accounts sit in the window's top bar, beside its close button; Stop is there too, shown on the
- * phone only (phone.css): on the desktop, Esc in the message box stops a turn. PRs lists the repository's pull
+ * New, Fork and PRs (shown while the conversation's directory is in a GitHub repository) sit in
+ * the window's top bar, beside its close button; Stop is there too, shown on the phone only
+ * (omp.css): on the desktop, Esc in the message box stops a turn. Another provider or account is
+ * signed in from Config's Accounts (ui/login.js). PRs lists the repository's pull
  * requests: a click opens one beside this window, to review for this conversation
  * (widgets/github.js); dragging one places it where it is dropped. Typing `#` in the message box
  * suggests them too (omp/pr-suggest.js).
@@ -531,8 +532,6 @@ function createPane(body, ctx, daemon) {
     const forksBtn = toolButton('Forks', FORKS_TITLE, 'omp-forks');
     const prsBtn = toolButton('PRs', 'Pull requests of this repository: click one to review it beside this conversation, or drag it where you want it', 'omp-prs');
     prsBtn.hidden = true; // until GitHub says the directory is in a repository
-    // Model providers and accounts omp can use: connect another, or switch.
-    const accountsBtn = toolButton('Accounts', 'Connect a model provider or another account', 'omp-accounts');
     const stopBtn = toolButton('Stop', 'Stop the agent and restore queued messages (Esc)', 'omp-stop');
     // Shown only while the session's model has no account signed in to talk to it with.
     const signInBtn = toolButton('Sign in', 'Sign in to a model provider: this conversation’s model needs it');
@@ -542,7 +541,7 @@ function createPane(body, ctx, daemon) {
     const prevBtn = navButton('↑', `Previous response (${navKey}↑)`, () => toResponse('previous'));
     const nextBtn = navButton('↓', `Next response (${navKey}↓)`, () => toResponse('next'));
     // The conversation's own controls go in the window's top bar, for as long as it is shown.
-    ctx.headActions.replaceChildren(prevBtn, nextBtn, newBtn, forksBtn, prsBtn, accountsBtn, stopBtn);
+    ctx.headActions.replaceChildren(prevBtn, nextBtn, newBtn, forksBtn, prsBtn, stopBtn);
 
     const strip = el('div', 'omp-strip');
     const loginStrip = el('div', 'omp-login');
@@ -1064,7 +1063,6 @@ function createPane(body, ctx, daemon) {
           pick: () => void rpc({ type: 'login', providerId: p?.id }),
         }));
     attachMenu(signInBtn, loginProviders, { filter: true });
-    attachMenu(accountsBtn, loginProviders, { filter: true, className: 'omp-head-menu' });
 
     // ── pull requests of the conversation's repository (widgets/github.js) ──
     /** The conversation, for a pull request window reviewing for it. */

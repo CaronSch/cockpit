@@ -21,12 +21,13 @@ resize on a snapping grid, as many as you like, side by side.
 | **Setup** | What this machine needs before a first agent, checked live: omp, a model provider (sign in through omp's login from the window), the agents' browser, GitHub's CLI, your phone (optional) and the daemon's switches. Opens by itself on a machine not set up yet. |
 
 A window whose agent finished or asks something while you looked away gets a cyan border and
-stays unread, everywhere, until you click or type in it. **Notify** in the top bar adds desktop
-notifications.
+stays unread, everywhere, until you click or type in it; *Desktop notifications* in **Config**
+tells you as well.
 
 **Config** in the top bar holds the switches. Per browser: *Only prompts and responses* hides
-the agent's work in between; *Animated selection* glides between words as you select. Kept by
-the daemon, for every browser:
+the agent's work in between; *Animated selection* glides between words as you select; *Desktop
+notifications* (off) notifies you when an agent finishes or needs you. Kept by the daemon, for
+every browser:
 
 - *Compact idle conversations* (on): compacts a long conversation just before its prompt cache
   expires. A window dims when that point nears.
@@ -36,6 +37,7 @@ the daemon, for every browser:
 - *Agents’ browser*: where agents open web pages: a separate Chrome (default), your own, or as
   omp is set up.
 - *Phone access* (off): see **Phone** below.
+- *Accounts*: signs omp in to a model provider, or with another account (`omp login`).
 
 **Screens.** Each browser window is a screen of your workspace, like an extra
 monitor: open a second window and it starts empty, with its own panes. Layouts
@@ -111,8 +113,8 @@ says whether it is done; **Check again** after fixing one in a terminal.
 
 Once omp runs with a model, **Start an agent** opens an Agent window: pick a directory (folders
 are suggested as you type, from your home folder; Tab completes) and start chatting. From then on
-new screens start empty; **＋ Widget → Setup** opens it again. Another provider can be added
-later from an agent window's **Accounts** (omp's `/login`).
+new screens start empty; **＋ Widget → Setup** opens it again. Another provider or account can be
+added later from **Config → Accounts**.
 
 The daemon listens on loopback only, and also on the Mac's Tailscale address while Phone access
 is on (see **Phone** above); it refuses requests from other sites.

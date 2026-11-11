@@ -8,6 +8,7 @@
  */
 import { button, el, setText } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
+import { createLogin } from '../ui/login.js';
 import { DAEMON_SETTINGS, browserChoice, phoneAccess, switchRow } from '../ui/settings.js';
 import { getDaemon } from '../daemon/client.js';
 /** @import { SetupCheck, SetupStatus } from '../../daemon/setup.js' */
@@ -62,34 +63,13 @@ export default {
     omp.todo.append(para('Install it, then Check again: ', shell('curl -fsSL https://omp.sh/install | sh')));
 
     const models = step('2. A model provider', 'Agents need a model to talk to. omp signs in to subscriptions (Claude Pro/Max, ChatGPT, GitHub Copilot…) in your browser.');
-    const loginOutput = el('pre', 'setup-login-output');
-    const loginStatus = el('p', 'setup-login-status');
-    const answer = el('input', 'setup-login-input');
-    answer.placeholder = 'Type here, Enter sends it to omp login';
-    answer.setAttribute('aria-label', 'Answer omp login');
-    const answerForm = el('form', 'setup-login-form');
-    const cancel = button('btn', 'Cancel', () => void daemon.cancelLogin().catch(() => {}));
-    answerForm.append(answer, cancel);
-    const login = el('div', 'setup-login');
-    login.append(loginStatus, loginOutput, answerForm);
-    const signIn = button('btn btn-accent', 'Sign in…', () => {
-      signIn.disabled = true;
-      daemon.startLogin().catch((err) => {
-        signIn.disabled = false;
-        setText(loginStatus, errorMessage(err));
-      });
-    });
+    // A login that ends may have signed in: see.
+    const login = createLogin(daemon, { onEnded: () => void check() });
     models.todo.append(
-      para(signIn, ' runs omp login: pick a provider by number below, then finish in the browser tab it opens.'),
-      login,
+      para(login.signIn, ' runs omp login: pick a provider by number below, then finish in the browser tab it opens.'),
+      login.panel,
       para('Or set an API key (', shell('ANTHROPIC_API_KEY'), ', ', shell('OPENAI_API_KEY'), '…) in the shell that runs ', shell('bun start'), ', and restart it.'),
     );
-    answerForm.addEventListener('submit', (event) => {
-      event.preventDefault();
-      const line = answer.value;
-      answer.value = '';
-      daemon.answerLogin(line).catch((err) => setText(loginStatus, errorMessage(err)));
-    });
 
     const browser = el('section', 'setup-step');
     browser.append(el('h3', 'setup-step-title', '3. Agents’ browser'));
@@ -114,7 +94,7 @@ export default {
     const prefs = el('section', 'setup-step');
     prefs.append(
       el('h3', 'setup-step-title', '6. Preferences'),
-      el('p', 'setup-about', 'Kept by the daemon, for every browser; Config in the top bar changes them later. Notify, also in the top bar, adds desktop notifications when an agent finishes or needs you.'),
+      el('p', 'setup-about', 'Kept by the daemon, for every browser; Config in the top bar changes them later, and turns on desktop notifications when an agent finishes or needs you.'),
     );
     const prefsList = el('div', 'setup-prefs');
     prefs.append(prefsList);
@@ -199,39 +179,15 @@ export default {
       if (ready && daemon.settings()?.setupDone === false) daemon.changeSettings({ setupDone: true }).catch(() => {});
     }
 
-    let wasRunning = daemon.login()?.running ?? false;
-    function drawLogin() {
-      const state = daemon.login();
-      login.hidden = !state;
-      const running = state?.running ?? false;
-      signIn.disabled = running;
-      answer.disabled = !running;
-      cancel.hidden = !running;
-      if (state) {
-        const atEnd = loginOutput.scrollTop + loginOutput.clientHeight >= loginOutput.scrollHeight - 4;
-        setText(loginOutput, state.output);
-        if (atEnd) loginOutput.scrollTop = loginOutput.scrollHeight;
-        setText(
-          loginStatus,
-          running ? 'omp login is running' : state.exitCode === 0 ? 'omp login finished' : `omp login ended (exit ${state.exitCode ?? '?'})`,
-        );
-      }
-      // A login that just ended may have signed in: see.
-      if (wasRunning && !running) void check();
-      wasRunning = running;
-    }
-
     const offSettings = daemon.onSettings(drawSettings);
-    const offLogin = daemon.onLogin(drawLogin);
     const offRemote = daemon.onRemote(drawPhone);
     drawSettings();
-    drawLogin();
     void check();
     return {
       destroy() {
         checking++;
         offSettings();
-        offLogin();
+        login.destroy();
         offRemote();
       },
     };

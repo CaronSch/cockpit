@@ -435,14 +435,13 @@ export async function createApp(root) {
   );
   query(root, '.topbar-actions').prepend(createZoomControl().root);
   query(root, '.topbar-actions').prepend(createSpotlight({ daemon, show: (params) => showWidget('omp', params) }).root);
-  query(root, '.topbar-actions').prepend(createConfigMenu({ daemon }).root);
-  query(root, '.topbar-actions').prepend(
-    createNotifier({
-      daemon,
-      shown: () => new Set(sessionLinks(screenAtom.get()).windows.keys()),
-      show: (params) => showWidget('omp', params),
-    }).root,
-  );
+  // Desktop notifications follow every awake session; Config turns them on or off.
+  const notifier = createNotifier({
+    daemon,
+    shown: () => new Set(sessionLinks(screenAtom.get()).windows.keys()),
+    show: (params) => showWidget('omp', params),
+  });
+  query(root, '.topbar-actions').prepend(createConfigMenu({ daemon, notifier }).root);
 
   // Until this machine has what agents need (daemon/settings.js `setupDone`), an empty screen
   // opens Setup: decided once, as the page first hears the daemon's settings.
