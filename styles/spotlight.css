@@ -24,15 +24,40 @@
   backdrop-filter: blur(2px);
 }
 
-.spotlight-input {
+/* The field, with Ask at its end. */
+.spotlight-bar {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-3);
+  border-bottom: 1px solid color-mix(in oklch, var(--color-line) 80%, transparent);
+}
+
+.spotlight-input {
+  flex: 1;
+  min-width: 0;
   padding: var(--space-3) var(--space-4);
   border: 0;
-  border-bottom: 1px solid color-mix(in oklch, var(--color-line) 80%, transparent);
   background: transparent;
   color: var(--color-text);
   font: var(--weight-regular) var(--text-lg) / 1.4 var(--font-ui);
   outline: none;
+}
+
+.spotlight-ask {
+  flex: none;
+  padding-block: 3px;
+}
+
+/* The agent's answer, above the conversations it names. */
+.spotlight-answer {
+  flex: none;
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid color-mix(in oklch, var(--color-line) 80%, transparent);
+  font: var(--weight-regular) var(--text-sm) / var(--leading-read) var(--font-ui);
 }
 
 .spotlight-input::placeholder {

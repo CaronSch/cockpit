@@ -203,6 +203,14 @@ is newer. The daemon prints its version at start.
   failed` note in every agent window, or an agent whose schedule calls never answer. *Response:*
   re-read those files and `tools/essential-tools.ts`, then update `omp-session.js` and the fake.
 
+- **Spotlight's Ask leans on `omp -p` with `--tools` and `--auto-approve`.** `daemon/ask.js` runs
+  `omp -p --no-session … --tools read,grep,find --auto-approve --thinking low` in a temporary
+  directory holding `index.tsv`, and reads the conversations it names from `CONVERSATION: <path>`
+  lines in its stdout. If `--tools` stops limiting the agent to those, it could run more than reads
+  on the user's behalf from a question; if read-only tools start asking for approval in print mode,
+  every question hangs until its three-minute timeout. *Response:* re-read `main.ts` (print mode,
+  `--tools`, `--auto-approve`) and check a question still answers with only read and grep calls.
+
 - **Decision reviews lean on `omp -p` and message timestamps.** `daemon/decisions.js` runs
   `omp -p --no-session --no-tools … --model @smol --thinking off --system-prompt <prompt> <turn>`
   and reads the decisions from its stdout, one a line; a turn is named by its user message's

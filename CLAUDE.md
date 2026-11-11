@@ -310,7 +310,10 @@ What runs today:
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
   the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
   prompts and the agents' replies, so a question in plain words finds the conversation that
-  answers it, best first, with the passage that matched and its words marked; Enter shows the
+  answers it, best first, with the passage that matched and its words marked; **Ask** (⌘↵) hands
+  the question to an agent instead, a one-shot `omp -p` with read-only tools reading an index of
+  the conversations and their journals (`daemon/ask.js`), whose answer shows above the conversations
+  it names; Enter shows the
   conversation as a Sessions click does). The window's title bar holds its controls: a directory
   menu and **View** (sort order, Reverse order, Archived sessions); the list follows the
   daemon, so nothing refreshes it. A click on a conversation (or Enter) shows it in the
@@ -711,6 +714,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
+- `daemon/ask.js` — Asking an agent where something was said: Spotlight's Ask (src/ui/spotlight.js) hands a question in plain words to a one-shot omp that reads the user's conversations and answers it, naming the conversations that do.
 - `daemon/attachments.js` — Files attached to omp prompts: stored where omp can read them, one folder per day, so a prompt can mention them as `@"<path>"` and omp attaches them itself (images to the model, text inlined; see omp's file mentions).
 - `daemon/browser.js` — Which browser agents drive (settings.js `browser`, picked in Setup or Config): a separate one of omp's own by default, so an agent testing a page never takes over the tab its user is reading.
 - `daemon/bugbot.js` — Bugbot reviews asked for from the pull request window: `bugbot go` is commented on the pull request as the user, and the daemon watches it until Cursor Bugbot's review answers (src/github/bugbot.js), then sends the review, every finding with where it is, to the conversation the window reviews for (deliver.js).

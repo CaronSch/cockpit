@@ -76,6 +76,7 @@ export class DaemonError extends Error {
  *   onSettings(fn: () => void): () => void,
  *   changeSettings(patch: Partial<DaemonSettings>): Promise<void>,
  *   history(query?: string, options?: { archived?: boolean }): Promise<PastSession[]>,
+ *   ask(question: string): Promise<{ answer: string, sessions: PastSession[] }>,
  *   conversation(file: string): Promise<Conversation>,
  *   archivePastSession(file: string): Promise<string>,
  *   restorePastSession(file: string): Promise<string>,
@@ -589,6 +590,7 @@ export function createDaemonClient(env = {}, { scoped = false } = {}) {
       const body = await request(`/api/history${params.size ? `?${params}` : ''}`);
       return body.sessions;
     },
+    ask: (question) => request('/api/ask', { method: 'POST', body: JSON.stringify({ question }) }),
     conversation: (file) => request(`/api/conversation?file=${encodeURIComponent(file)}`),
     async archivePastSession(file) {
       return (await request('/api/history/archive', { method: 'POST', body: JSON.stringify({ file }) })).file;

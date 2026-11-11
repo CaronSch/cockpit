@@ -23,10 +23,11 @@ import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
 import { isValidTree } from '../src/layout/grid-model.js';
 import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion } from './ui-files.js';
 /** @import { BunRequest, Server } from 'bun' */
-/** @import { BugbotWatch, ConversationTarget, DaemonConfig, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent } from './wire.js' */
+/** @import { BugbotWatch, ConversationTarget, DaemonConfig, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent } from './wire.js' */
 /** @import { Hub } from './hub.js' */
 /** @import { RemoteAccess } from './remote.js' */
 /** @typedef {ReturnType<typeof import('./history.js').createHistory>} History */
+/** Asks an agent a question about the conversations (ask.js `askAgent`). @typedef {(question: string) => Promise<{ answer: string, sessions: PastSession[] }>} Ask */
 /** @typedef {ReturnType<typeof import('./scratchpad.js').createScratchpads>} Scratchpads */
 /** @typedef {ReturnType<typeof import('./attachments.js').createAttachments>} Attachments */
 /** @typedef {ReturnType<typeof import('./workspace.js').createWorkspaces>} Workspaces */
@@ -251,14 +252,14 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, ask: Ask, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, schedule, setup, remote, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, schedule, setup, remote, ask, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -443,6 +444,13 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           GET: async (req) => {
             const params = new URL(req.url).searchParams;
             return json({ sessions: await history.list(params.get('q') ?? '', { archived: params.get('archived') === '1' }) });
+          },
+        }),
+        '/api/ask': api({
+          POST: async (req) => {
+            const question = (await readJson(req))?.question;
+            if (typeof question !== 'string' || !question.trim()) throw new HttpError(400, 'expected { question: string }');
+            return json(await ask(question.trim()));
           },
         }),
         '/api/history/archive': api({
