@@ -151,6 +151,9 @@ What runs today:
   compaction is on or not, dims its window until it is used again (anything in it focused) or
   works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New** and **Forks**
   sit in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
+  Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring
+  saying how the agent is doing: spinning in the accent while it works, warm while it asks,
+  green once it is done and waiting (`drawJump` in `src/widgets/omp.js`).
   **⌘↑** and **⌘↓** (Ctrl elsewhere, anywhere in the window, the message box; on the phone, its **↑** and **↓** buttons)
   put the agent's previous or next response (as *Responses only* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again
@@ -246,7 +249,7 @@ What runs today:
   `get_messages` replaces every window's transcript. A pane whose
   agent finished its turn (or asks something) while its user was not in it (the last
   window they clicked, typed or put the cursor in, with the pointer over it, in a focused
-  page) gets a cyan border until they click in it, type in it or move the cursor
+  page) gets a green border until they click in it, type in it or move the cursor
   into it; hovering over it or scrolling it reads nothing (it keeps the session awake), nor
   does a modifier or shortcut (⌘K, ⌘-Tab) nor the focus the browser gives back as the page
   regains it: its session is unread, for every window and page, across reloads and daemon
@@ -315,7 +318,7 @@ What runs today:
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
   (starting or working: a spinner and the word in the accent; *needs you*: it asks a question or
-  an approval, a warm dot; *done*: it finished and nobody has read it, a cyan dot; idle: nothing).
+  an approval, a warm dot; *done*: it finished and nobody has read it, a green dot; idle: nothing).
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
   the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
   prompts and the agents' replies, so a question in plain words finds the conversation that
@@ -347,7 +350,7 @@ What runs today:
   moves; one whose agent works is not archived until it is done. A new session
   nothing was sent to has no journal yet: Archive ends it (`DELETE /api/sessions/:id`)
   and it is gone, not archived. Nothing is ever deleted: there is no delete. An unread conversation (archived too, which
-  keeps its mark) has a cyan dot and a bold title, and the window's top bar counts the
+  keeps its mark) has a green dot and a bold title, and the window's top bar counts the
   unread ones it lists; showing a session from here reads it. Right-click on a row, its
   **⋯** button, or Shift+F10 / the ContextMenu key on a focused row opens its menu
   (`src/ui/context-menu.js`, a popover the arrow keys move through): **Mark as

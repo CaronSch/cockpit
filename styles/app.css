@@ -681,7 +681,7 @@ button {
   border-color: var(--color-unread);
   box-shadow:
     inset 0 0 0 1px var(--color-unread),
-    inset 0 0 16px color-mix(in oklch, var(--color-unread) 22%, transparent);
+    inset 0 0 0 4px color-mix(in oklch, var(--color-unread) 12%, transparent);
 }
 
 /* The windows a Sessions row points at (ctx.outline): inset, as above, so nothing
