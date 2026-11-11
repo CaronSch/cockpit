@@ -18,7 +18,7 @@
  * Restore. An archived one shows as any other, to read: carrying it on means restoring it. One whose agent is working is not archived until it is done. A new session
  * nothing was sent to has no journal yet: archiving it ends it, and it is gone, not archived.
  *
- * A conversation with news its user has not read (daemon/unread.js) has an indigo dot and a bold
+ * A conversation with news its user has not read (daemon/unread.js) has an indigo bar at its left edge and a bold
  * title, archived or not, and the window's top bar counts those it lists. Showing one from
  * here reads it. Each row's menu (a right-click, the ContextMenu key, Shift+F10, or its ⋯
  * button) marks it read or unread, beside the row's other actions.
@@ -28,7 +28,7 @@
  *
  * Rows show how their conversations are doing (working, needs you, done) and where they are on
  * this screen (sessions/links.js): the one in the agent window used last (where a click shows
- * conversations) is filled with an accent bar at its left edge, and one shown in another agent window has a grey bar. Pointing at
+ * conversations) is filled with a near-white bar at its left edge, and one shown in another agent window has a grey bar. Pointing at
  * a row (hover, or keyboard focus: a click also focuses a row, but that is not pointing at it
  * once the pointer moves on) outlines its windows, and pointing at an agent window lights its
  * conversation's row.
@@ -280,18 +280,9 @@ function createSessionsWindow(body, ctx, daemon) {
     return main;
   }
 
-  /**
-   * The dot before a row's title: how an awake conversation is doing, and blue while unread
-   * (then it says so to screen readers too).
-   * @param {boolean} unread
-   */
-  function rowDot(unread) {
-    const dot = el('span', 'sessions-dot');
-    if (unread) {
-      dot.setAttribute('role', 'img');
-      dot.setAttribute('aria-label', 'Unread');
-    } else dot.setAttribute('aria-hidden', 'true');
-    return dot;
+  /** Says "Unread" to a screen reader; the row's bar says it to the eye. @param {boolean} unread */
+  function unreadLabel(unread) {
+    return unread ? [el('span', 'sessions-sr', 'Unread')] : [];
   }
 
   /** The row's ⋯ button, which opens its menu. */
@@ -312,7 +303,7 @@ function createSessionsWindow(body, ctx, daemon) {
     return star;
   }
 
-  /** States worth a word in the row: the rest read from the dot (done) or need none (idle). */
+  /** States worth a word in the row: the rest read from the bar (done) or need none (idle). */
   const SAID = new Set(['starting', 'working', 'asking']);
 
   /** @param {Listed} c @param {number} now */
@@ -338,7 +329,7 @@ function createSessionsWindow(body, ctx, daemon) {
     // Over the row's right end, not beside its text: hidden, they take none of its width.
     const tools = el('div', 'sessions-tools');
     tools.append(actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
-    row.append(rowDot(unread), main, tools);
+    row.append(...unreadLabel(unread), main, tools);
     return row;
   }
 

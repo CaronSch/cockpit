@@ -1491,7 +1491,7 @@ function createPane(body, ctx, daemon) {
           c.title = `${w.label}\n${w.background ? 'In the background: the agent goes on meanwhile' : 'The agent waits for it'}`;
           const time = el('span', 'omp-chip-time');
           if (w.startedAt !== null) time.dataset.since = String(w.startedAt);
-          c.append(el('span', 'omp-chip-kind', w.kind), el('span', 'omp-chip-text', w.label), time, orbit(w.key));
+          c.append(el('span', 'omp-chip-kind', w.kind), el('span', 'omp-chip-text', w.label), time, orbit());
           return c;
         }),
       );
