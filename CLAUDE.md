@@ -355,9 +355,11 @@ What runs today:
   it names; Enter shows the
   conversation as a Sessions click does). The window's title bar holds its controls: a directory
   menu and **View** (sort order, Reverse order, Archived sessions); the list follows the
-  daemon, so nothing refreshes it. A click on a conversation (or Enter) shows it in the
-  agent window this screen used last (pressed or focused last), or a new one if
-  there is none; dragging it onto the middle of an agent window shows it there, and
+  daemon, so nothing refreshes it. A click on a conversation (or Enter; Spotlight's and the
+  Timeline's too) opens it as a new tab beside the agent window this screen used last (pressed
+  or focused last), never replacing what a window shows: a window showing it already comes to
+  the front instead, one showing nothing yet (its setup screen) takes it, and with no agent window
+  a new one opens (`ctx.showInTab`); dragging it onto the middle of an agent window shows it there, and
   onto the grid elsewhere opens a new agent window where it is dropped. Showing one
   starts no omp. The conversation in the agent window this screen used last has its row filled
   with a near-white bar at its left edge, and one shown in another agent window here a grey bar (an unread one's bar stays indigo); pointing at a row

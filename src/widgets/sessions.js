@@ -38,7 +38,7 @@ import { archiveIcon, mailIcon, mailOpenIcon, unarchiveIcon } from '../ui/icons.
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
-import { STATE_LABELS, listConversations, runningState, showConversation } from '../sessions/running.js';
+import { STATE_LABELS, conversationMatch, listConversations, runningState, showConversation } from '../sessions/running.js';
 import { sessionLinks } from '../sessions/links.js';
 import { openContextMenu, opensContextMenu } from '../ui/context-menu.js';
 /** @import { WidgetContext } from './registry.js' */
@@ -218,11 +218,15 @@ function createSessionsWindow(body, ctx, daemon) {
     });
   }
 
-  /** Shows the row's conversation in the agent window this screen used last; that reads it. @param {HTMLElement} row */
+  /**
+   * Shows the row's conversation: in a new tab beside the agent window this screen used last
+   * (the window showing it already, if one does); that reads it.
+   * @param {HTMLElement} row
+   */
   function show(row) {
     const params = paramsFor(row);
     if (!params) return;
-    ctx.showWidget('omp', params);
+    ctx.showInTab('omp', params, conversationMatch(params));
     mark(row, false);
   }
 

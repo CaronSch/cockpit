@@ -102,3 +102,15 @@ export const showConversation = ({ file, meta, cwd, name }) => ({
   fork: null,
   prompt: null,
 });
+
+/**
+ * How a conversation opened from a list (Sessions, Timeline, Spotlight) finds its window
+ * (`ctx.showInTab`): one showing it already (its journal, or the session holding it), else an
+ * agent window showing nothing yet (its setup screen), which it may take over.
+ * @param {LeafParams} shown what `showConversation` gave
+ * @returns {{ same: (params: LeafParams) => boolean, blank: (params: LeafParams) => boolean }}
+ */
+export const conversationMatch = (shown) => ({
+  same: (p) => Boolean((shown.sessionFile && p.sessionFile === shown.sessionFile) || (shown.session && p.session === shown.session)),
+  blank: (p) => !p.session && !p.sessionFile && !p.fork,
+});

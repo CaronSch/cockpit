@@ -56,6 +56,13 @@ let shown = null;
 /** The conversation the page's history entry shows, if any. @returns {LeafParams | null} */
 const conversationParams = () => /** @type {{ params?: LeafParams } | null} */ (history.state)?.params ?? null;
 
+/** Shows a conversation full screen, a step the Back button undoes. @param {string} widget @param {LeafParams} params */
+function show(widget, params) {
+  if (widget !== 'omp') return;
+  history.pushState({ params }, '');
+  render();
+}
+
 /**
  * Mounts `type` with `params` in place of what was shown, which is destroyed (that never ends
  * a session: it is the daemon's).
@@ -85,11 +92,9 @@ function mount(type, params) {
       view.instance.paramsChanged?.();
     },
     addWidget: noop,
-    showWidget(widget, p) {
-      if (widget !== 'omp') return;
-      history.pushState({ params: p }, '');
-      render();
-    },
+    showWidget: show,
+    // One conversation at a time here: a new tab is the conversation shown.
+    showInTab: (widget, p) => show(widget, p),
     openTab: noop,
     dragWidget: noop,
     setUnread: noop,
