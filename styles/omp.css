@@ -244,8 +244,8 @@
 .omp-working::before {
   content: '';
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   margin-right: 5px;
   border-radius: 50%;
   background: var(--color-line-strong);
@@ -260,8 +260,8 @@
 .omp-activity.is-streaming::before,
 .omp-working::before {
   box-sizing: border-box;
-  border: 1.5px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
-  border-top-color: color-mix(in oklch, var(--color-accent) 90%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
   background: transparent;
   animation: omp-spin 1.4s linear infinite;
 }
@@ -518,7 +518,7 @@
 }
 
 .omp-jump.is-working .omp-jump-ring {
-  stroke: color-mix(in oklch, var(--color-accent) 90%, transparent);
+  stroke: var(--color-accent);
   stroke-dasharray: 20 62;
   animation: omp-jump-spin 1.4s linear infinite;
 }
@@ -1014,10 +1014,10 @@
 .omp-spin {
   flex: none;
   box-sizing: border-box;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
-  border-top-color: color-mix(in oklch, var(--color-accent) 90%, transparent);
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
   border-radius: 50%;
   corner-shape: round;
   animation: omp-spin 1.4s linear infinite;
@@ -1047,6 +1047,39 @@
   font: inherit;
   font-family: var(--font-code);
   overflow-wrap: anywhere;
+}
+
+/* Compaction (omp near its context's limit, or the daemon while idle): a line across the
+   transcript with what happened in its middle; the summary opens under it. */
+div.omp-compaction,
+.omp details.omp-compaction > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: none;
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+}
+
+div.omp-compaction::before,
+div.omp-compaction::after,
+.omp details.omp-compaction > summary::before,
+.omp details.omp-compaction > summary::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-line-strong);
+}
+
+.omp-compaction.is-error,
+.omp-compaction.is-warning {
+  color: var(--color-danger);
+}
+
+.omp-compaction-summary {
+  color: var(--color-text-dim);
+  white-space: pre-wrap;
 }
 
 .omp-note {
