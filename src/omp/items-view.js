@@ -17,7 +17,8 @@ import { splitAttachments } from './message.js';
  * @typedef {{ tools: ReadonlyMap<string, ToolRun>, open: Set<string> }} ItemContext
  */
 
-const STATUS_GLYPH = { pending: '○', running: '◌', ok: '✓', error: '✕', cancelled: '⊘' };
+/** A run still going shows a small spinner before it; how one ended shows in its colour. @param {string} status */
+const spinnerIf = (status) => (status === 'running' ? [el('span', 'omp-spin')] : []);
 const NOTE_INLINE_CHARS = 200;
 
 /** @param {Item} item @param {ItemContext} ctx @returns {HTMLElement} */
@@ -53,10 +54,7 @@ export function renderItem(item, ctx) {
     case 'bash': {
       const node = el('div', `omp-bash is-${item.status}`);
       const head = el('div', 'omp-bash-head');
-      head.append(
-        el('span', 'omp-status', STATUS_GLYPH[item.status]),
-        el('code', 'omp-bash-cmd', `${item.language === 'bash' ? '$' : '>>>'} ${item.command}`),
-      );
+      head.append(...spinnerIf(item.status), el('code', 'omp-bash-cmd', `${item.language === 'bash' ? '$' : '>>>'} ${item.command}`));
       if (item.exitCode !== null && item.exitCode !== 0) head.append(statusLine('muted', `exit ${item.exitCode}`, 'span'));
       if (item.status === 'cancelled') head.append(statusLine('muted', 'cancelled', 'span'));
       node.append(head);
@@ -116,11 +114,12 @@ export function renderPending(text, which, continues, cancel) {
 }
 
 /**
- * A stretch of the agent's work as one line: how it went (running, failed, done), how many
- * tool calls and which (`edit ×2`), opening to the thinking and tool calls themselves.
- * @param {WorkItem} work @param {ItemContext} ctx @returns {HTMLElement}
+ * A stretch of the agent's work as one line: how it went (still going, how many failed), how
+ * many tool calls and which (`edit ×2`), opening to the thinking and tool calls themselves.
+ * `live`: the turn is still running and this is its latest stretch, so the agent is still at it.
+ * @param {WorkItem} work @param {ItemContext} ctx @param {boolean} [live] @returns {HTMLElement}
  */
-export function renderWork(work, ctx) {
+export function renderWork(work, ctx, live = false) {
   /** @type {Array<{ name: string, status: ToolRun['status'] }>} */
   const calls = [];
   for (const part of work.parts) {
@@ -135,8 +134,8 @@ export function renderWork(work, ctx) {
       calls.push({ name: run?.name || block.name || 'tool', status: run?.status ?? (block.id ? 'pending' : 'running') });
     }
   }
-  const has = (/** @type {ToolRun['status']} */ s) => calls.some((c) => c.status === s);
-  const status = has('running') ? 'running' : has('error') ? 'error' : has('pending') ? 'pending' : 'ok';
+  const failed = calls.filter((c) => c.status === 'error').length;
+  const going = live || calls.some((c) => c.status === 'running') || work.parts.some((p) => p.kind === 'assistant' && !p.ended);
   /** Each run of one tool once, counted: `read, edit ×2, bash`. */
   const names = calls.reduce((/** @type {Array<{ name: string, n: number }>} */ acc, c) => {
     const last = acc.at(-1);
@@ -144,9 +143,14 @@ export function renderWork(work, ctx) {
     else acc.push({ name: c.name, n: 1 });
     return acc;
   }, []);
-  const label = calls.length ? `${calls.length} step${calls.length === 1 ? '' : 's'} · ${names.map((n) => (n.n > 1 ? `${n.name} ×${n.n}` : n.name)).join(', ')}` : 'thinking';
-  const head = calls.length ? [el('span', 'omp-status', STATUS_GLYPH[status]), el('span', 'omp-work-summary', label)] : [el('span', 'omp-work-summary', label)];
-  return collapsible(ctx, work.key, `omp-work is-${status}`, head, () => work.parts.map((part) => renderItem(part, ctx)));
+  const label = calls.length
+    ? `${going ? 'Working' : 'Worked'} · ${calls.length} step${calls.length === 1 ? '' : 's'} · ${names.map((n) => (n.n > 1 ? `${n.name} ×${n.n}` : n.name)).join(', ')}`
+    : going
+      ? 'Thinking'
+      : 'Thought';
+  const head = [...spinnerIf(going ? 'running' : ''), el('span', 'omp-work-summary', label)];
+  if (failed) head.push(el('span', 'omp-work-failed', `${failed} failed`));
+  return collapsible(ctx, work.key, `omp-work${going ? ' is-running' : ''}`, head, () => work.parts.map((part) => renderItem(part, ctx)));
 }
 
 /**
@@ -177,7 +181,7 @@ function renderBlock(block, id, ctx) {
       return node;
     }
     case 'thinking':
-      return collapsible(ctx, id, 'omp-thinking', [block.redacted ? 'thinking (redacted)' : 'thinking'], () => [
+      return collapsible(ctx, id, 'omp-thinking', [block.redacted ? 'Thinking (redacted)' : 'Thinking'], () => [
         el('div', 'omp-thinking-text', block.text),
       ]);
     case 'toolCall':
@@ -196,7 +200,7 @@ function toolCard(id, block, run, ctx) {
   const name = run?.name || block?.name || 'tool';
   const args = run?.args ?? block?.args ?? null;
   const summary = run?.intent ?? block?.intent ?? argsSummary(args) ?? (block?.argsText ? block.argsText.slice(0, 120) : '');
-  const head = [el('span', 'omp-status', STATUS_GLYPH[status]), el('span', 'omp-tool-name', name)];
+  const head = [...spinnerIf(status), el('span', 'omp-tool-name', name)];
   if (summary) head.push(el('span', 'omp-tool-summary', summary));
   return collapsible(ctx, `tool:${run?.id ?? id}`, `omp-tool is-${status}`, head, () => {
     /** @type {HTMLElement[]} */
@@ -232,7 +236,10 @@ function collapsible(ctx, id, className, summary, body) {
   head.append(...summary);
   details.append(head);
   const fill = () => {
-    if (details.childNodes.length === 1) details.append(...body());
+    if (details.childNodes.length > 1) return;
+    const inside = el('div', 'omp-details-body');
+    inside.append(...body());
+    details.append(inside);
   };
   if (ctx.open.has(id)) {
     details.open = true;

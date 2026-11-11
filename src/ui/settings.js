@@ -23,10 +23,10 @@ const SETTINGS_KEY = 'cockpit.settings';
 /** How long the menu stays open after the pointer leaves it, so crossing the gap to it does not close it. */
 const CLOSE_DELAY_MS = 250;
 
-/** @typedef {'onlyResponses' | 'compactWork' | 'animatedSelection'} SettingKey */
+/** @typedef {'onlyResponses' | 'animatedSelection'} SettingKey */
 /** @typedef {{ key: SettingKey, label: string, detail: string, initial: boolean }} Setting */
 
-/** The settings, in the order the menu lists them; the first two it offers as one choice (`transcriptChoice`). @type {readonly Setting[]} */
+/** The settings, in the order the menu lists them. @type {readonly Setting[]} */
 const SETTINGS = [
   {
     key: 'onlyResponses',
@@ -35,47 +35,12 @@ const SETTINGS = [
     initial: false,
   },
   {
-    key: 'compactWork',
-    label: 'Compact work',
-    detail: 'Fold each stretch of thinking and tool calls into one line',
-    initial: true,
-  },
-  {
     key: 'animatedSelection',
     label: 'Animated selection',
     detail: 'Highlight whole words as you drag over a reply',
     initial: true,
   },
 ];
-
-/** How agent windows show the work between what the agent says, as stored in the two settings. */
-const TRANSCRIPT_OPTIONS = /** @type {const} */ ([
-  { label: 'Everything', detail: 'Every thinking block and tool call', onlyResponses: false, compactWork: false },
-  { label: 'Compact', detail: 'Each stretch of thinking and tool calls as one line', onlyResponses: false, compactWork: true },
-  { label: 'Responses only', detail: 'What you asked and what the agent said', onlyResponses: true, compactWork: true },
-]);
-
-/** The transcript choice, as radio rows under a heading. @param {Settings} now */
-function transcriptChoice(now) {
-  const root = el('fieldset', 'config-group');
-  root.append(el('legend', 'config-legend', 'Agent transcripts'));
-  const name = `transcript-${crypto.randomUUID().slice(0, 8)}`;
-  for (const option of TRANSCRIPT_OPTIONS) {
-    const row = el('label', 'config-setting');
-    const radio = el('input');
-    radio.type = 'radio';
-    radio.name = name;
-    radio.checked = now.onlyResponses === option.onlyResponses && (option.onlyResponses || now.compactWork === option.compactWork);
-    radio.addEventListener('change', () => {
-      if (!radio.checked) return;
-      setSetting('onlyResponses', option.onlyResponses);
-      setSetting('compactWork', option.compactWork);
-    });
-    row.append(radio, el('span', '', option.label), el('span', 'config-detail', option.detail));
-    root.append(row);
-  }
-  return root;
-}
 
 /** The daemon's settings that are switches. @typedef {'idleCompaction' | 'decisionReview' | 'adhd'} DaemonSwitch */
 /** @typedef {{ key: DaemonSwitch, label: string, detail: string }} DaemonSetting */
@@ -370,8 +335,7 @@ export function createConfigMenu({ daemon, notifier }) {
     accounts = atDaemon ? accountsGroup(daemon) : null;
     menu.replaceChildren(
       heading('This browser'),
-      transcriptChoice(now),
-      ...SETTINGS.filter((s) => s.key === 'animatedSelection').map((setting) => switchRow(setting.label, setting.detail, now[setting.key], (on) => setSetting(setting.key, on)).row),
+      ...SETTINGS.map((setting) => switchRow(setting.label, setting.detail, now[setting.key], (on) => setSetting(setting.key, on)).row),
       notificationsRow(notifier),
       ...(atDaemon ? [heading('Every browser')] : []),
       ...(atDaemon

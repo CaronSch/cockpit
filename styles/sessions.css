@@ -102,7 +102,7 @@
 
 /* How an awake conversation is doing, or that it is unread: a mark before its title (rows with
    nothing to say keep its space, empty). Working spins in the accent; needing its user is a
-   warm dot; unread news is green. */
+   warm dot; unread news is the accent. */
 .sessions-dot {
   flex: none;
   box-sizing: border-box;
@@ -191,18 +191,19 @@
 }
 
 /* Row actions and the pin float over the row's right end, so the text runs the row's full
-   width. Shown (on hover or focus), they cover the text beneath, fading into it. */
+   width. Shown (on hover or focus), they sit on the row's own background, covering the text
+   beneath with a clean edge. */
 .sessions-tools {
   position: absolute;
   inset: 0 var(--space-2) 0 auto;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .sessions-item:is(:hover, :focus-within) .sessions-tools {
-  padding-left: var(--space-4);
-  background: linear-gradient(to right, transparent, var(--color-surface-raised) var(--space-4));
+  padding-left: var(--space-2);
+  background: var(--color-surface-raised);
 }
 
 /* A pinned row keeps room for its ★, which stays in view. */
@@ -213,21 +214,20 @@
 /* Row actions: quiet text buttons, shown while the row is hovered or holds focus. */
 .sessions-actions {
   display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--duration-fast);
+  gap: var(--space-1);
+  visibility: hidden;
 }
 
 .sessions-item:is(:hover, :focus-within) .sessions-actions {
-  opacity: 1;
+  visibility: visible;
 }
 
 .sessions-action {
-  padding: 2px 6px;
-  border: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-s);
-  background: transparent;
-  color: var(--color-text-dim);
+  background: var(--color-surface);
+  color: var(--color-text);
   font-size: var(--text-xs);
   cursor: pointer;
 }
@@ -246,7 +246,6 @@
 .sessions-pin {
   font-size: var(--text-sm);
   opacity: 0;
-  transition: opacity var(--duration-fast);
 }
 
 .sessions-item:is(:hover, :focus-within) .sessions-pin,

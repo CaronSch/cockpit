@@ -687,8 +687,8 @@ button {
 /* The windows a Sessions row points at (ctx.outline): inset, as above, so nothing
    shifts; after it, so pointing at an unread window still shows. */
 .widget.is-outlined {
-  border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  border-color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-text);
 }
 
 .widget-head {

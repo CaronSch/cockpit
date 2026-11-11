@@ -111,6 +111,25 @@ export default {
 /** @param {unknown} v @returns {string | null} */
 const str = (v) => (typeof v === 'string' && v ? v : null);
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+/** @param {string} tag @param {Record<string, string>} attrs */
+const svgEl = (tag, attrs) => {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+  return node;
+};
+
+/** The jump-to-latest button's face: a ring (a faint track, and the arc that spins while the agent works) round a down arrow. */
+function jumpIcon() {
+  const svg = svgEl('svg', { viewBox: '0 0 28 28', 'aria-hidden': 'true' });
+  svg.append(
+    svgEl('circle', { class: 'omp-jump-track', cx: '14', cy: '14', r: '13' }),
+    svgEl('circle', { class: 'omp-jump-ring', cx: '14', cy: '14', r: '13' }),
+    svgEl('path', { class: 'omp-jump-arrow', d: 'M14 8.5v11M9.5 15l4.5 4.5 4.5-4.5' }),
+  );
+  return svg;
+}
+
 /**
  * @param {HTMLElement} body @param {WidgetContext} ctx @param {DaemonClient} daemon
  */
@@ -555,22 +574,21 @@ function createPane(body, ctx, daemon) {
       stickToBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < BOTTOM_SLACK_PX;
       drawJump();
     });
-    // Scrolled up, a small arrow at the transcript's foot goes back to the latest, its ring
-    // saying how the agent is doing: spinning while it works, warm while it asks, green once
-    // it is done and waiting.
-    const jump = button('omp-jump', '↓', () => {
+    // Scrolled up, a small arrow at the transcript's foot goes back to the latest; its ring spins
+    // while the agent works (the window's outline says when it is done or asks).
+    const jump = button('omp-jump', '', () => {
       stickToBottom = true;
       transcript.scrollTo({ top: transcript.scrollHeight, behavior: 'smooth' });
     });
+    jump.append(jumpIcon());
     const jumpWrap = el('div', 'omp-jump-wrap');
     jumpWrap.hidden = true;
     jumpWrap.append(jump);
     function drawJump() {
       jumpWrap.hidden = stickToBottom;
       if (stickToBottom) return;
-      const how = state.dialogs.length ? 'asking' : state.streaming ? 'working' : 'done';
-      jump.className = `omp-jump is-${how}`;
-      jump.title = { asking: 'Latest: the agent is asking you something', working: 'Latest: the agent is working', done: 'Latest: the agent is done, waiting for you' }[how];
+      jump.classList.toggle('is-working', state.streaming);
+      jump.title = state.streaming ? 'Latest: the agent is working' : 'Latest';
       jump.setAttribute('aria-label', jump.title);
     }
     const pinToBottom = () => {
@@ -1361,20 +1379,29 @@ function createPane(body, ctx, daemon) {
 
     function drawTranscript() {
       rewindBar.remove(); // items are placed by index; drawRewind puts it back
-      const { onlyResponses, compactWork: compact } = settings.get();
-      const view = onlyResponses ? 'responses' : compact ? 'compact' : 'all';
+      const { onlyResponses } = settings.get();
+      const view = onlyResponses ? 'responses' : 'work';
       if (view !== drawnView) {
         drawnView = view;
         clearDrawn();
       }
       // omp's continue directive (a `.` sent) is never shown, in any view.
       const everything = state.items.filter((i) => i.kind !== 'user' || !i.continues);
+      const folded = onlyResponses ? null : compactWork(everything);
+      // A turn still running has the agent at it: its latest stretch of work still goes, and a
+      // turn with nothing to show yet says it is working.
+      const last = folded?.at(-1);
+      const liveWork = state.streaming && last?.kind === 'work' ? last.key : null;
       /** @type {{ items: Array<import('../omp/transcript.js').Item | import('../omp/visibility.js').WorkItem>, working: { steps: number } | null }} */
-      const shown = onlyResponses ? promptsAndResponses(state.items, state.streaming) : { items: compact ? compactWork(everything) : everything, working: null };
+      const shown = folded ? { items: folded, working: state.streaming && last?.kind === 'user' ? { steps: 0 } : null } : promptsAndResponses(state.items, state.streaming);
       const live = new Set();
       const itemCtx = { tools: state.tools, open: openDetails };
       /** @type {Array<{ key: string, rev: number | string, render: () => HTMLElement }>} */
-      const entries = shown.items.map((item) => ({ key: item.key, rev: item.rev, render: () => (item.kind === 'work' ? renderWork(item, itemCtx) : renderItem(item, itemCtx)) }));
+      const entries = shown.items.map((item) =>
+        item.kind === 'work'
+          ? { key: item.key, rev: item.key === liveWork ? `${item.rev}:live` : item.rev, render: () => renderWork(item, itemCtx, item.key === liveWork) }
+          : { key: item.key, rev: item.rev, render: () => renderItem(item, itemCtx) },
+      );
       // Each turn's decision review shows where the turn ends (placed from the last, so the
       // places before it hold); one that found no decisions shows nothing.
       for (const { index, at, review } of placeReviews(shown.items, daemon.decisions(ompId()) ?? {}).reverse()) {
