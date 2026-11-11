@@ -29,7 +29,7 @@ import { button, el, setText } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
-import { renderItem, renderReview } from '../omp/items-view.js';
+import { renderItem, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
 import { composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
@@ -43,7 +43,7 @@ import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
 import { attachFileRefs } from '../files/file-window.js';
 import { awaitedAfter } from '../omp/activity.js';
-import { isResponse, promptsAndResponses } from '../omp/visibility.js';
+import { compactWork, isResponse, promptsAndResponses } from '../omp/visibility.js';
 import { responseTarget } from '../omp/response-nav.js';
 import { placeReviews } from '../omp/decisions.js';
 import { coldAt } from '../omp/cold.js';
@@ -1327,8 +1327,8 @@ function createPane(body, ctx, daemon) {
     let stripKey = '';
     let bannerKey = '';
     let loginKey = '';
-    /** Which view `drawn` holds: an item draws differently when only responses show. */
-    let drawnOnlyResponses = false;
+    /** How the transcript was drawn (which view), so changing it redraws every item. */
+    let drawnView = '';
     /** Stands in for the hidden work of a running turn when only responses show. */
     const workingEl = el('div', 'omp-working');
     workingEl.setAttribute('role', 'status');
@@ -1344,17 +1344,20 @@ function createPane(body, ctx, daemon) {
 
     function drawTranscript() {
       rewindBar.remove(); // items are placed by index; drawRewind puts it back
-      const { onlyResponses } = settings.get();
-      if (onlyResponses !== drawnOnlyResponses) {
-        drawnOnlyResponses = onlyResponses;
+      const { onlyResponses, compactWork: compact } = settings.get();
+      const view = onlyResponses ? 'responses' : compact ? 'compact' : 'all';
+      if (view !== drawnView) {
+        drawnView = view;
         clearDrawn();
       }
-      // omp's continue directive (a `.` sent) is never shown, in either view.
-      const shown = onlyResponses ? promptsAndResponses(state.items, state.streaming) : { items: state.items.filter((i) => i.kind !== 'user' || !i.continues), working: null };
+      // omp's continue directive (a `.` sent) is never shown, in any view.
+      const everything = state.items.filter((i) => i.kind !== 'user' || !i.continues);
+      /** @type {{ items: Array<import('../omp/transcript.js').Item | import('../omp/visibility.js').WorkItem>, working: { steps: number } | null }} */
+      const shown = onlyResponses ? promptsAndResponses(state.items, state.streaming) : { items: compact ? compactWork(everything) : everything, working: null };
       const live = new Set();
       const itemCtx = { tools: state.tools, open: openDetails };
       /** @type {Array<{ key: string, rev: number | string, render: () => HTMLElement }>} */
-      const entries = shown.items.map((item) => ({ key: item.key, rev: item.rev, render: () => renderItem(item, itemCtx) }));
+      const entries = shown.items.map((item) => ({ key: item.key, rev: item.rev, render: () => (item.kind === 'work' ? renderWork(item, itemCtx) : renderItem(item, itemCtx)) }));
       // Each turn's decision review shows where the turn ends (placed from the last, so the
       // places before it hold); one that found no decisions shows nothing.
       for (const { index, at, review } of placeReviews(shown.items, daemon.decisions(ompId()) ?? {}).reverse()) {
@@ -1429,7 +1432,9 @@ function createPane(body, ctx, daemon) {
         const c = el('span', `omp-chip is-${which}`);
         // A queued continue reads as the `.` it was sent as, not omp's directive.
         const shown = isContinueDirective(text) ? '. (continue)' : text;
-        c.append(el('span', 'omp-chip-kind', which === 'steering' ? 'steer' : 'next'), el('span', 'omp-chip-text', shown));
+        const kind = el('span', 'omp-chip-kind', which === 'steering' ? 'Steering' : 'Queued');
+        kind.title = which === 'steering' ? 'Reaches the agent at its next step, in this turn' : 'Sent once this turn ends';
+        c.append(kind, el('span', 'omp-chip-text', shown));
         const remove = button('omp-chip-remove', '×');
         remove.setAttribute('aria-label', `Remove queued message: ${shown}`);
         remove.addEventListener('click', () => void rpc({ type: 'remove_queued_message', message: text, queue: which }));

@@ -23,7 +23,7 @@ const SETTINGS_KEY = 'cockpit.settings';
 /** How long the menu stays open after the pointer leaves it, so crossing the gap to it does not close it. */
 const CLOSE_DELAY_MS = 250;
 
-/** @typedef {'onlyResponses' | 'animatedSelection'} SettingKey */
+/** @typedef {'onlyResponses' | 'compactWork' | 'animatedSelection'} SettingKey */
 /** @typedef {{ key: SettingKey, label: string, detail: string, initial: boolean }} Setting */
 
 /** The settings, in the order the menu lists them. @type {readonly Setting[]} */
@@ -33,6 +33,12 @@ const SETTINGS = [
     label: 'Only prompts and responses',
     detail: 'Hide thinking and tool calls in agent windows',
     initial: false,
+  },
+  {
+    key: 'compactWork',
+    label: 'Compact work',
+    detail: 'Fold each stretch of thinking and tool calls into one line',
+    initial: true,
   },
   {
     key: 'animatedSelection',

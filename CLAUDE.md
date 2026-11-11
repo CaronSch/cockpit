@@ -256,7 +256,10 @@ What runs today:
   switches, kept per browser (`src/ui/settings.js`): *Only prompts and responses*
   shows only prompts and responses (every reply the agent finished, not only a turn's
   last) and the agent's narration between tool calls in every agent window, hiding
-  thinking and tool calls, with one "Working…" line while a turn runs;
+  thinking and tool calls, with one "Working…" line while a turn runs; *Compact work* (on;
+  `compactWork` in `src/omp/visibility.js`) keeps the agent's text but folds each stretch of
+  thinking and tool calls between two things it said into one line (its status, how many tool
+  calls and which), opening to them; *Only prompts and responses* wins when both are on;
   *Animated selection* (on) draws a drag's selection in the transcript as Google
   Docs does, whole words gliding into place (`src/omp/drag-highlight.js`), with the
   browser's own highlight hidden under it. Snapping (`src/ui/word-snap.js`) leaves a
@@ -657,7 +660,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/file-mention.js` — Paths typed in the agent pane, as `@` file mentions in its draft or plainly in its Directory field: the path being typed at the caret, the folder entries that match it, and the text that completes it, kept free of the DOM so they can be tested.
 - `src/omp/file-suggest.js` — Path suggestions in the agent pane's text boxes (`@` file mentions in its draft, its dialogs' answers and its comments and questions on reply text; its Directory field): while the caret ends a path, the suggestion list shows the matching entries of the folder it names, and Tab, Enter or a click completes the path (see `file-mention.js`).
 - `src/omp/fork-family.js` — Reads the daemon's fork registry (daemon/forks.js: each fork's omp id → the conversation it was forked from, and its title) for one conversation: what it was forked from and its own forks, which the agent pane's Forks menu lists, and the family it belongs to, which colours the windows of related conversations alike.
-- `src/omp/items-view.js` — DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes, unrecognised frames), and for a turn's decision review, built from text nodes only.
+- `src/omp/items-view.js` — DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes, unrecognised frames), a stretch of folded work (visibility.js `compactWork`), and a turn's decision review, built from text nodes only.
 - `src/omp/markdown-dom.js` — Renders the safe markdown tree from `markdown.js` as DOM nodes (text nodes only, never HTML).
 - `src/omp/markdown.js` — Safe markdown subset for agent text: parses into a small block/inline tree, never HTML.
 - `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), and side questions about a quote.
@@ -673,7 +676,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/table-text.js` — Plain-text forms of a parsed Markdown table: a cell's text without its formatting, and the table as CSV.
 - `src/omp/todos.js` — How far along the agent is, from the todo list omp agents keep with their `todo` tool: how many of its tasks are done and which one it is on.
 - `src/omp/transcript.js` — Transcript reducer for one omp session: folds the daemon's SessionEvents into display items plus derived session state, with no DOM.
-- `src/omp/visibility.js` — Which transcript items an agent pane shows when it is set to only prompts and responses: what the user said and ran, and what the agent finally answered, without the work in between.
+- `src/omp/visibility.js` — Which transcript items an agent pane shows: everything; everything with the work folded (`compactWork`); or only prompts and responses: what the user said and ran, and what the agent finally answered, without the work in between.
 - `src/omp/visuals.js` — Diagrams and charts in agent replies: a closed ```mermaid fence is drawn by Mermaid, a closed ```vega-lite fence (a Vega-Lite spec, JSON) by Vega.
 - `src/phone.js` — The phone page (`/phone`, phone.html): the Sessions list, then one conversation full screen, then Back, for a phone reaching the daemon over its owner's tailnet (daemon/remote.js).
 - `src/render/drop-indicator.js` — Landing preview for drag & drop, plus the sash snap guide.
