@@ -64,7 +64,7 @@ export const DAEMON_SETTINGS = [
 /** @typedef {{ value: BrowserChoice, label: string, detail: string }} BrowserOption */
 
 /** Which browser agents drive (daemon/browser.js), as Setup and the menu offer it. @type {readonly BrowserOption[]} */
-export const BROWSER_OPTIONS = [
+const BROWSER_OPTIONS = [
   {
     value: 'isolated',
     label: 'A separate browser',
@@ -83,7 +83,7 @@ export const BROWSER_OPTIONS = [
 ];
 
 /** The heading of the browser choice, and what it is about. */
-export const BROWSER_SETTING = Object.freeze({
+const BROWSER_SETTING = Object.freeze({
   label: 'Agents’ browser',
   detail: 'Where agents open web pages',
 });
@@ -104,7 +104,7 @@ function parseChosen(value) {
 }
 
 /** Stored settings over the defaults; anything unknown or not a switch is ignored. @param {string | null} value @returns {Settings} */
-export function parseSettings(value) {
+function parseSettings(value) {
   const chosen = parseChosen(value);
   return /** @type {Settings} */ (Object.fromEntries(SETTINGS.map((s) => [s.key, chosen[s.key] ?? s.initial])));
 }

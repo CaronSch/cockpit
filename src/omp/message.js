@@ -113,7 +113,7 @@ export function shellCommand(draft) {
  * Ends every side question, follow-ups included: omp's side-question prompt only asks for a
  * "brief" answer; this one bounds it.
  */
-export const ANSWER_BRIEFLY = 'Answer in at most three sentences, or a short list; no preamble.';
+const ANSWER_BRIEFLY = 'Answer in at most three sentences, or a short list; no preamble.';
 
 /**
  * A side question about `quote`, for omp's `btw`: answered from the session's context, kept

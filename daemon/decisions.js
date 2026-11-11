@@ -22,7 +22,7 @@ import { REVIEW_SYSTEM_PROMPT, parseDecisions, turnToReview } from '../src/omp/d
 
 const VERSION = 1;
 /** How long the reviewer may take before it is stopped and the review fails. */
-export const REVIEW_TIMEOUT_MS = 120_000;
+const REVIEW_TIMEOUT_MS = 120_000;
 
 /** @param {any} review parsed untrusted JSON @returns {review is Review} */
 const isStoredReview = (review) =>

@@ -30,7 +30,7 @@ import { createFrameDecoder } from './frame-decoder.js';
  * log holds the session's state (and so the journal it writes) and which providers omp is
  * logged in to (does its model need a login?) before anything else asks.
  */
-export const SETUP_COMMANDS = Object.freeze([
+const SETUP_COMMANDS = Object.freeze([
   { type: 'negotiate_protocol', protocolVersion: 2 },
   { type: 'set_event_filter', events: null, messageUpdates: 'delta' },
   { type: 'set_ask_dialog', enabled: true },
@@ -69,7 +69,7 @@ const LOGIN_CHANGING_COMMANDS = new Set(['login', 'logout']);
  * anything the session does once it is ready. Sent again after a rewind (`branch`), whose
  * conversation omp does not stream either: windows replace theirs with that answer.
  */
-export const HISTORY_COMMAND = Object.freeze({ type: 'get_messages' });
+const HISTORY_COMMAND = Object.freeze({ type: 'get_messages' });
 
 /** Successful responses after which `get_state` reports something else. */
 const STATE_CHANGING_COMMANDS = new Set(['set_model', 'cycle_model', 'set_thinking_level', 'cycle_thinking_level', 'login', 'new_session', 'switch_session', 'fork', 'branch', 'compact']);

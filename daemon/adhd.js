@@ -20,10 +20,10 @@ const RULES_HEADER =
   'ADHD MODE ACTIVE. The user turned it on for every conversation; the ruleset below applies to every response. "stop adhd mode" or "normal mode" turns it off for this conversation.';
 
 /** The SKILL.md's text without its YAML frontmatter (the project's `stripFrontmatter`). @param {string} content */
-export const withoutFrontmatter = (content) => content.replace(/^---[^\S\r\n]*\r?\n[\s\S]*?\r?\n---[^\S\r\n]*(?:\r?\n|$)/, '').trim();
+const withoutFrontmatter = (content) => content.replace(/^---[^\S\r\n]*\r?\n[\s\S]*?\r?\n---[^\S\r\n]*(?:\r?\n|$)/, '').trim();
 
 /** What a session's system prompt gains while the switch is on. */
-export const ADHD_RULES = `${RULES_HEADER}\n\n${withoutFrontmatter(readFileSync(join(import.meta.dir, 'i-have-adhd', 'SKILL.md'), 'utf8'))}`;
+const ADHD_RULES = `${RULES_HEADER}\n\n${withoutFrontmatter(readFileSync(join(import.meta.dir, 'i-have-adhd', 'SKILL.md'), 'utf8'))}`;
 
 /** `prompt` (appended to omp's system prompt) with the rules after it when `adhd` is on. @param {string} prompt @param {boolean} adhd */
 export const withAdhdRules = (prompt, adhd) => (adhd ? `${prompt}\n\n${ADHD_RULES}` : prompt);

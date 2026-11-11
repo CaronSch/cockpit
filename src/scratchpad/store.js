@@ -22,7 +22,7 @@ import { errorMessage } from '../ui/format.js';
 const SAVE_DELAY_MS = 400;
 
 /** @param {{ daemon: DaemonClient, id: string, timers?: Timers, delayMs?: number }} options */
-export function createScratchpadStore({ daemon, id, timers = globalThis, delayMs = SAVE_DELAY_MS }) {
+function createScratchpadStore({ daemon, id, timers = globalThis, delayMs = SAVE_DELAY_MS }) {
   let text = '';
   /** The daemon's version `text` was edited from; null until the first load. @type {string | null} */
   let base = null;

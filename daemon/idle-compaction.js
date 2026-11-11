@@ -26,7 +26,7 @@ export const IDLE_COMPACT_TOKENS_FLOOR = 100_000;
 /** 90% of a one-hour cache entry's life. */
 export const IDLE_COMPACT_AFTER_MS = 0.9 * 60 * 60_000;
 /** How late a check may be and still compact. */
-export const IDLE_COMPACT_LATE_MS = 60_000;
+const IDLE_COMPACT_LATE_MS = 60_000;
 
 /** What omp's `compact` is sent as. */
 export const IDLE_COMPACT = Object.freeze({ type: 'compact' });

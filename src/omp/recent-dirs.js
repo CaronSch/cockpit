@@ -8,7 +8,7 @@
  */
 
 /** How many directories the setup screen offers. */
-export const RECENT_DIRS = 5;
+const RECENT_DIRS = 5;
 
 /** `dir` without trailing slashes, so `/a/b/` and `/a/b` are one directory (`/` stays). @param {string} dir */
 const withoutSlash = (dir) => dir.replace(/(?<=.)\/+$/, '');

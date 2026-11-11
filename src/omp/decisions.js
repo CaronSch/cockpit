@@ -12,7 +12,7 @@
 /** @import { Item, ToolRun } from './transcript.js' */
 
 /** The most decisions a review lists. */
-export const MAX_DECISIONS = 5;
+const MAX_DECISIONS = 5;
 
 /**
  * A turn's review: under way, done (no decisions when the agent took none worth a look), or

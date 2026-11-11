@@ -10,7 +10,7 @@
 /** @import { Align, Inline, TableBlock } from '../omp/markdown.js' */
 
 /** Past this many rows a table shows only the first ones, and says so: the source has them all. */
-export const MAX_TABLE_ROWS = 5000;
+const MAX_TABLE_ROWS = 5000;
 
 /** The delimiter of the table file `path` names, or null for any other file. @param {string} path */
 export function tableDelimiter(path) {
@@ -23,7 +23,7 @@ export function tableDelimiter(path) {
  * @param {string} text @param {string} delimiter one character
  * @returns {string[][]}
  */
-export function parseDelimited(text, delimiter) {
+function parseDelimited(text, delimiter) {
   /** @type {string[][]} */
   const records = [];
   /** @type {string[]} */

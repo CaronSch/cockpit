@@ -10,15 +10,15 @@ import { button, el } from './dom.js';
 import { readPref, writePref } from './prefs.js';
 
 const ZOOM_KEY = 'cockpit.zoom';
-export const MIN_ZOOM = 0.7;
-export const MAX_ZOOM = 1.5;
+const MIN_ZOOM = 0.7;
+const MAX_ZOOM = 1.5;
 const STEP = 0.1;
 
 /** `scale` moved `steps` steps (10% each), kept in range and off float noise. @param {number} scale @param {number} steps */
-export const stepZoom = (scale, steps) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((scale + steps * STEP) * 10) / 10));
+const stepZoom = (scale, steps) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((scale + steps * STEP) * 10) / 10));
 
 /** A stored value as a scale, or 1 when there is none or it is not one. @param {string | null} value */
-export function parseZoom(value) {
+function parseZoom(value) {
   const scale = Number(value);
   return value !== null && Number.isFinite(scale) && scale >= MIN_ZOOM && scale <= MAX_ZOOM ? scale : 1;
 }
