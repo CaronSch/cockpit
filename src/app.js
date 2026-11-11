@@ -230,7 +230,7 @@ export async function createApp(root) {
       },
     };
 
-    /** @type {{ destroy(): void, paramsChanged?(): void }} */
+    /** @type {{ destroy(): void, paramsChanged?(): void, closed?(): void }} */
     let instance = { destroy() {} };
     if (!def) {
       body.append(el('p', 'widget-empty', 'This widget type is not installed.'));
@@ -250,11 +250,13 @@ export async function createApp(root) {
       params = next;
       instance.paramsChanged?.();
     });
+    closers.set(leaf.id, () => instance.closed?.());
     return {
       el: frameEl,
       destroy() {
         offParams();
         instance.destroy?.();
+        closers.delete(leaf.id);
         faces.delete(leaf.id);
         outlines.delete(leaf.id);
         drawOutlines();
@@ -263,6 +265,9 @@ export async function createApp(root) {
       },
     };
   }
+
+  /** What each window's widget does when its user closes it (`closed`), by window id. @type {Map<string, () => void>} */
+  const closers = new Map();
 
   /** What each window's tab shows, should it be in a stack, by window id. @type {Map<string, TabFace>} */
   const faces = new Map();
@@ -429,8 +434,11 @@ export async function createApp(root) {
     return true;
   }
 
-  /** @param {string} id */
-  const closeWindow = (id) => api.commitTree(removeLeaf(layoutAtom.get(), id), { animate: true });
+  /** The user closes window `id`: its widget hears it (`closed`), then it goes. @param {string} id */
+  function closeWindow(id) {
+    closers.get(id)?.();
+    api.commitTree(removeLeaf(layoutAtom.get(), id), { animate: true });
+  }
 
   /** Opens another window of window `id`'s kind as a tab beside it, as its `newTab` says. @param {string} id */
   function newTabBeside(id) {
@@ -531,12 +539,12 @@ export async function createApp(root) {
     const grip = /** @type {Element} */ (event.target).closest?.('.widget-grip');
     if (!grip) return;
     const id = /** @type {string} */ (/** @type {HTMLElement} */ (grip.closest('.widget')).dataset.id);
-    const tree = layoutAtom.get();
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
-      api.commitTree(removeLeaf(tree, id), { animate: true });
+      closeWindow(id);
       return;
     }
+    const tree = layoutAtom.get();
     const dir = DIRECTION_KEYS[event.key];
     if (!dir || !event.altKey || !event.shiftKey) return;
     event.preventDefault();
