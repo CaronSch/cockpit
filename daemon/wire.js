@@ -90,6 +90,8 @@
  *                                      it is asleep, queued after the turn if its agent works (see
  *                                      `deliver.js`); 404 when no session holds it and it has no
  *                                      journal, 409 when it is archived
+ *   POST   /api/restart                → 202: the daemon restarts in a moment, as it was started, and
+ *                                      wakes the agents it cut short (`restart.js`; `bun run restart`)
  *   PATCH  /api/schedule/:id           { prompt?, dueAt? } → ScheduledTask: the user changed a scheduled
  *                                      prompt (its text, its time in epoch ms, or both; it is no longer
  *                                      missed); 400 for an empty prompt or a time past

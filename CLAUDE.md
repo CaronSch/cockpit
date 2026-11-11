@@ -92,7 +92,7 @@ Planned capabilities:
   while the summary still reads it from the cache), and stays awake until then
   (`daemon/idle-compaction.js`; omp's own idle compaction runs only in its TUI;
   a switch in Config, kept by the daemon in `~/.cockpit/settings.json`, turns it off:
-  `daemon/settings.js`). After a daemon restart nothing is awake. A rewind moves omp onto a new journal: windows follow `get_state`'s
+  `daemon/settings.js`). After a daemon restart nothing is awake, but for the agents a `bun run restart` cut short (below). A rewind moves omp onto a new journal: windows follow `get_state`'s
   `sessionFile`, and the daemon archives the old one (`onRewound`). Which conversations
   are unread is the daemon's too (`daemon/unread.js`, keyed by omp's conversation
   id, kept in `~/.cockpit/unread.json`), so every window and page agrees on what
@@ -615,6 +615,14 @@ telemetry views, cmux-parity features beyond the above.
   `--tailscale <path>` (or `COCKPIT_TAILSCALE`) and `--remote-port <n>` (or
   `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's (Setup checks the same
   `tailscale`). Tests drive `tests/fixtures/fake-tailscale.js`, never the real `tailscale`.
+- Restart the running daemon with `bun run restart` (`scripts/restart.js`, `--port` if it is not
+  4777): it stops as Ctrl+C stops it, then starts again as it was started (the same command,
+  directory and environment), in the background, its output in `~/.cockpit/daemon.log`. The
+  agents that were working as it stopped are woken from their journals with a message saying so,
+  and carry on (`daemon/restart.js`). An agent working on the workbench uses it to take up its
+  own changes once they are on `main` and pulled into the directory the daemon runs from (a
+  worktree's changes need a preview daemon of their own): every omp gets `COCKPIT_PORT` and
+  `COCKPIT_STATE_DIR`, so the script finds the daemon the agent runs under.
 - Before committing, all of these must pass (CI runs them on every push to `main` and every PR,
   `.github/workflows/ci.yml`):
   - `bun run typecheck`
@@ -811,6 +819,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
 - `daemon/remote.js` — Phone access (settings.js `remote`): while it is on, the daemon also serves the owner's own devices on their tailnet, through a second listener bound to the Mac's Tailscale IPv4 with the same routes as loopback (server.js), behind a whois gate.
+- `daemon/restart.js` — Restarting the daemon from the inside (`bun run restart`, scripts/restart.js), so an agent working on the workbench itself can take up its own changes and carry on afterwards.
 - `daemon/schedule.js` — Scheduled prompts: an agent sends its own conversation a prompt later, at a set time or after a while, through the `schedule` tool the daemon gives every omp it launches (omp's RPC host tools: omp-session.js `HostTools`).
 - `daemon/scratchpad.js` — Scratchpads: plain Markdown files the daemon keeps, one per pad, with pasted screenshots and files stored beside them.
 - `daemon/search.js` — Ranked search over conversations: a question in plain words ("in which session did we find that Binance bundle exclusivity dropped…") finds the conversations that talk about it.
@@ -840,6 +849,7 @@ particular, move a capability into "Current state" when it ships.
 ### Scripts
 
 - `bun run start` — `bun daemon/main.js`
+- `bun run restart` — `bun scripts/restart.js`
 - `bun run test` — `bun test`
 - `bun run test:coverage` — `bun test --coverage`
 - `bun run typecheck` — `tsc -p .`
