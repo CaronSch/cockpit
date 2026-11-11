@@ -188,10 +188,10 @@ export async function createApp(root) {
       },
       setParams: (/** @type {LeafParams} */ patch) => api.commitTree(setLeafParams(layoutAtom.get(), leaf.id, patch)),
       addWidget: (/** @type {string} */ type, /** @type {LeafParams} */ params) => addWidget(type, params),
-      openBeside(/** @type {string} */ type, /** @type {LeafParams} */ params) {
+      openTab(/** @type {string} */ type, /** @type {LeafParams} */ params) {
         const tree = layoutAtom.get();
         const opened = newWidgetLeaf(type, params);
-        api.commitTree(tree && findLeaf(tree, leaf.id) ? insertBeside(tree, leaf.id, 'right', opened) : opened, { animate: true });
+        api.commitTree(tree && findLeaf(tree, leaf.id) ? addTab(tree, leaf.id, opened) : opened, { animate: true });
       },
       showWidget: (/** @type {string} */ type, /** @type {LeafParams} */ params) => showWidget(type, params),
       dragWidget(/** @type {string} */ type, /** @type {LeafParams} */ params, /** @type {PointerEvent} */ event, options = {}) {

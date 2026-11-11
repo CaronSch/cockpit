@@ -23,7 +23,8 @@ import timeline from './timeline.js';
  * `paramsChanged()` is called after they changed, whoever changed them (this window, or
  * another one showing something in it).
  * `ctx.addWidget(type, params)` opens another window beside the largest one;
- * `ctx.openBeside(type, params)` opens one on this window's right, splitting it;
+ * `ctx.openTab(type, params)` opens one as a tab in this window's place, shown, so nothing is
+ * pushed aside (this window waits behind it, a tab of the stack);
  * `ctx.showWidget(type, params)` shows `params` in the window of `type` this screen used last
  * (merging them into its settings, and bringing it to the front of its stack), or opens one if
  * there is none;
@@ -61,7 +62,7 @@ import timeline from './timeline.js';
  *   setParams(patch: LeafParams): void,
  *   addWidget(type: string, params: LeafParams): void,
  *   showWidget(type: string, params: LeafParams): void,
- *   openBeside(type: string, params: LeafParams): void,
+ *   openTab(type: string, params: LeafParams): void,
  *   dragWidget(type: string, params: LeafParams, event: PointerEvent, options?: { label?: string, into?: boolean, onEnd?: (result: DragEndResult) => void, target?: HTMLElement }): void,
  *   setUnread(unread: boolean): void,
  *   setLabel(text: string | null): void,

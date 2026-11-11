@@ -1125,12 +1125,12 @@ function createPane(body, ctx, daemon) {
         .get()
         .windows.find((w) => w.widget === 'github' && w.params?.number === pull.number && (at.repo ? w.params?.repo === at.repo : w.params?.cwd === at.cwd));
       if (open) {
-        // Already beside it: point at it rather than open it twice.
+        // Already open: point at it rather than open it twice.
         ctx.outline([open.id]);
         setTimeout(() => ctx.outline([]), 1500);
         return;
       }
-      ctx.openBeside('github', pullParams(at, pull, asTarget()));
+      ctx.openTab('github', pullParams(at, pull, asTarget()));
     }
     // Pull requests the conversation links or refers to (`#123`: of its directory's repository)
     // drag out of the transcript as pull request windows, and a click opens one on GitHub.
@@ -1181,7 +1181,7 @@ function createPane(body, ctx, daemon) {
     stopBtn.addEventListener('click', () => void stop());
 
     // ── forks (daemon/forks.js): the conversation this one was forked from, and its own ──
-    /** Shows a conversation beside this window, or points at the window already showing it. @param {LeafParams} shown */
+    /** Shows a conversation as a tab beside this one, or points at the window already showing it. @param {LeafParams} shown */
     function openRelative(shown) {
       const open = ctx.screen
         .get()
@@ -1191,7 +1191,7 @@ function createPane(body, ctx, daemon) {
         setTimeout(() => ctx.outline([]), 1500);
         return;
       }
-      ctx.openBeside('omp', shown);
+      ctx.openTab('omp', shown);
     }
     attachMenu(
       forksBtn,

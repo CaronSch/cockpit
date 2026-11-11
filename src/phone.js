@@ -90,7 +90,7 @@ function mount(type, params) {
       history.pushState({ params: p }, '');
       render();
     },
-    openBeside: noop,
+    openTab: noop,
     dragWidget: noop,
     setUnread: noop,
     setLabel(text) {
