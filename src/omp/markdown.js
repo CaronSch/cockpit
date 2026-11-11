@@ -52,7 +52,7 @@ const SAFE_SCHEMES = new Set(['http:', 'https:', 'mailto:']);
 /** @param {string} lang @returns {lang is VisualLang} */
 const isVisualLang = (lang) => lang === 'mermaid' || lang === 'vega-lite';
 /** An image file named by an absolute or `~/` path (the daemon serves these: `/api/file`). */
-export const LOCAL_IMAGE = /^~?\/[^\s]*\.(png|jpe?g|gif|webp|avif)$/i;
+const LOCAL_IMAGE = /^~?\/[^\s]*\.(png|jpe?g|gif|webp|avif)$/i;
 
 /**
  * Returns the href if it is an absolute http(s) or mailto URL, else null.

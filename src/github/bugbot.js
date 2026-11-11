@@ -14,7 +14,7 @@ import { readableBody } from './text.js';
 /** The comment that asks Bugbot for a review. */
 export const BUGBOT_COMMAND = 'bugbot go';
 /** The GitHub user Bugbot reviews as. */
-export const BUGBOT_LOGIN = 'cursor[bot]';
+const BUGBOT_LOGIN = 'cursor[bot]';
 
 /** A review as GitHub lists it, in the fields used here. @typedef {{ id: number, author: string, body: string, submittedAt: string }} Review */
 /** An inline comment as GitHub lists it, in the fields used here. @typedef {{ body: string, path: string, line: number | null, startLine: number | null }} InlineComment */
@@ -42,7 +42,7 @@ const between = (body, marker) => marker.exec(body)?.[1].trim() ?? null;
  * it says, and where.
  * @param {InlineComment} comment @returns {Finding}
  */
-export function parseFinding(comment) {
+function parseFinding(comment) {
   const { body } = comment;
   const title = /^#{1,6}\s+(.+)$/m.exec(body)?.[1].trim() ?? 'Finding';
   const severity = /\*\*([^*\n]*Severity)\*\*/.exec(body)?.[1].trim() ?? null;

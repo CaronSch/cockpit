@@ -52,7 +52,7 @@ const summary = (pr) => ({
 });
 
 /** The repository (`owner/name`) a pull request URL is in. @param {string} url */
-export function repoOf(url) {
+function repoOf(url) {
   const match = PULL_URL.exec(url);
   if (!match) throw new GithubError(`not a pull request URL: ${url}`);
   return match[1];

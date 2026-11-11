@@ -28,11 +28,11 @@ import { duration } from '../src/timeline/scale.js';
 
 const VERSION = 1;
 /** How late a prompt may run: later than this, the daemon was off or the Mac slept when it came due. */
-export const MISSED_AFTER_MS = 60_000;
+const MISSED_AFTER_MS = 60_000;
 /** How long after the daemon finds a missed prompt (or a failed delivery) it runs. */
-export const MISSED_DELAY_MS = 10 * 60_000;
+const MISSED_DELAY_MS = 10 * 60_000;
 /** How often the daemon looks at the clock while prompts are scheduled, at most: after a sleep, it finds missed ones within this. */
-export const SCHEDULE_TICK_MS = 30_000;
+const SCHEDULE_TICK_MS = 30_000;
 /** The longest prompt kept: a message, not a document. */
 const MAX_PROMPT_CHARS = 20_000;
 
@@ -50,7 +50,7 @@ export class ScheduleRefused extends Error {
  * all the agent knows of it, so it says when to use it, and to ask before guessing a time.
  * Essential, so it sits in the agent's own tools rather than behind tool discovery.
  */
-export const SCHEDULE_TOOL = Object.freeze({
+const SCHEDULE_TOOL = Object.freeze({
   name: 'schedule',
   label: 'Schedule',
   description:
@@ -83,7 +83,7 @@ const DELAY_PART = /(\d+(?:\.\d+)?)\s*(min|w|d|h|m|s)/g;
  * with units, and nothing else.
  * @param {string} text
  */
-export function parseDelay(text) {
+function parseDelay(text) {
   const parts = [...text.matchAll(DELAY_PART)];
   if (parts.length === 0 || text.replace(DELAY_PART, '').trim() !== '') return null;
   return parts.reduce((sum, [, n, unit]) => sum + Number(n) * UNIT_MS[unit], 0);
@@ -96,7 +96,7 @@ const AT = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?$
  * or an offset), epoch milliseconds, or null if it names none.
  * @param {string} text
  */
-export function parseAt(text) {
+function parseAt(text) {
   const trimmed = text.trim();
   if (!AT.test(trimmed)) return null;
   const at = Date.parse(trimmed.replace(' ', 'T'));
@@ -106,7 +106,7 @@ export function parseAt(text) {
 const pad = (/** @type {number} */ n) => String(n).padStart(2, '0');
 
 /** `ms` as this machine's clock reads it: `Wed 2026-11-11 09:00 CET`. @param {number} ms */
-export function localTime(ms) {
+function localTime(ms) {
   const d = new Date(ms);
   const weekday = d.toLocaleDateString('en-GB', { weekday: 'short' });
   const zone = new Intl.DateTimeFormat('en-GB', { timeZoneName: 'short' }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value;
@@ -127,7 +127,7 @@ const isTask = (t) =>
   (t.error === null || typeof t.error === 'string');
 
 /** What the agent is sent when `task` comes due. @param {ScheduledTask} task */
-export const scheduledMessage = (task) => `Scheduled prompt, set ${localTime(task.createdAt)}:\n\n${task.prompt}`;
+const scheduledMessage = (task) => `Scheduled prompt, set ${localTime(task.createdAt)}:\n\n${task.prompt}`;
 
 /** @param {string} message @returns {HostToolResult} */
 const refused = (message) => ({ text: message, isError: true });

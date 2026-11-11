@@ -120,8 +120,10 @@ function askQuestion(q, pick, listDir) {
     });
     inputs.push(input);
     const text = el('span', 'omp-choice-text');
-    text.append(el('span', 'omp-option-label', option.label));
-    if (i === q.recommended) text.append(el('span', 'omp-recommended', 'recommended'));
+    const head = el('span', 'omp-choice-head');
+    head.append(el('span', 'omp-option-label', option.label));
+    if (i === q.recommended) head.append(el('span', 'omp-recommended', 'recommended'));
+    text.append(head);
     if (option.description) text.append(el('span', 'omp-option-desc', option.description));
     if (option.preview) text.append(el('pre', 'omp-pre omp-preview', option.preview));
     row.append(input, text);

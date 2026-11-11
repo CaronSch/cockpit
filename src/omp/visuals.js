@@ -199,7 +199,7 @@ async function vegaView(source) {
  * scale that does not say how to stack is not stacked, so its bars run from the axis' start.
  * @param {any} spec parsed JSON, changed in place @returns {any}
  */
-export function unstackLogScales(spec) {
+function unstackLogScales(spec) {
   if (Array.isArray(spec)) spec.forEach(unstackLogScales);
   else if (spec && typeof spec === 'object') {
     for (const channel of Object.values(spec.encoding ?? {})) {

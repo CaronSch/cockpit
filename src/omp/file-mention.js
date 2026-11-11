@@ -42,7 +42,7 @@ const BREAKS_FINISHED = /[\s@"'`]|^[([{<]|[)\]}>.,;:!?]$/;
  * The mention the caret ends, or null when it ends none.
  * @param {string} text @param {number} caret @returns {MentionQuery | null}
  */
-export function mentionAt(text, caret) {
+function mentionAt(text, caret) {
   const match = QUERY.exec(text.slice(0, caret));
   if (!match) return null;
   const quote = match[1] !== undefined ? '"' : match[2] !== undefined ? "'" : '';
@@ -99,7 +99,7 @@ const quoteFor = (path, typed, finished) =>
  * own entries can be chosen next.
  * @param {MentionQuery} query @param {DirEntry} entry
  */
-export function completeEntry(query, entry) {
+function completeEntry(query, entry) {
   const path = `${query.dir}${entry.name}${entry.isDir ? '/' : ''}`;
   const quote = quoteFor(path, query.quote, !entry.isDir);
   return entry.isDir ? `@${quote}${path}` : `@${quote}${path}${quote} `;
@@ -117,7 +117,7 @@ const TRAILING_PUNCTUATION = /[.,;:!?)]+$/;
  * `@.` and `@..`, on their way to `./` and `../`, finish nothing.
  * @param {MentionQuery} query @param {readonly DirEntry[]} entries
  */
-export function endedByPunctuation(query, entries) {
+function endedByPunctuation(query, entries) {
   if (query.quote) return false;
   const name = query.segment.replace(TRAILING_PUNCTUATION, '');
   if (name === query.segment) return false;
@@ -128,7 +128,7 @@ export function endedByPunctuation(query, entries) {
  * The text that replaces the mention when Tab extends its last segment to `segment`.
  * @param {MentionQuery} query @param {string} segment
  */
-export function extendSegment(query, segment) {
+function extendSegment(query, segment) {
   const path = `${query.dir}${segment}`;
   return `@${quoteFor(path, query.quote, false)}${path}`;
 }

@@ -11,7 +11,7 @@
  */
 
 /** How close to the viewport's top a response counts as already being there, in pixels. */
-export const RESPONSE_SLACK_PX = 4;
+const RESPONSE_SLACK_PX = 4;
 
 /**
  * The scroll position to move to, between 0 and `maxScrollTop` (the bottom: a response too

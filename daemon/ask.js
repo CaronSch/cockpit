@@ -17,11 +17,11 @@ import { join } from 'node:path';
 /** @import { PastSession } from './wire.js' */
 
 /** How long the agent may take before it is stopped and the question fails. */
-export const ASK_TIMEOUT_MS = 180_000;
+const ASK_TIMEOUT_MS = 180_000;
 /** How many conversations an answer may name. */
 const MAX_NAMED = 5;
 
-export const ASK_SYSTEM_PROMPT =
+const ASK_SYSTEM_PROMPT =
   "You find things in the user's past conversations with coding agents. Your working directory holds index.tsv: one line per conversation, " +
   'tab-separated: journal path, title, directory, last active (YYYY-MM-DD), first prompt. Each journal is a JSONL file of the whole conversation: ' +
   "the user's prompts, the agent's replies, its tool calls and their output. Use grep and read on the journals in the index to answer the " +
@@ -41,7 +41,7 @@ export const indexOf = (sessions) =>
  * `known` (in its order, once each, at most MAX_NAMED).
  * @param {string} output @param {ReadonlySet<string>} known
  */
-export function parseAnswer(output, known) {
+function parseAnswer(output, known) {
   /** @type {string[]} */
   const files = [];
   const lines = [];

@@ -38,7 +38,7 @@ function token(text, at) {
 }
 
 /** Whether a word starts or ends at `at` in `text`. @param {string} text @param {number} at */
-export function isBoundary(text, at) {
+function isBoundary(text, at) {
   if (at <= 0 || at >= text.length || SPACE.test(text[at - 1]) || SPACE.test(text[at])) return true;
   const { start, end } = token(text, at);
   if (end - start <= LONG) return false;
@@ -69,7 +69,7 @@ const withinWord = (text, from, to) => {
  * `from`…`to` of `text` snapped: as it is inside one word, else out to whole words.
  * @param {string} text @param {number} from @param {number} to @returns {[number, number]}
  */
-export function snapSpan(text, from, to) {
+function snapSpan(text, from, to) {
   return withinWord(text, from, to) ? [from, to] : [wordStart(text, from), wordEnd(text, to)];
 }
 

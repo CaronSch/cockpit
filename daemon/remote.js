@@ -22,7 +22,7 @@ import { renderSVG } from 'uqr';
 /** @import { SettingsStore } from './settings.js' */
 
 /** How often the Tailscale status is read while Phone access is on. */
-export const HEALTH_CHECK_MS = 30_000;
+const HEALTH_CHECK_MS = 30_000;
 const WHOIS_TIMEOUT_MS = 2_000;
 const VERDICT_TTL_MS = 60_000;
 /** `status --json` answers at once unless something is wrong. */

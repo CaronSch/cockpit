@@ -115,7 +115,7 @@
 }
 
 .sessions-item.is-unread::before {
-  background: var(--color-unread);
+  background: var(--color-accent);
 }
 
 /* Words for screen readers only (the bar says it to the eye). */
@@ -243,8 +243,8 @@
 }
 
 .sessions-item.is-unread .sessions-mark svg {
-  fill: var(--color-unread);
-  stroke: var(--color-unread);
+  fill: var(--color-accent);
+  stroke: var(--color-accent);
 }
 
 /* A pinned row's ★ stays in view; another row's ☆ shows with its actions. */
