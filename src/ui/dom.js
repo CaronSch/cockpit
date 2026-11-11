@@ -18,6 +18,13 @@ export function svg(tag, attrs = {}) {
   return node;
 }
 
+/** A small ×, drawn so it sits at the centre of whatever holds it (a font's × sits low). */
+export function crossIcon() {
+  const icon = svg('svg', { class: 'cross-icon', viewBox: '0 0 10 10', 'aria-hidden': 'true' });
+  icon.append(svg('path', { d: 'M2 2l6 6M8 2l-6 6' }));
+  return icon;
+}
+
 /**
  * A `<button type="button">`, so it never submits an enclosing form.
  * @param {string} className @param {string} [text] @param {(event: MouseEvent) => void} [onClick]

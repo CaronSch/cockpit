@@ -10,7 +10,7 @@
  * controller's.
  */
 import { listStacks } from '../layout/grid-model.js';
-import { button, el } from '../ui/dom.js';
+import { button, crossIcon, el } from '../ui/dom.js';
 /** @import { Stack, Tree } from '../layout/grid-model.js' */
 /** What a tab shows of its window. @typedef {{ glyph: string, name: string, unread: boolean }} TabFace */
 
@@ -37,7 +37,8 @@ export function createTabStrips({ gridEl, frameElement, describe }) {
     const glyph = el('span', 'widget-tab-glyph');
     const dot = el('span', 'widget-tab-dot');
     // Closes its window with a click (app.js); a keyboard closes the focused tab with Delete.
-    const close = el('span', 'widget-tab-close', '×');
+    const close = el('span', 'widget-tab-close');
+    close.append(crossIcon());
     for (const part of [glyph, dot, close]) part.setAttribute('aria-hidden', 'true');
     tab.append(glyph, el('span', 'widget-tab-name'), dot, close);
     return tab;

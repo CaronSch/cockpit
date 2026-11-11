@@ -48,6 +48,7 @@ input[type='radio'],
 .omp-working::before,
 .omp-chip,
 .timeline-dot,
+.widget-tab-dot,
 .timeline-stem::after {
   corner-shape: round;
 }
@@ -953,8 +954,22 @@ input[type='radio']:checked {
 }
 
 .widget-close {
-  font-size: 16px;
   cursor: pointer;
+}
+
+/* A drawn ×, centred in its button (ui/dom.js crossIcon). */
+.cross-icon {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.widget-tab-close .cross-icon {
+  width: 8px;
+  height: 8px;
 }
 
 .widget-close:hover {
@@ -1061,7 +1076,7 @@ input[type='radio']:checked {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--color-unread);
+  background: var(--color-accent);
 }
 
 .widget-tab[data-unread='true'] .widget-tab-dot {
