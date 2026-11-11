@@ -1,6 +1,6 @@
 import { leaf } from '../layout/grid-model.js';
-import pane from './pane.js';
 import omp from './omp.js';
+import terminal from './terminal.js';
 import sessions from './sessions.js';
 import scratchpad from './scratchpad.js';
 import github from './github.js';
@@ -80,7 +80,7 @@ import timeline from './timeline.js';
  */
 
 /** @type {readonly WidgetDef[]} */
-const DEFS = [pane, omp, sessions, timeline, scratchpad, github, file, setup];
+const DEFS = [omp, terminal, sessions, timeline, scratchpad, github, file, setup];
 
 /** @type {Readonly<Record<string, WidgetDef>>} */
 export const WIDGETS = Object.freeze(Object.fromEntries(DEFS.map((def) => [def.type, def])));

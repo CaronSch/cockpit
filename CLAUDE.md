@@ -56,6 +56,8 @@ Planned capabilities:
   set up, `host_tool_call` answered with `host_tool_result`; `HostTools` in
   `daemon/omp-session.js`): today the `schedule` tool (`daemon/schedule.js`). omp is the `omp` on PATH unless `--omp`
   says otherwise. Prefer Bun's own APIs where they make the code smaller.
+  It also runs the Terminal windows' shells (`daemon/terminals.js`): the user's login shell in a
+  pseudo-terminal of Bun's own (`Bun.spawn`'s `terminal`), owned like omp, never by a window.
   The workbench is self-contained: it shows agents it launched and does not attach
   to sessions started in other terminals. Later it also samples process trees,
   proxies model calls and observes the filesystem.
@@ -72,7 +74,9 @@ Planned capabilities:
   and it asks for `get_state` again after anything that changes it. Windows render
   the stream and send only what their user asks for. A window showing a conversation
   no session holds reads it from its journal (`GET /api/conversation`,
-  `daemon/conversation.js`, in `get_messages`' shape), without starting omp.
+  `daemon/conversation.js`, in `get_messages`' shape), without starting omp. A terminal's output
+  rides the same stream, outside the replayable log and only to the pages watching it (a page
+  asks for it by its stream's id from the `hello`): first its scrollback, then as it comes.
 - **Windows keep their own settings** in `leaf.params` (e.g. which conversation an
   agent pane shows: its journal, `sessionFile`), saved with the layout.
   **Conversations are named by their journal, and asleep or awake is the daemon's
@@ -460,6 +464,21 @@ What runs today:
   if the file changed since (an agent wrote it), the window asks whose text stays. Only a file
   read whole and plain UTF-8 is editable (`editable`), so a save changes no byte not edited;
   `\r\n` line ends are kept.
+- Terminal windows (the `terminal` widget): a real shell, the user's login shell (`$SHELL -l`) in
+  a chosen directory, drawn by xterm.js in the app's colours and `--font-code`, and fitted to the
+  window (its size goes to the shell, the last window resized setting it for all). The daemon
+  runs it (`daemon/terminals.js`), so closing or hiding the window ends nothing: the window keeps
+  its terminal's id and directory in its settings, and a reload, or another window given the same
+  id, shows it again with what it printed (its last 256 KiB, kept in parts at the size each was
+  printed at and replayed so, as a window watching all along shows it). A new window offers the
+  agent window's Directory field and recent directories, and lists the shells running, to show one
+  there again or **End** it (clicked twice); the + after its title opens another terminal as a tab,
+  started in the same directory. A shell ends when it exits (`exit`) or is ended, and with the
+  daemon: its windows then say so, with **New shell here** and **Another directory**. Keys typed
+  in a terminal go to the shell, Ctrl+K and Tab included; those with Cmd stay the app's and the
+  browser's (⌘K, copy, paste). Typing goes to the daemon one request at a time, so it arrives in
+  order. The empty Pane widget is gone; a saved layout's Pane windows (they held nothing) are left
+  out as the daemon reads it (`daemon/workspace.js`).
 - Phone access (`daemon/remote.js`, the `remote` setting, **Phone access** in Config and in
   Setup): while on, a second listener on the Mac's Tailscale IPv4, at the daemon's port unless
   `--remote-port`, serves the same routes behind the whois gate (Invariants), the health check
@@ -483,7 +502,7 @@ What runs today:
   history, so an old `set_editor_text` never fills the box. JSON answers of 64 KiB or more are
   gzipped for a client that accepts it.
 
-Not built yet: saved-context pins, terminal panes, process view,
+Not built yet: saved-context pins, process view,
 telemetry views, cmux-parity features beyond the above.
 
 ## How we decide
@@ -547,6 +566,11 @@ telemetry views, cmux-parity features beyond the above.
     loaded as classic scripts only when a reply first holds one.
   - `uqr` (QR codes): the daemon draws Phone access's sign-in QR code as an SVG
     (`daemon/remote.js`); the browser never loads it.
+  - `@xterm/xterm` and `@xterm/addon-fit` (terminal emulation for the Terminal window, VS Code's
+    own, and fitting it to the window): their ES modules and stylesheet are served at
+    `/vendor/xterm.mjs`, `/vendor/addon-fit.mjs` and `/vendor/xterm.css` (the import map in
+    `index.html`), loaded only when a terminal window first opens. The pseudo-terminal itself
+    needs no dependency: Bun has one (`Bun.spawn`'s `terminal`).
 - omp is not a dependency: the user installs it on its own (https://omp.sh) and
   the daemon runs the `omp` on PATH. The version the fake omp in `tests/` was
   recorded from is in `RISKS.md`; a newer installed omp means re-recording frames. GitHub's
@@ -726,6 +750,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
 - `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key or Shift+F10 opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
+- `src/ui/directory-form.js` — The form a window starts something in a directory from (an agent, a shell): a Directory field that suggests folders as the path is typed, a start button, and under them the directories of the latest conversations, each a click from starting there.
 - `src/ui/dom.js` — Element construction helpers: elements, SVG elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
 - `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
@@ -744,11 +769,11 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
-- `src/widgets/pane.js` — An empty window: the frame every real widget is mounted into, with nothing inside.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
 - `src/widgets/sessions.js` — omp conversations, one list, sortable and narrowed to a directory.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
+- `src/widgets/terminal.js` — A terminal: the user's login shell in a directory, shown as a terminal app shows it (xterm.js), run by the daemon (daemon/terminals.js) so it goes on whatever becomes of the window.
 - `src/widgets/timeline.js` — A timeline of the agents: on its left, idle conversations by how recently they were active (in order, not to scale), the latest beside now; at now, those whose agents are busy (starting, working, asking their user something, or running work in the background); on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js) that reaches as far as the furthest one: the next hour spread out, the next month squeezed in.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
@@ -770,7 +795,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/history.js` — Past omp sessions, read from omp's session files: one summary per conversation, searchable (search.js, ranked) by title, directory, what the user asked and what the agent answered.
 - `daemon/hub.js` — The daemon's omp sessions and the single ordered event log the browser replays.
 - `daemon/idle-compaction.js` — Idle compaction, as Claude Code does it: a long conversation left idle is compacted shortly before its prompt cache expires, while the summary request can still read the conversation from the cache, so coming back later sends a summary instead of the whole conversation at full price.
-- `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback (and, with Phone access on, to the owner's tailnet devices: remote.js) and runs the omp processes it shows.
+- `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback (and, with Phone access on, to the owner's tailnet devices: remote.js) and runs the omp processes and shells it shows.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
 - `daemon/remote.js` — Phone access (settings.js `remote`): while it is on, the daemon also serves the owner's own devices on their tailnet, through a second listener bound to the Mac's Tailscale IPv4 with the same routes as loopback (server.js), behind a whois gate.
@@ -782,6 +807,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/setup.js` — Setup (the Setup window, src/widgets/setup.js): what this machine needs before a first agent can start, and what Phone access would need, checked whenever the window asks, and omp's own `omp login` run for the window, so a model provider can be signed in to from the browser.
 - `daemon/sleep.js` — When the daemon puts a session to sleep: ends its omp process, as nobody needs it running.
 - `daemon/state-file.js` — A value the daemon keeps in one small JSON file in the state directory (unread marks, pins, settings): read once as the daemon starts, written whole after every change (write-then-rename, one write at a time, so a crash mid-write leaves the old value, never half of the new one), and every change heard by its subscribers.
+- `daemon/terminals.js` — Terminals: shells the daemon runs in pseudo-terminals for the Terminal window (src/widgets/terminal.js), each the user's login shell in a directory, running whatever becomes of the windows that show it.
 - `daemon/token.js` — The daemon's access token: random, created once, kept owner-only in the state directory so a browser stays signed in across daemon restarts.
 - `daemon/ui-files.js` — The files that make up the browser UI: which ones the daemon serves, and a version that changes whenever any of them does, so an open page can tell it is running older code.
 - `daemon/unread.js` — Which omp conversations have news their user has not read: kept in one small file in the state directory, so a mark outlives windows, browsers, daemon restarts and the session itself (a stopped session is a past one, still unread).
@@ -790,8 +816,8 @@ particular, move a capability into "Current state" when it ships.
 
 ### Registered widgets
 
-- `pane` — Pane: An empty window
 - `omp` — Agent: Chat with a coding agent in a directory
+- `terminal` — Terminal: A shell in a directory; it keeps running when its window closes
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `timeline` — Timeline: Agents by when they were last active, and the prompts they scheduled: drag one out to open it, or onto the bin to archive or delete
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page

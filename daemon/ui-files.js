@@ -21,6 +21,10 @@ export const VENDOR_FILES = /** @type {Record<string, string>} */ ({
   'vendor/mermaid.min.js': 'node_modules/mermaid/dist/mermaid.min.js',
   'vendor/vega.min.js': 'node_modules/vega/build/vega.min.js',
   'vendor/vega-lite.min.js': 'node_modules/vega-lite/build/vega-lite.min.js',
+  // Loaded only when a terminal window first opens (src/widgets/terminal.js): ES modules and a stylesheet.
+  'vendor/xterm.mjs': 'node_modules/@xterm/xterm/lib/xterm.mjs',
+  'vendor/xterm.css': 'node_modules/@xterm/xterm/css/xterm.css',
+  'vendor/addon-fit.mjs': 'node_modules/@xterm/addon-fit/lib/addon-fit.mjs',
 });
 /** The file types served, and so the only ones a version counts. */
 export const CONTENT_TYPES = /** @type {Record<string, string>} */ ({

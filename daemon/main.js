@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Daemon entry point (`bun start`): serves the workbench on loopback (and, with Phone access on,
- * to the owner's tailnet devices: remote.js) and runs the omp processes it shows.
+ * to the owner's tailnet devices: remote.js) and runs the omp processes and shells it shows.
  *
  *   bun daemon/main.js [--port 4777] [--omp <path to omp>] [--gh <path to gh>] [--cwd <dir>]
  *                      [--tailscale <path to tailscale>] [--remote-port <n>]
@@ -51,6 +51,7 @@ import { createForker, loadForks } from './forks.js';
 import { nameFork } from './fork-title.js';
 import { loadSettings } from './settings.js';
 import { createSetup, ompVersion } from './setup.js';
+import { createTerminals } from './terminals.js';
 
 const ROOT = resolve(import.meta.dir, '..');
 
@@ -144,6 +145,7 @@ remote.subscribe((state) => {
   if (state.state === 'on') console.log(`Phone: ${info.url} (only ${info.login}'s devices)`);
   else if (state.state === 'error') console.error(`[daemon] Phone access: ${state.error}`);
 });
+const terminals = createTerminals();
 const daemon = createDaemon({
   hub,
   history,
@@ -162,6 +164,7 @@ const daemon = createDaemon({
   schedule,
   setup,
   remote,
+  terminals,
   ask: (question) => askAgent(question, { ompPath, history }),
   token,
   root: ROOT,
@@ -198,7 +201,7 @@ async function shutdown() {
   void server.stop(true);
   void remote.stop();
   setup.login.cancel();
-  await hub.closeAll();
+  await Promise.all([hub.closeAll(), terminals.closeAll()]);
   process.exit(0);
 }
 process.on('SIGINT', shutdown);

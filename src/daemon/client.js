@@ -26,9 +26,15 @@
  * It also tracks the UI files' version (see daemon/ui-files.js): the first one the daemon
  * reports is the code this page loaded, and `onUiChange` hears when the files served stop
  * being, or become again, those.
+ *
+ * Terminals (daemon/terminals.js) come on the same stream: every page hears which are running,
+ * and the output of those its windows watch. Watching one has the daemon send its scrollback
+ * first (`replay`), on this connection; a new connection (a reconnect, a daemon restart) watches
+ * them again. What is typed into a terminal is sent one request at a time, keystrokes typed
+ * meanwhile together, so it arrives in order.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TextFile, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -126,6 +132,13 @@ export class DaemonError extends Error {
  *   remote(): RemoteState | null,
  *   onRemote(fn: () => void): () => void,
  *   remoteInfo(): Promise<RemoteInfo>,
+ *   terminals(): readonly TerminalInfo[],
+ *   onTerminals(fn: () => void): () => void,
+ *   startTerminal(options: { cwd: string, cols: number, rows: number }): Promise<TerminalInfo>,
+ *   endTerminal(id: string): Promise<void>,
+ *   watchTerminal(id: string, fn: (event: TerminalEvent) => void): () => void,
+ *   typeInto(id: string, data: string, binary?: boolean): void,
+ *   resizeTerminal(id: string, cols: number, rows: number): Promise<void>,
  * }} DaemonClient
  */
 
@@ -285,6 +298,35 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     remote = next;
     for (const fn of remoteListeners) fn();
   };
+  /** The terminals running, as the daemon last said. @type {readonly TerminalInfo[]} */
+  let terminals = [];
+  /** @type {Set<() => void>} */
+  const terminalsListeners = new Set();
+  /** @param {readonly TerminalInfo[]} next */
+  const setTerminals = (next) => {
+    terminals = next;
+    for (const fn of terminalsListeners) fn();
+  };
+  /** What the stream open now is called, for watching terminals on it (`hello`'s `stream`). @type {string | null} */
+  let streamId = null;
+  /** The windows showing each terminal: they hear its output. @type {Map<string, Set<(event: TerminalEvent) => void>>} */
+  const terminalViewers = new Map();
+  /** What is waiting to be typed into each terminal, in pieces of one kind (`binary` or not). @type {Map<string, Array<{ data: string, binary: boolean }>>} */
+  const typing = new Map();
+  const terminalPath = (/** @type {string} */ id) => `/api/terminals/${encodeURIComponent(id)}`;
+  /** Has the daemon send terminal `id`'s scrollback, then its output, on this page's stream. @param {string} id */
+  function watchOn(id) {
+    // A terminal that has ended is not watched (404): the list tells its windows so.
+    if (streamId) request(`${terminalPath(id)}/watchers/${streamId}`, { method: 'PUT' }).catch(() => {});
+  }
+  /** Sends what waits to be typed into `id`, one request at a time, until nothing does. @param {string} id @param {Array<{ data: string, binary: boolean }>} queue */
+  async function sendTyping(id, queue) {
+    for (let next = queue[0]; next; next = queue[0]) {
+      await request(`${terminalPath(id)}/input`, { method: 'POST', body: JSON.stringify(next) }).catch(() => {});
+      queue.shift();
+    }
+    typing.delete(id);
+  }
   const sessionsChanged = () => {
     for (const fn of sessionListeners) fn();
   };
@@ -321,6 +363,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (replayLeft === 0) replayDone();
     for (const meta of hello.sessions) metas.set(meta.id, meta);
     noteUi(hello.ui);
+    streamId = hello.stream;
+    setTerminals(hello.terminals);
     setStatus('open');
     sessionsChanged();
     setUnread(hello.unread);
@@ -336,6 +380,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     // Changes made while this page was away were not heard: ask again.
     decisions.clear();
     decisionsChanged();
+    // A new connection: the terminals shown are watched on it, from their scrollback again.
+    for (const id of terminalViewers.keys()) watchOn(id);
   }
 
   /** @param {StreamEvent} event */
@@ -357,6 +403,11 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (event.kind === 'schedule') return setScheduled(event.tasks);
     if (event.kind === 'login') return setLogin(event.login);
     if (event.kind === 'remote') return setRemote({ state: event.state, error: event.error });
+    if (event.kind === 'terminals') return setTerminals(event.terminals);
+    if (event.kind === 'terminal') {
+      for (const fn of terminalViewers.get(event.id) ?? []) fn(event);
+      return;
+    }
     if (event.kind === 'activity') {
       if (event.activity) activities.set(event.session, event.activity);
       else activities.delete(event.session);
@@ -746,6 +797,42 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     },
     // Answered on the Mac's own (loopback) address only: it carries the sign-in QR code.
     remoteInfo: () => request('/api/remote'),
+    terminals: () => terminals,
+    onTerminals(fn) {
+      terminalsListeners.add(fn);
+      return () => terminalsListeners.delete(fn);
+    },
+    async startTerminal({ cwd, cols, rows }) {
+      return (await request('/api/terminals', { method: 'POST', body: JSON.stringify({ cwd, cols, rows }) })).terminal;
+    },
+    async endTerminal(id) {
+      await request(terminalPath(id), { method: 'DELETE' });
+    },
+    /** Has `fn` hear terminal `id`'s output: its scrollback first (`replay`), then as it comes; again from the scrollback after a reconnect, or when another window of this page starts watching it. */
+    watchTerminal(id, fn) {
+      let viewers = terminalViewers.get(id);
+      if (!viewers) terminalViewers.set(id, (viewers = new Set()));
+      viewers.add(fn);
+      watchOn(id);
+      return () => {
+        viewers.delete(fn);
+        if (viewers.size || terminalViewers.get(id) !== viewers) return;
+        terminalViewers.delete(id);
+        if (streamId) request(`${terminalPath(id)}/watchers/${streamId}`, { method: 'DELETE' }).catch(() => {});
+      };
+    },
+    typeInto(id, data, binary = false) {
+      let queue = typing.get(id);
+      if (!queue) typing.set(id, (queue = []));
+      // The first piece is on its way: what is typed meanwhile joins the next one.
+      const last = queue.length > 1 ? queue[queue.length - 1] : undefined;
+      if (last && last.binary === binary) last.data += data;
+      else queue.push({ data, binary });
+      if (queue.length === 1) void sendTyping(id, queue);
+    },
+    async resizeTerminal(id, cols, rows) {
+      await request(`${terminalPath(id)}/size`, { method: 'POST', body: JSON.stringify({ cols, rows }) });
+    },
   };
 }
 
