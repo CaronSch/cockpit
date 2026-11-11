@@ -10,14 +10,17 @@ import timeline from './timeline.js';
 
 /**
  * Widgets the palette can add, keyed by type.
- * Contract: { type, title, glyph, description, newParams?(), newTab?(params), mount(body, ctx) → { destroy(), paramsChanged?() } }.
+ * Contract: { type, title, glyph, description, newParams?(), newTab?(params), mount(body, ctx) → { destroy(), paramsChanged?(), closed?() } }.
  * `newParams()` gives a window its starting settings when one is created (e.g. a fresh
  * scratchpad id); windows restored from a saved layout keep theirs.
  * `newTab(params)`, if a widget has it, puts a + after its window's title (or its stack's tabs):
  * a click opens another window of its type as a tab beside it, with the settings `newTab` draws
  * from this window's (an agent window: the same directory).
  * A window owns nothing but its settings: what must outlive it (an agent, a pad) lives with
- * the daemon, so closing a window never ends anything.
+ * the daemon, so closing a window ends nothing, with one exception: `closed()` runs when its
+ * user closes the window (its ×, or Delete on its grip or tab), never as it goes for any other
+ * reason (a reload, another screen), and a terminal ends its shell there, as a terminal app's
+ * tab does. `destroy()` runs every time the window goes.
  * `ctx.params` is this window's saved settings (read it when needed: it changes after
  * mount); `ctx.setParams(patch)` merges into them and persists them with the layout.
  * `paramsChanged()` is called after they changed, whoever changed them (this window, or
@@ -76,7 +79,7 @@ import timeline from './timeline.js';
  * @typedef {{ type: string, title: string, glyph: string, description: string,
  *   newParams?: () => LeafParams,
  *   newTab?: (params: LeafParams) => LeafParams,
- *   mount(body: HTMLElement, ctx: WidgetContext): { destroy(): void, paramsChanged?(): void } }} WidgetDef
+ *   mount(body: HTMLElement, ctx: WidgetContext): { destroy(): void, paramsChanged?(): void, closed?(): void } }} WidgetDef
  */
 
 /** @type {readonly WidgetDef[]} */

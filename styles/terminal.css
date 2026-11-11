@@ -34,53 +34,6 @@
   margin: 0;
 }
 
-/* The shells running, under the form: like its recent directories, a click shows one here. */
-.term-running {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 var(--space-4) var(--space-4);
-  font-size: var(--text-xs);
-}
-
-.term-running[hidden] {
-  display: none;
-}
-
-.term-running > .omp-label {
-  padding-bottom: 2px;
-}
-
-.term-running-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin-left: -8px;
-}
-
-.term-running-pick {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  text-align: left;
-}
-
-.term-running-dir {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-code);
-}
-
-.term-running-since {
-  color: var(--color-text-faint);
-}
-
-.term-running-end.is-armed:not(:disabled) {
-  color: var(--color-danger);
-}
-
 /* ── The terminal ───────────────────────────────────── */
 .term-view {
   flex: 1;

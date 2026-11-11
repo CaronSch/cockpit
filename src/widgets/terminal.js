@@ -1,14 +1,15 @@
 /**
- * A terminal: the user's login shell in a directory, shown as a terminal app shows it (xterm.js),
- * run by the daemon (daemon/terminals.js) so it goes on whatever becomes of the window.
+ * A terminal: the user's login shell in a directory, shown as a terminal app shows it (xterm.js).
+ * It lives in its window: closing the window ends it, as a terminal app's tab; the daemon runs it
+ * (daemon/terminals.js) so a reload, or the browser closed and opened again, finds it running.
  *
  * Params (persisted with the layout): `terminal` (the id of the shell shown), `cwd` (its
  * directory) and `startIn` (a directory to start a shell in at once, as the + after the window's
- * title asks for). Without a terminal, the window offers to start one, and lists the shells
- * running, to show one again (a window closed leaves its shell running) or end it. A reload, or
- * another window given the same id, shows the same shell with what it printed (its scrollback).
- * A shell ends when it exits (`exit`, Ctrl+D) or is ended from that list; its window then says
- * so, and offers a new one.
+ * title asks for). Without a terminal, the window offers to start one. A reload, or another
+ * window given the same id, shows the same shell with what it printed (its scrollback). A shell
+ * ends when it exits (`exit`, Ctrl+D) or its window is closed (unless another window of this
+ * screen shows it); a window whose shell ended (an `exit`, a daemon restart) says so, and offers
+ * a new one.
  *
  * Keys typed in the terminal go to the shell, the app's shortcuts with Ctrl too (Ctrl+K is the
  * shell's); those with Cmd stay the app's and the browser's (Cmd+K, Cmd+C, Cmd+V).
@@ -21,7 +22,6 @@ import { getDaemon } from '../daemon/client.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { LeafParams } from '../layout/grid-model.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
-/** @import { TerminalInfo } from '../../daemon/wire.js' */
 /** @import { ITheme, Terminal } from '@xterm/xterm' */
 /** @import { FitAddon } from '@xterm/addon-fit' */
 
@@ -29,7 +29,7 @@ export default {
   type: 'terminal',
   title: 'Terminal',
   glyph: '❯',
-  description: 'A shell in a directory; it keeps running when its window closes',
+  description: 'A shell in a directory; closing its window ends it',
   /** The + after its title: another terminal beside it, started in the same directory. @param {LeafParams} params */
   newTab: (params) => ({ startIn: typeof params.cwd === 'string' ? params.cwd : null }),
 
@@ -180,9 +180,8 @@ function createTerminalWindow(body, ctx, daemon) {
     return { root: el('p', status === 'connecting' ? 'term-note' : 'term-note omp-error', text) };
   }
 
-  /** The form to start a shell, and the shells running, each to show here or end. */
+  /** The form to start a shell: a directory, or one of the recent ones. */
   function setupView() {
-    const box = el('div', 'term-setup');
     const form = directoryForm({
       daemon,
       title: 'Start a shell',
@@ -193,46 +192,9 @@ function createTerminalWindow(body, ctx, daemon) {
       failed,
     });
     failed = null;
-    const running = el('div', 'term-running');
-    running.setAttribute('role', 'group');
-    running.setAttribute('aria-label', 'Shells running');
-    const drawRunning = () => {
-      const all = daemon.terminals();
-      running.hidden = all.length === 0;
-      running.replaceChildren(el('span', 'omp-label', 'Running'), ...all.map(runningRow));
-    };
-    drawRunning();
-    // Again once home is known, to write it as `~`.
-    daemon.config().then(drawRunning, () => {});
-    const offTerminals = daemon.onTerminals(drawRunning);
-    box.append(form, running);
-    return { root: box, destroy: offTerminals };
-  }
-
-  /** A running shell: a click shows it here; End, clicked twice, ends it. @param {TerminalInfo} t */
-  function runningRow(t) {
-    const row = el('div', 'term-running-row');
-    const dir = tildeHome(t.cwd, home);
-    const since = new Date(t.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const pick = button('omp-tool-btn term-running-pick', '', () => ctx.setParams({ terminal: t.id, cwd: t.cwd, startIn: null }));
-    pick.append(el('span', 'term-running-dir', dir), el('span', 'term-running-since', `since ${since}`));
-    pick.setAttribute('aria-label', `Show the shell in ${dir}, started at ${since}`);
-    const end = button('omp-tool-btn term-running-end', 'End', () => {
-      if (!end.classList.contains('is-armed')) {
-        end.classList.add('is-armed');
-        end.textContent = 'End shell?';
-        return;
-      }
-      end.disabled = true;
-      daemon.endTerminal(t.id).catch(() => (end.disabled = false));
-    });
-    end.setAttribute('aria-label', `End the shell in ${dir}`);
-    end.addEventListener('blur', () => {
-      end.classList.remove('is-armed');
-      end.textContent = 'End';
-    });
-    row.append(pick, end);
-    return row;
+    const box = el('div', 'term-setup');
+    box.append(form);
+    return { root: box };
   }
 
   /** Terminal `id`, live: what it prints, what is typed into it, its size following the window's. @param {string} id */
@@ -386,6 +348,12 @@ function createTerminalWindow(body, ctx, daemon) {
   render();
   return {
     paramsChanged: render,
+    closed() {
+      const id = ctx.params.terminal;
+      if (typeof id !== 'string' || !id) return;
+      const showing = ctx.screen.get().windows.filter((w) => w.widget === 'terminal' && w.params?.terminal === id);
+      if (showing.length <= 1) daemon.endTerminal(id).catch(() => {}); // this window alone
+    },
     destroy() {
       offStatus();
       view?.destroy();

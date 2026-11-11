@@ -472,14 +472,15 @@ What runs today:
   `\r\n` line ends are kept.
 - Terminal windows (the `terminal` widget): a real shell, the user's login shell (`$SHELL -l`) in
   a chosen directory, drawn by xterm.js in the app's colours and `--font-code`, and fitted to the
-  window (its size goes to the shell, the last window resized setting it for all). The daemon
-  runs it (`daemon/terminals.js`), so closing or hiding the window ends nothing: the window keeps
-  its terminal's id and directory in its settings, and a reload, or another window given the same
-  id, shows it again with what it printed (its last 256 KiB, kept in parts at the size each was
-  printed at and replayed so, as a window watching all along shows it). A new window offers the
-  agent window's Directory field and recent directories, and lists the shells running, to show one
-  there again or **End** it (clicked twice); the + after its title opens another terminal as a tab,
-  started in the same directory. A shell ends when it exits (`exit`) or is ended, and with the
+  window (its size goes to the shell, the last window resized setting it for all). It lives in its
+  window: closing the window (×) ends it, as a terminal app's tab (the widget's `closed`; unless
+  another window of the screen shows it), and there is no list of shells. The daemon runs it
+  (`daemon/terminals.js`), so a reload, or the browser closed and opened again, ends nothing: the
+  window keeps its terminal's id and directory in its settings, and shows it again with what it
+  printed (its last 256 KiB, kept in parts at the size each was printed at and replayed so, as a
+  window watching all along shows it). A new window offers the agent window's Directory field and
+  recent directories; the + after its title opens another terminal as a tab, started in the same
+  directory. A shell also ends when it exits (`exit`), and with the
   daemon: its windows then say so, with **New shell here** and **Another directory**. Keys typed
   in a terminal go to the shell, Ctrl+K and Tab included; those with Cmd stay the app's and the
   browser's (⌘K, copy, paste). Typing goes to the daemon one request at a time, so it arrives in
@@ -590,7 +591,8 @@ telemetry views, cmux-parity features beyond the above.
   layout logic is unit-tested.
 - New windows are widgets: one module in `src/widgets/` registered in
   `src/widgets/registry.js` (contract documented there). A window owns nothing
-  but its settings: closing it ends nothing.
+  but its settings: closing it ends nothing, but for a terminal's shell, which its user closes
+  with it, as in a terminal app (the widget's `closed`, run only when its user closes it).
 - Every module opens with a `/** … */` comment whose first sentence says what it
   is for; the module map below is built from it.
 
@@ -780,7 +782,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
 - `src/widgets/sessions.js` — omp conversations, one list, sortable and narrowed to a directory.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
-- `src/widgets/terminal.js` — A terminal: the user's login shell in a directory, shown as a terminal app shows it (xterm.js), run by the daemon (daemon/terminals.js) so it goes on whatever becomes of the window.
+- `src/widgets/terminal.js` — A terminal: the user's login shell in a directory, shown as a terminal app shows it (xterm.js).
 - `src/widgets/timeline.js` — A timeline of the agents: on its left, idle conversations by how recently they were active (in order, not to scale), the latest beside now; at now, those whose agents are busy (starting, working, asking their user something, or running work in the background); on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js) that reaches as far as the furthest one: the next hour spread out, the next month squeezed in.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
@@ -824,7 +826,7 @@ particular, move a capability into "Current state" when it ships.
 ### Registered widgets
 
 - `omp` — Agent: Chat with a coding agent in a directory
-- `terminal` — Terminal: A shell in a directory; it keeps running when its window closes
+- `terminal` — Terminal: A shell in a directory; closing its window ends it
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `timeline` — Timeline: Agents by when they were last active, and the prompts they scheduled: drag one out to open it, or onto the bin to archive or delete
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
