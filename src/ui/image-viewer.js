@@ -1,9 +1,9 @@
 /**
  * An image viewer over the workbench: a click on an image (in a reply, a prompt or a note)
- * shows it as large as the window allows, on a dimmed backdrop; Esc, a click outside it or ×
- * closes it. A ⌘-click (Ctrl-click elsewhere) still opens it in a new tab.
+ * shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes
+ * it. A ⌘-click (Ctrl-click elsewhere) still opens it in a new tab.
  */
-import { button, el } from './dom.js';
+import { el } from './dom.js';
 
 /** @type {{ dialog: HTMLDialogElement, img: HTMLImageElement, caption: HTMLElement } | null} */
 let viewer = null;
@@ -15,13 +15,8 @@ function showImage(src, name) {
     dialog.setAttribute('aria-label', 'Image');
     const img = /** @type {HTMLImageElement} */ (el('img', 'image-viewer-img'));
     const caption = el('p', 'image-viewer-caption');
-    const close = button('image-viewer-close', '×', () => dialog.close());
-    close.setAttribute('aria-label', 'Close');
-    dialog.append(img, caption, close);
-    // A click on the backdrop lands on the dialog itself, outside the picture.
-    dialog.addEventListener('click', (event) => {
-      if (event.target === dialog) dialog.close();
-    });
+    dialog.append(img, caption);
+    dialog.addEventListener('click', () => dialog.close());
     document.body.append(dialog);
     viewer = { dialog, img, caption };
   }
