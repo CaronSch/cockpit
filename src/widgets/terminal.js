@@ -212,13 +212,17 @@ function createTerminalWindow(body, ctx, daemon) {
 
   /** @param {string} status */
   function statusView(status) {
+    if (status === 'connecting') {
+      // As the agent window says it: the spinner it shows while it works, then what it waits on.
+      const waiting = el('p', 'term-note omp-waiting');
+      waiting.append(el('span', 'omp-spin'), 'Connecting…');
+      return { root: waiting };
+    }
     const text =
       status === 'unauthorized'
         ? 'This browser is not signed in to the daemon: open the URL printed by `bun start`.'
-        : status === 'down'
-          ? 'Daemon not reachable; this window reconnects by itself.'
-          : 'Connecting to the daemon…';
-    return { root: el('p', status === 'connecting' ? 'term-note' : 'term-note omp-error', text) };
+        : 'Daemon not reachable; this window reconnects by itself.';
+    return { root: el('p', 'term-note omp-error', text) };
   }
 
   /** The form to start a shell: a directory, or one of the recent ones. */
