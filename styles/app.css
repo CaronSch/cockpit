@@ -671,14 +671,36 @@ input[type='radio']:checked {
 }
 
 /* ── Screen switcher ─────────────────────────────────── */
+/* Compact: two screens, `1/2`, a chevron. */
+.screen-switch {
+  gap: 5px;
+  padding-inline: 8px;
+}
+
+.screen-switch .stroke-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--color-text-dim);
+}
+
+.screen-switch .screen-caret {
+  width: 8px;
+  height: 8px;
+  stroke-width: 1.75;
+}
+
+.screen-label {
+  font-variant-numeric: tabular-nums;
+}
+
+.screen-label:empty {
+  display: none;
+}
+
 /* The layout is not being saved: shown, never hidden. */
 .screen-switch.is-unsaved,
 .screen-switch.is-unsaved:hover {
   border-color: var(--color-danger);
-}
-
-.screen-caret {
-  color: var(--color-text-dim);
 }
 
 /* The menu, set as Config's: a heading, a row per screen, and New screen at its foot. */

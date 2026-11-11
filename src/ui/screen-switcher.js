@@ -9,6 +9,7 @@
  */
 import { button, el } from './dom.js';
 import { errorMessage } from './format.js';
+import { chevronIcon, screensIcon } from './icons.js';
 /** @import { OpenedScreen, ScreenEntry } from '../workspace/screen.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 
@@ -17,12 +18,14 @@ import { errorMessage } from './format.js';
  */
 export function createScreenSwitcher({ opened, describe }) {
   const root = el('div', 'screen-switcher');
+  // Compact, as the top bar's other controls: two screens, which one this is (`1/2`), a chevron;
+  // its name says it in full.
   const toggle = button('topbar-btn screen-switch');
   toggle.setAttribute('aria-haspopup', 'true');
   const label = el('span', 'screen-label');
-  const caret = el('span', 'screen-caret', '▾');
-  caret.setAttribute('aria-hidden', 'true');
-  toggle.append(label, caret);
+  const caret = chevronIcon();
+  caret.classList.add('screen-caret');
+  toggle.append(screensIcon(), label, caret);
   const menu = el('div', 'screen-menu');
   menu.popover = 'auto';
   menu.setAttribute('aria-label', 'Screens');
@@ -31,6 +34,7 @@ export function createScreenSwitcher({ opened, describe }) {
 
   if (!opened.ok) {
     label.textContent = 'Not saved';
+    toggle.setAttribute('aria-label', 'Screens: not saved');
     menu.append(el('p', 'screen-note', opened.problem));
     return { root };
   }
@@ -54,7 +58,8 @@ export function createScreenSwitcher({ opened, describe }) {
   function draw() {
     const at = entries.findIndex((e) => e.open === 'here');
     const saveError = screen.saveError();
-    label.textContent = (at < 0 ? 'Screen' : `Screen ${at + 1} of ${entries.length}`) + (saveError ? ' · not saved' : '');
+    label.textContent = (at < 0 ? '' : `${at + 1}/${entries.length}`) + (saveError ? (at < 0 ? 'not saved' : ' · not saved') : '');
+    toggle.setAttribute('aria-label', (at < 0 ? 'Screens' : `Screen ${at + 1} of ${entries.length}`) + (saveError ? ', not saved' : ''));
     toggle.classList.toggle('is-unsaved', Boolean(saveError));
     if (menu.matches(':popover-open') && !confirming) fillMenu();
   }
