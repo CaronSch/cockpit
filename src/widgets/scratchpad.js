@@ -1,6 +1,8 @@
 /**
- * Notes beside the agents: text with screenshots and files in it. Each new Scratchpad window
- * starts its own pad; the switcher reopens any pad (two windows may show the same one).
+ * Notes beside the agents: text with screenshots and files in it, filling its window. Each new
+ * Notes window (or the + after its title, a tab beside it) starts its own pad, named in the
+ * window's title by its first line; All notes, in the title bar, reopens any pad (two windows may
+ * show the same one), starts another or deletes this one.
  *
  * A pad is a Markdown file the daemon keeps (`~/.cockpit/scratchpads/<id>.md`), so
  * closing a window loses nothing. Pasted or dropped files are stored beside it and shown
@@ -34,6 +36,8 @@ export default {
   glyph: '✎',
   description: 'Notes with screenshots and files; each new window starts a fresh page',
   newParams: () => ({ pad: newPadId() }),
+  /** The + after its title: fresh notes as a tab beside it. */
+  newTab: () => ({ pad: newPadId() }),
 
   /** @param {HTMLElement} body @param {WidgetContext} ctx */
   mount(body, ctx) {
@@ -54,17 +58,14 @@ function createScratchpadWindow(body, ctx, daemon) {
 
   const root = el('div', 'scratchpad');
 
-  // ── pad switcher ──
-  const bar = el('div', 'pad-bar');
-  const switcher = button('pad-switch');
+  // ── pad switcher, in the window's title bar ──
+  const switcher = button('omp-tool-btn pad-switch', 'All notes');
   switcher.setAttribute('aria-haspopup', 'menu');
-  const switchTitle = el('span', 'pad-title');
-  switcher.append(switchTitle, el('span', 'pad-caret', '▾'));
   const menu = el('div', 'pad-menu');
   menu.setAttribute('role', 'menu');
   menu.popover = 'auto';
   switcher.popoverTargetElement = menu;
-  bar.append(switcher, menu);
+  ctx.headActions.append(switcher, menu);
 
   // ── conflict ──
   const conflict = el('div', 'scratchpad-conflict');
@@ -89,7 +90,7 @@ function createScratchpadWindow(body, ctx, daemon) {
   status.setAttribute('aria-live', 'polite');
   const where = el('span', 'scratchpad-file');
   footer.append(status, where);
-  root.append(bar, conflict, doc, footer);
+  root.append(conflict, doc, footer);
   body.append(root);
 
   /** @type {ScratchpadStore} */
@@ -182,7 +183,7 @@ function createScratchpadWindow(body, ctx, daemon) {
     const s = store.state();
     if (s.text !== rendered) renderDoc(s.text);
     for (const area of textAreas()) area.readOnly = s.phase === 'loading';
-    switchTitle.textContent = titleOf(s.text) || 'Untitled';
+    ctx.setLabel(titleOf(s.text) || null);
     conflict.hidden = s.phase !== 'conflict';
     theirsText.textContent = s.theirs ? s.theirs.text || '(empty)' : '';
     status.classList.toggle('is-error', !busy && s.phase === 'error');
@@ -407,6 +408,7 @@ function createScratchpadWindow(body, ctx, daemon) {
       off();
       resize.disconnect();
       offZoom();
+      ctx.headActions.replaceChildren();
       root.remove();
     },
   };
