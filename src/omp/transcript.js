@@ -901,14 +901,16 @@ function noteJobs(state, run, details, at) {
 
 /**
  * Forgets the jobs `jobs` (omp's job records) reports as ended: every one listed, or with
- * `byStatus` only those whose status is no longer `running`.
+ * `byStatus` only those whose status is no longer `running`. A subagent's record also names
+ * its agent (`agentId`, or `agentUrlId` in a `wait`'s or `proc://`'s), which is how a subagent
+ * a message revived is known here: omp runs the revival as a job of its own (`<agent>-2`).
  * @param {Transcript} state @param {unknown} jobs @param {boolean} byStatus
  */
 function endJobs(state, jobs, byStatus) {
   if (!Array.isArray(jobs)) return;
   for (const job of jobs) {
-    const id = job?.jobId ?? job?.id;
-    if (typeof id === 'string' && !(byStatus && job.status === 'running')) state.jobs.delete(id);
+    if (byStatus && job?.status === 'running') continue;
+    for (const id of [job?.jobId ?? job?.id, job?.agentId ?? job?.agentUrlId]) if (typeof id === 'string') state.jobs.delete(id);
   }
 }
 
