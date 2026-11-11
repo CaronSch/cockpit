@@ -49,6 +49,26 @@ const INK = { text: '#fafafb', dim: '#bdbdc1', faint: '#85858b', line: '#2e2e31'
 const SURFACE = { window: '#151517', raised: '#1f1f22', edge: '#3c3c42' };
 /** Series colours, the accent first: clear apart on the dark surfaces, none of them shouting. */
 const PALETTE = ['#818cf8', '#22d3ee', '#fbbf24', '#f472b6', '#34d399', '#a78bfa', '#fb923c', '#38bdf8', '#a3e635', '#fb7185'];
+/** A diagram's edges and arrows: a grey with a little of the accent in it, quieter than the nodes. */
+const EDGE = '#5d6080';
+/**
+ * Mermaid's own CSS, over its theme: no drop shadow under nodes (its "neo" look's light one reads
+ * as a glow on a dark surface), rounder corners, labels a touch heavier, thin edges with labels
+ * that read as notes on them, groups dashed with their names faint; a sequence diagram's text at
+ * `size`, as a flowchart's (its own setting for it is not followed).
+ * @param {string} size
+ */
+const mermaidCss = (size) => `
+  .node rect, .node polygon, .node path, .node circle, .node ellipse, .cluster rect, .actor, .note, .labelBox { filter: none !important; }
+  .node rect, .cluster rect, .actor, .note, .labelBox { rx: 8px; ry: 8px; }
+  .node .label text, .nodeLabel, text.actor > tspan { font-weight: 500; }
+  text.actor, text.actor > tspan, .messageText, .noteText, .noteText > tspan, .labelText, .loopText { font-size: ${size} !important; }
+  .flowchart-link, .messageLine0, .messageLine1 { stroke-width: 1.25px; }
+  .edgeLabel text, .edgeLabel tspan, .messageText { fill: ${INK.dim} !important; }
+  .cluster rect { stroke-dasharray: 4 3; }
+  .cluster-label text, .cluster-label tspan { fill: ${INK.faint} !important; }
+  marker path, .arrowheadPath { fill: ${EDGE} !important; stroke: none !important; }
+`;
 /** The transcript's typeface (read when first drawing, not on import). */
 const font = () => getComputedStyle(document.documentElement).getPropertyValue('--font-ui').trim() || 'monospace';
 /** The transcript's reading size, in pixels (`--text-sm`, which follows the text size the top bar sets). */
@@ -68,6 +88,10 @@ function localFile(uri) {
 }
 
 let mermaidReady = false;
+/** Diagrams drawn so far, so each gets an element id of its own. */
+let mermaidCount = 0;
+/** The diagram being drawn: Mermaid draws one at a time, so the next waits for it. */
+let mermaidTurn = Promise.resolve();
 /** @param {string} source @returns {Promise<string>} */
 async function drawMermaid(source) {
   await load(SCRIPTS.mermaid);
@@ -77,7 +101,8 @@ async function drawMermaid(source) {
       startOnLoad: false,
       securityLevel: 'strict',
       suppressErrorRendering: true,
-      // The app's own colours on Mermaid's plain theme: quiet rounded nodes, smooth edges.
+      // The app's own colours on Mermaid's plain theme, drawn as the charts are: flat nodes
+      // (no glow) with round corners and room inside, thin quiet edges, dashed groups.
       theme: 'base',
       // The transcript's own type, and labels that wrap at a line's width rather than a word's,
       // packed close: a diagram reads as part of the reply, not a poster beside it. Its size is
@@ -100,34 +125,50 @@ async function drawMermaid(source) {
         nodeBorder: SURFACE.edge,
         textColor: INK.text,
         titleColor: INK.text,
-        lineColor: '#6e7191',
-        clusterBkg: 'rgba(255, 255, 255, 0.025)',
+        lineColor: EDGE,
+        clusterBkg: 'rgba(255, 255, 255, 0.02)',
         clusterBorder: SURFACE.edge,
         edgeLabelBackground: SURFACE.window,
         actorBkg: SURFACE.raised,
         actorBorder: SURFACE.edge,
         actorTextColor: INK.text,
-        actorLineColor: SURFACE.edge,
-        signalColor: INK.dim,
-        signalTextColor: INK.text,
+        actorLineColor: INK.line,
+        signalColor: EDGE,
+        signalTextColor: INK.dim,
         labelBoxBkgColor: SURFACE.raised,
         labelBoxBorderColor: SURFACE.edge,
         labelTextColor: INK.text,
         loopTextColor: INK.dim,
-        noteBkgColor: '#25263a',
-        noteBorderColor: '#4b4f8a',
+        noteBkgColor: '#23243a',
+        noteBorderColor: '#3f4275',
         noteTextColor: INK.text,
         activationBkgColor: SURFACE.raised,
         activationBorderColor: SURFACE.edge,
       },
-      themeCSS: '.node rect, .node polygon, .cluster rect, .actor, .note { rx: 6px; ry: 6px; } .flowchart-link { stroke-width: 1.5px; }',
+      themeCSS: mermaidCss(textSize()),
       htmlLabels: false,
-      flowchart: { useMaxWidth: false, htmlLabels: false, curve: 'basis', wrappingWidth: 200, nodeSpacing: 20, rankSpacing: 28, padding: 8 },
+      flowchart: { useMaxWidth: false, htmlLabels: false, curve: 'basis', wrappingWidth: 200, nodeSpacing: 28, rankSpacing: 40, padding: 12 },
+      sequence: {
+        useMaxWidth: false,
+        mirrorActors: false,
+        actorFontFamily: font(),
+        messageFontFamily: font(),
+        noteFontFamily: font(),
+        width: 120,
+        height: 36,
+        boxMargin: 8,
+        actorMargin: 48,
+        messageMargin: 36,
+        diagramMarginX: 8,
+        diagramMarginY: 8,
+      },
     });
     mermaidReady = true;
   }
-  const { svg } = await mermaid.render(`md-mermaid-${drawings.size}`, source);
-  return svg;
+  const id = `md-mermaid-${++mermaidCount}`;
+  const drawn = mermaidTurn.then(() => mermaid.render(id, source));
+  mermaidTurn = drawn.catch(() => {});
+  return (await drawn).svg;
 }
 
 /** @returns {Promise<{ vega: any, vegaLite: any }>} */
