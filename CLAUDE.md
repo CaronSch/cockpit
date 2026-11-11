@@ -222,9 +222,9 @@ What runs today:
   below), each with when it runs, the whole prompt on hover; a missed one says so. A Markdown table in a reply has a Copy button (on
   hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
   (not its language label), pinned to its corner while long lines scroll. Selected
-  reply text shows Comment and Ask; either opens a box in the transcript under the block the
-  selection ends in (a paragraph, a whole list or table), set like the message box, with both
-  actions, the one clicked taking Enter. A comment goes quoted with the next prompt; a
+  reply text shows Comment and Ask (following the selection as new output scrolls it); either opens a box in the transcript under the block the
+  selection ends in (a paragraph, a whole list or table), set like the message box, with that
+  action alone, which Enter does too. A comment goes quoted with the next prompt; a
   question goes to omp's `btw`, whose answer streams into that box, outside the chat, where
   follow-up questions continue the same topic, one at a time (every question asks
   for an answer of at most three sentences); pasted text goes into the
