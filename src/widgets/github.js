@@ -17,6 +17,7 @@
  * narrowed to the `status` and `author` (params too) picked above the list (github/pull-filter.js).
  */
 import { button, el, setText } from '../ui/dom.js';
+import { crossIcon } from '../ui/icons.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { renderMarkdown } from '../omp/markdown-dom.js';
@@ -314,10 +315,11 @@ function createPullPane(body, ctx, daemon) {
             el('span', 'gh-note-quote', excerpt(n.quote)),
             el('span', 'gh-note-text', n.text),
           );
-          const remove = button('omp-chip-remove', '×', () => {
+          const remove = button('omp-card-remove', '', () => {
             review = { ...review, notes: review.notes.filter((_, at) => at !== i) };
             keep();
           });
+          remove.append(crossIcon());
           remove.setAttribute('aria-label', `Remove ${n.kind}: ${n.text}`);
           card.append(text, remove);
           return card;
