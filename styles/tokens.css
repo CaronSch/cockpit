@@ -51,11 +51,11 @@
      code, diffs, files, paths, notes and numbers that tick (spend). Hierarchy comes from size,
      weight and colour. `--text-sm` is reading text: the omp transcript, its message box and
      scratchpads. Every size follows `--font-scale`, the text size the top bar sets (ui/zoom.js).
-     `--weight-regular` is body text's weight, a touch above 400 so light text on the dark
-     surfaces holds its shape (Inter is variable; IBM Plex Mono rounds it to 400). */
+     `--weight-regular` is body text's weight; Inter is variable, so it can sit between its
+     named weights (IBM Plex Mono rounds to the nearest it has). */
   --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-code: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
-  --weight-regular: 450;
+  --weight-regular: 400;
   --font-scale: 1;
   --text-2xs: calc(0.65rem * var(--font-scale));
   --text-xs: calc(0.71rem * var(--font-scale));
