@@ -472,7 +472,8 @@ What runs today:
   `\r\n` line ends are kept.
 - Terminal windows (the `terminal` widget): a real shell, the user's login shell (`$SHELL -l`) in
   a chosen directory, drawn by xterm.js in the app's colours and `--font-code`, and fitted to the
-  window (its size goes to the shell, the last window resized setting it for all). It lives in its
+  window (its size goes to the shell, the last window resized setting it for all; a shell starts at
+  the size its window draws it at, measured first, so its first prompt is drawn for it). It lives in its
   window: closing the window (×) ends it, as a terminal app's tab (the widget's `closed`; unless
   another window of the screen shows it), and there is no list of shells. The daemon runs it
   (`daemon/terminals.js`), so a reload, or the browser closed and opened again, ends nothing: the
