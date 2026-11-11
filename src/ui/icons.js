@@ -32,3 +32,9 @@ export const mailIcon = () => icon('M2.5 4h11v8h-11zM2.75 4.5L8 8.5l5.25-4', 16)
 
 /** An open envelope: mark as read. */
 export const mailOpenIcon = () => icon('M2.5 7L8 3l5.5 4v6h-11zM2.75 7.25L8 10.75l5.25-3.5', 16);
+
+/** Two screens, one behind the other: the screen switcher. */
+export const screensIcon = () => icon('M5 3.5h8.5v6.5H5zM2.5 6v6.5H11', 16);
+
+/** A small chevron pointing down: a control that opens a menu. */
+export const chevronIcon = () => icon('M2.5 4l2.5 2.5L7.5 4', 10);
