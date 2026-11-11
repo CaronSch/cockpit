@@ -615,14 +615,18 @@ telemetry views, cmux-parity features beyond the above.
   `--tailscale <path>` (or `COCKPIT_TAILSCALE`) and `--remote-port <n>` (or
   `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's (Setup checks the same
   `tailscale`). Tests drive `tests/fixtures/fake-tailscale.js`, never the real `tailscale`.
-- Restart the running daemon with `bun run restart` (`scripts/restart.js`, `--port` if it is not
-  4777): it stops as Ctrl+C stops it, then starts again as it was started (the same command,
-  directory and environment), in the background, its output in `~/.cockpit/daemon.log`. The
-  agents that were working as it stopped are woken from their journals with a message saying so,
-  and carry on (`daemon/restart.js`). An agent working on the workbench uses it to take up its
-  own changes once they are on `main` and pulled into the directory the daemon runs from (a
-  worktree's changes need a preview daemon of their own): every omp gets `COCKPIT_PORT` and
-  `COCKPIT_STATE_DIR`, so the script finds the daemon the agent runs under.
+- **Agents: you may restart the daemon yourself** with `bun run restart` (`scripts/restart.js`)
+  when a change of yours needs it to take effect (the daemon's code, the prompt or environment it
+  gives agents), instead of asking the user to: you run under that daemon, and it wakes you after
+  with a message saying it restarted, so you carry on and check your change. Restart only for
+  changes on `main` and pulled into `~/cockpit`, the directory it runs from (a worktree's changes
+  need a preview daemon of their own), and tell the user you did it: a restart ends their terminal
+  windows' shells and cuts other agents' turns short (they are woken too). How it works: the
+  daemon stops as Ctrl+C stops it, then starts again as it was started (the same command,
+  directory and environment), in the background, its output in `~/.cockpit/daemon.log`, and wakes
+  the agents that were working as it stopped from their journals (`daemon/restart.js`). Every omp
+  gets `COCKPIT_PORT` and `COCKPIT_STATE_DIR`, so the script finds the daemon the agent runs under
+  (`--port` overrides).
 - Before committing, all of these must pass (CI runs them on every push to `main` and every PR,
   `.github/workflows/ci.yml`):
   - `bun run typecheck`
