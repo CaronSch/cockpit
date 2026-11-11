@@ -23,7 +23,7 @@ import { button, el } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { displayTitle, sortSessions } from '../sessions/order.js';
-import { listConversations, runningState, showConversation } from '../sessions/running.js';
+import { conversationMatch, listConversations, runningState, showConversation } from '../sessions/running.js';
 import { futureSpan, pack, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
@@ -325,9 +325,10 @@ function createTimeline(body, ctx, daemon) {
     { passive: false },
   );
 
-  /** Shows the conversation in the agent window this screen used last; that reads it. @param {Listed} c */
+  /** Shows the conversation as a Sessions row does (a new tab, or the window showing it); that reads it. @param {Listed} c */
   function show(c) {
-    ctx.showWidget('omp', showConversation({ file: c.file, meta: c.meta, cwd: c.cwd, name: nameOf(c) }));
+    const params = showConversation({ file: c.file, meta: c.meta, cwd: c.cwd, name: nameOf(c) });
+    ctx.showInTab('omp', params, conversationMatch(params));
     read(c);
   }
 

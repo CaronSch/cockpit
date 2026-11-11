@@ -21,6 +21,7 @@ import { sessionLinks } from './sessions/links.js';
 import { createZoomControl } from './ui/zoom.js';
 import { createConfigMenu } from './ui/settings.js';
 import { createSpotlight } from './ui/spotlight.js';
+import { conversationMatch } from './sessions/running.js';
 import { button, el } from './ui/dom.js';
 import { crossIcon, gripIcon, plusIcon } from './ui/icons.js';
 import { getDaemon } from './daemon/client.js';
@@ -28,7 +29,7 @@ import { openScreen } from './workspace/screen.js';
 import { describeWindows } from './workspace/model.js';
 import { WIDGETS, newWidgetLeaf } from './widgets/registry.js';
 /** @import { Leaf, LeafParams, Tree } from './layout/grid-model.js' */
-/** @import { ScreenWindows, WidgetContext } from './widgets/registry.js' */
+/** @import { ScreenWindows, TabMatch, WidgetContext } from './widgets/registry.js' */
 /** @import { Layout, Rect } from './layout/compute-layout.js' */
 /** @import { Palette } from './ui/palette.js' */
 /** @import { GridApi } from './interaction/drag-controller.js' */
@@ -194,6 +195,7 @@ export async function createApp(root) {
         api.commitTree(tree && findLeaf(tree, leaf.id) ? addTab(tree, leaf.id, opened) : opened, { animate: true });
       },
       showWidget: (/** @type {string} */ type, /** @type {LeafParams} */ params) => showWidget(type, params),
+      showInTab: (/** @type {string} */ type, /** @type {LeafParams} */ params, /** @type {TabMatch} */ match) => showInTab(type, params, match),
       dragWidget(/** @type {string} */ type, /** @type {LeafParams} */ params, /** @type {PointerEvent} */ event, options = {}) {
         drag.start({ kind: 'new', leaf: newWidgetLeaf(type, params), into: options.into }, event, {
           label: options.label ?? WIDGETS[type]?.title ?? type,
@@ -421,6 +423,27 @@ export async function createApp(root) {
     api.commitTree(activateTab(setLeafParams(layoutAtom.get(), target, params), target));
   }
 
+  /**
+   * Shows `params` without replacing what another window shows: brings forward the window of
+   * `type` on this screen that shows it already (`match.same`), else shows it in the window of
+   * `type` used last if that shows nothing yet (`match.blank`), else opens it as a new tab beside
+   * that window (a new window if there is none).
+   * @param {string} type @param {LeafParams} params @param {TabMatch} match
+   */
+  function showInTab(type, params, match) {
+    const { windows, used } = screenAtom.get();
+    const open = windows.find((w) => w.widget === type && match.same(w.params ?? {}));
+    if (open) return void showTab(open.id);
+    const target = used[type];
+    const tree = layoutAtom.get();
+    const last = target && tree ? findLeaf(tree, target) : null;
+    if (!tree || !last) return addWidget(type, params);
+    if (match.blank(last.params ?? {})) return showWidget(type, params);
+    const opened = newWidgetLeaf(type, params);
+    usedAt.set(opened.id, ++uses);
+    api.commitTree(addTab(tree, last.id, opened), { animate: true });
+  }
+
   /** Shows a tab of a stack, as used now; false when it was already shown. @param {string} id */
   function showTab(id) {
     usedAt.set(id, ++uses);
@@ -567,7 +590,7 @@ export async function createApp(root) {
     createScreenSwitcher({ opened, describe: (tree) => describeWindows(tree, titleOf) }).root,
   );
   query(root, '.topbar-actions').prepend(createZoomControl().root);
-  query(root, '.topbar-actions').prepend(createSpotlight({ daemon, show: (params) => showWidget('omp', params) }).root);
+  query(root, '.topbar-actions').prepend(createSpotlight({ daemon, show: (params) => showInTab('omp', params, conversationMatch(params)) }).root);
   // Desktop notifications follow every awake session; Config turns them on or off. A window
   // stacked behind another shows its conversation to nobody.
   const notifier = createNotifier({

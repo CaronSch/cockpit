@@ -31,6 +31,10 @@ import timeline from './timeline.js';
  * `ctx.showWidget(type, params)` shows `params` in the window of `type` this screen used last
  * (merging them into its settings, and bringing it to the front of its stack), or opens one if
  * there is none;
+ * `ctx.showInTab(type, params, match)` shows `params` without replacing what a window shows:
+ * it brings forward the window of `type` on this screen that shows it already (`match.same`),
+ * else shows it in the window of `type` used last if that shows nothing yet (`match.blank`), else
+ * opens it as a new tab beside that window (a new window if there is none);
  * `ctx.dragWidget(type, params, pointerdown)` lets the user drop it where they want, exactly
  * like dragging from the palette (a plain click does nothing): onto a window's middle or head,
  * it stacks there as a tab; with `into`, the middle of a window of `type` shows it instead;
@@ -60,11 +64,17 @@ import timeline from './timeline.js';
  * @typedef {{ windows: Leaf[], used: Readonly<Record<string, string>>, pointed: string | null }} ScreenWindows
  */
 /**
+ * How `showInTab` finds a window for what it shows: one that shows it already (`same`), or one
+ * that shows nothing yet and may take it (`blank`), each from that window's settings.
+ * @typedef {{ same: (params: LeafParams) => boolean, blank: (params: LeafParams) => boolean }} TabMatch
+ */
+/**
  * @typedef {{
  *   readonly params: LeafParams,
  *   setParams(patch: LeafParams): void,
  *   addWidget(type: string, params: LeafParams): void,
  *   showWidget(type: string, params: LeafParams): void,
+ *   showInTab(type: string, params: LeafParams, match: TabMatch): void,
  *   openTab(type: string, params: LeafParams): void,
  *   dragWidget(type: string, params: LeafParams, event: PointerEvent, options?: { label?: string, into?: boolean, onEnd?: (result: DragEndResult) => void, target?: HTMLElement }): void,
  *   setUnread(unread: boolean): void,
