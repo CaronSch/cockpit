@@ -64,7 +64,8 @@ Planned capabilities:
   verbatim, each frame the daemon wrote to omp, stderr lines, undecodable stdout
   (`garbled`) and session status changes, less what no window needs any more
   (`src/omp/event-log.js`: finished streams' deltas, ended sessions). The browser replays it on load, so a
-  window shows the same history whether it was open all along or not.
+  window shows the same history whether it was open all along or not; the `hello` says how many
+  events the replay holds, and an agent window draws once they are all in, not event by event.
   `src/daemon/client.js` is the browser side; widgets never open their own
   connections. The daemon also does omp's housekeeping once for every window: its
   setup fetches a resumed or forked session's history before the session is ready,
@@ -187,7 +188,9 @@ What runs today:
   shows one beside the window (or points at the window already showing it) and reads it, as
   showing one from Sessions does; a drag places it. Windows of related conversations on one screen get the same colour in their top bars
   (`ctx.setFamily`, `src/omp/fork-family.js`). The message box is a card set like the transcript (Inter; code, notes,
-  paths and the spend are monospace), starts one line high and grows with the prompt; a plain click anywhere else in the pane
+  paths and the spend are monospace), lifted by a soft shadow, its faint edge turning indigo while it is typed in and a
+  light going round it while the agent works (`src/ui/orbit.js`, as round a running shell or subagent, or a working
+  session in Sessions), starts one line high and grows with the prompt; a plain click anywhere else in the pane
   (not on a control, in a dialog omp asked for, or ending a text selection) puts the caret
   at its end without scrolling, as in a terminal (`src/ui/click-focus.js`); Tab indents by two spaces as in a code
   editor (every selected line; Shift+Tab, or Backspace in the leading spaces, outdents; Cmd/Ctrl+Z undoes it) unless a
@@ -318,7 +321,7 @@ What runs today:
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
-  (starting or working: a spinner and the word in the accent; *needs you*: it asks a question or
+  (starting or working: a spinner, the word in the accent and a light going round the row; *needs you*: it asks a question or
   an approval, a warm dot; *done*: it finished and nobody has read it, an indigo dot; idle: nothing).
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
   the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
@@ -711,6 +714,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc, a click outside it or × closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
 - `src/ui/login.js` — Signing omp in to a model provider, or another account, without a conversation: `omp login`, run by the daemon (daemon/setup.js) and shown as it goes, its questions answered from a line here.
+- `src/ui/orbit.js` — A light going round an element's outline while something it stands for is at work (a running shell or subagent, a working session, the message box of a working agent): an SVG outline the size of its element whose dash moves along it, at an even pace whatever the element's shape, since the outline's length is set to 100 and the dash moves by its offset.
 - `src/ui/palette.js` — "Add widget" palette.
 - `src/ui/prefs.js` — Per-browser preferences in localStorage.
 - `src/ui/save-notice.js` — The "Not saved" notice in the top bar: shown while this window's layout is not being saved (the page is signed out, its workspace name is not one, or the daemon refused a save), with why on hover; otherwise nothing.

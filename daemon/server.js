@@ -278,18 +278,18 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
       start(controller) {
         const write = (/** @type {string} */ chunk) => controller.enqueue(chunk);
         write('retry: 1000\n\n');
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state() })}\n\n`);
-        const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         const lastSeen = lastSeenSeq(req.headers.get('last-event-id'), hub.bootId);
-        if (!cursors) {
-          for (const event of hub.since(lastSeen)) send(event);
-        } else if (cursors.size > 0) {
+        /** What this connection replays: everything after Last-Event-ID; scoped, each followed session's events past its cursor. @type {SessionEvent[]} */
+        let replay = [];
+        if (!cursors) replay = [...hub.since(lastSeen)];
+        else if (cursors.size > 0) {
           // Everything up to Last-Event-ID was delivered in order: a followed session's cursor is at least that.
           for (const [id, seq] of cursors) cursors.set(id, Math.max(seq, lastSeen));
-          for (const event of hub.since(Math.min(...cursors.values()))) {
-            if (event.seq > (cursors.get(event.session) ?? Infinity)) send(event);
-          }
+          replay = [...hub.since(Math.min(...cursors.values()))].filter((event) => event.seq > (cursors.get(event.session) ?? Infinity));
         }
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state() })}\n\n`);
+        const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
+        for (const event of replay) send(event);
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
