@@ -14,11 +14,10 @@
  * Every open tab notifies, each under the conversation's omp id as its tag: the system keeps
  * one notification per tag, so tabs replace each other's (silently) rather than stack them.
  *
- * It is off until the user turns it on with the top bar's Notify button, which asks for the
+ * It is off until the user turns it on in the top bar's Config menu, which asks for the
  * browser's permission then (only from a click: never on load); the choice is kept per
  * browser.
  */
-import { button } from '../ui/dom.js';
 import { readPref, writePref } from '../ui/prefs.js';
 import { tildeHome } from '../ui/format.js';
 import { awaitsUser } from '../omp/activity.js';
@@ -27,6 +26,7 @@ import { conversationKey, follow, followedName, isRunning, noteEvent, showConver
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { LeafParams } from '../layout/grid-model.js' */
 /** @import { Followed } from './running.js' */
+/** @typedef {ReturnType<typeof createNotifier>} Notifier */
 
 /** What a notification says: the agent is done, or asks something (the question, if it gave one). @typedef {{ kind: 'done' | 'asking', question: string | null }} Alert */
 
@@ -81,28 +81,26 @@ export function createNotifier({ daemon, shown, show }) {
   /** The notifications up, by conversation (omp id): they outlive the session, until read. @type {Map<string, Notification>} */
   const notes = new Map();
 
-  const root = button('topbar-btn notify-toggle', 'Notify', () => void toggle());
-  /** The button says whether notifications are on, and why they cannot be. */
-  function draw() {
-    const permission = supported ? Notification.permission : 'denied';
-    const active = on && permission === 'granted';
-    root.setAttribute('aria-pressed', String(active));
-    root.disabled = !supported || permission === 'denied';
-    root.textContent = !supported || permission !== 'denied' ? 'Notify' : 'Notify: blocked';
-    root.title = !supported
+  /** Why notifications cannot be on in this browser, or null when they can. */
+  const blocked = () =>
+    !supported
       ? 'This browser cannot show notifications for this page (they need https or localhost)'
-      : permission === 'denied'
-        ? 'Notifications are blocked for this site: allow them in the browser’s site settings'
-        : active
-          ? 'Notifying when an agent finishes or needs you: click to stop'
-          : 'Notify me when an agent finishes or needs me';
-  }
+      : Notification.permission === 'denied'
+        ? 'Blocked for this site: allow notifications in the browser’s site settings'
+        : null;
 
-  async function toggle() {
-    if (on && Notification.permission === 'granted') on = false;
-    else on = (Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()) === 'granted';
+  /** Whether notifications are on: chosen, and allowed by the browser. */
+  const active = () => on && supported && Notification.permission === 'granted';
+
+  /**
+   * Turns notifications on (asking the browser's permission the first time, so only from a
+   * click) or off, and says whether they are on now.
+   * @param {boolean} want
+   */
+  async function set(want) {
+    on = want && supported && (Notification.permission === 'granted' || (await Notification.requestPermission()) === 'granted');
     writePref(NOTIFY_KEY, on ? 'on' : null);
-    draw();
+    return on;
   }
 
   /** @param {string} id */
@@ -173,17 +171,17 @@ export function createNotifier({ daemon, shown, show }) {
     for (const id of [...sessions.keys()]) forget(id);
   });
   sync();
-  draw();
 
   return {
-    root,
+    active,
+    blocked,
+    set,
     destroy() {
       offSessions();
       offUnread();
       offReset();
       for (const id of [...sessions.keys()]) forget(id);
       for (const note of notes.values()) note.close();
-      root.remove();
     },
   };
 }

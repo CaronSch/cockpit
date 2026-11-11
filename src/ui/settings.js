@@ -1,18 +1,21 @@
 /**
  * App-wide settings, picked in the top bar's Config menu and kept per browser. The menu
  * opens while the pointer rests on Config (and closes a moment after it leaves), or on a
- * click, which keeps it open until a click elsewhere or Esc.
+ * click, on Config or in the menu, which keeps it open until a click elsewhere or Esc.
  *
  * Each setting is a switch with its default; only the ones this browser chose are stored, so a
- * page can tell a choice from the default (`storedSetting`). Below them the menu lists the
- * daemon's settings (daemon/settings.js), the same for every browser, while the daemon can be
- * reached: its switches, Phone access (with, while it is on, the QR code a phone signs in with),
- * and which browser agents drive. The Setup window (widgets/setup.js) offers the same ones,
- * Phone access in a step of its own.
+ * page can tell a choice from the default (`storedSetting`). After them comes this browser's
+ * desktop notifications (sessions/notify.js). Below them the menu lists the daemon's settings
+ * (daemon/settings.js), the same for every browser, while the daemon can be reached: its
+ * switches, Phone access (with, while it is on, the QR code a phone signs in with), which
+ * browser agents drive, and Accounts, which signs omp in to a model provider (ui/login.js).
+ * The Setup window (widgets/setup.js) offers the same ones, Phone access in a step of its own.
  */
 import { button, el } from './dom.js';
 import { createAtom } from '../state/atom.js';
+import { createLogin } from './login.js';
 /** @import { DaemonClient } from '../daemon/client.js' */
+/** @import { Notifier } from '../sessions/notify.js' */
 /** @import { BrowserChoice } from '../../daemon/browser.js' */
 /** @import { RemoteState } from '../../daemon/wire.js' */
 
@@ -241,8 +244,33 @@ export function browserChoice(daemon, choice) {
   return { root, show };
 }
 
-/** The top bar's Config button and its menu. @param {{ daemon: DaemonClient }} options */
-export function createConfigMenu({ daemon }) {
+/**
+ * Desktop notifications, as Config offers them: this browser's, off until turned on here (which
+ * asks the browser's permission), and saying why when the browser will not show them.
+ * @param {Notifier} notifier
+ */
+function notificationsRow(notifier) {
+  const blocked = notifier.blocked();
+  const detail = blocked ?? 'When an agent finishes or needs you while you are elsewhere; in this browser';
+  const { row, box } = switchRow('Desktop notifications', detail, notifier.active(), (on) => {
+    void notifier.set(on).then((now) => (box.checked = now));
+  });
+  box.disabled = blocked !== null;
+  return row;
+}
+
+/** Accounts: sign omp in to a model provider, or with another account. @param {DaemonClient} daemon */
+function accountsGroup(daemon) {
+  const login = createLogin(daemon);
+  const root = el('div', 'config-group config-accounts');
+  const body = el('div', 'config-accounts-body');
+  body.append(login.signIn, login.panel);
+  root.append(el('span', 'config-legend', 'Accounts'), el('p', 'config-detail', 'Sign in to a model provider, or with another account (omp login)'), body);
+  return { root, destroy: login.destroy };
+}
+
+/** The top bar's Config button and its menu. @param {{ daemon: DaemonClient, notifier: Notifier }} options */
+export function createConfigMenu({ daemon, notifier }) {
   const root = el('div', 'config');
   const toggle = button('topbar-btn config-toggle', 'Config');
   toggle.setAttribute('aria-haspopup', 'true');
@@ -271,11 +299,18 @@ export function createConfigMenu({ daemon }) {
     if (hovering && open()) e.preventDefault();
     hovering = false;
   });
+  // A click in the menu pins it too: a login under way must not close as the pointer leaves.
+  menu.addEventListener('pointerdown', () => {
+    hovering = false;
+    clearTimeout(closing);
+  });
   menu.addEventListener('toggle', (event) => {
     const opened = /** @type {ToggleEvent} */ (event).newState === 'open';
     toggle.setAttribute('aria-expanded', String(opened));
     if (!opened) {
       hovering = false;
+      accounts?.destroy();
+      accounts = null;
       return;
     }
     render();
@@ -286,14 +321,19 @@ export function createConfigMenu({ daemon }) {
   let browser = null;
   /** Phone access, while the menu is open with the daemon's settings. @type {ReturnType<typeof phoneAccess> | null} */
   let phone = null;
+  /** Accounts, while the menu is open with the daemon's settings. @type {ReturnType<typeof accountsGroup> | null} */
+  let accounts = null;
   function render() {
     const now = settings.get();
     const atDaemon = daemon.settings();
     daemonBoxes.clear();
     browser = atDaemon ? browserChoice(daemon, atDaemon.browser) : null;
     phone = atDaemon ? phoneAccess(daemon) : null;
+    accounts?.destroy();
+    accounts = atDaemon ? accountsGroup(daemon) : null;
     menu.replaceChildren(
       ...SETTINGS.map((setting) => switchRow(setting.label, setting.detail, now[setting.key], (on) => setSetting(setting.key, on)).row),
+      notificationsRow(notifier),
       ...(atDaemon
         ? DAEMON_SETTINGS.map((setting) => {
             const { row, box } = switchRow(setting.label, setting.detail, atDaemon[setting.key], (on, box) => {
@@ -306,6 +346,7 @@ export function createConfigMenu({ daemon }) {
         : []),
       ...(phone ? [phone.root] : []),
       ...(browser ? [browser.root] : []),
+      ...(accounts ? [accounts.root] : []),
     );
   }
   // Another page may change them while the menu is open here.

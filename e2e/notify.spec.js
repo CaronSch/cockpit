@@ -99,11 +99,13 @@ test('a turn that ends while the user is away notifies once; a click shows the s
   const session = await shownSession(page, workspace);
   const first = await ompIdOf(page, session);
 
-  // Off until turned on, from a click.
-  const toggle = page.getByRole('button', { name: 'Notify' });
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  // Off until turned on in Config, from a click.
+  const toggle = page.locator('.config-menu').getByRole('checkbox', { name: /^Desktop notifications/ });
+  await page.getByRole('button', { name: 'Config' }).click();
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await expect(toggle).toBeChecked();
+  await page.keyboard.press('Escape');
 
   // Away (another tab in front): the turn's end notifies, once.
   await setAway(page, true);
@@ -126,7 +128,9 @@ test('a turn that ends while the user is away notifies once; a click shows the s
   // A reload replays every session's events: none of that notifies.
   await page.reload();
   await expect(pane.locator('.omp-assistant').last()).toContainText('You said: fix the login bug');
-  await expect(toggle, 'the choice is kept').toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Config' }).click();
+  await expect(toggle, 'the choice is kept').toBeChecked();
+  await page.keyboard.press('Escape');
   await page.waitForTimeout(1500);
   expect(await notes(page, first)).toEqual([]);
 

@@ -55,7 +55,7 @@ test('a fresh machine opens Setup, signs in through omp login, picks the agentsâ
 
     // omp login, answered from the window: a provider by number, then the code it asks for.
     await models.getByRole('button', { name: 'Sign inâ€¦' }).click();
-    const output = models.locator('.setup-login-output');
+    const output = models.locator('.login-output');
     await expect(output).toContainText('Enter number (1-2):');
     await expect(output).toContainText('1. Fake Cloud');
     const answer = models.getByRole('textbox', { name: 'Answer omp login' });
@@ -66,7 +66,7 @@ test('a fresh machine opens Setup, signs in through omp login, picks the agentsâ
     await answer.fill('good');
     await answer.press('Enter');
     await expect(output).toContainText('Logged in to Fake Cloud');
-    await expect(models.locator('.setup-login-status')).toHaveText('omp login finished');
+    await expect(models.locator('.login-status')).toHaveText('omp login finished');
     // The login ending checks again: signed in now, and ready.
     await expect(models).toHaveAttribute('data-state', 'ok');
     await expect(models.locator('.setup-state')).toHaveText('âœ“ fake-cloud (2 models)');
@@ -82,6 +82,47 @@ test('a fresh machine opens Setup, signs in through omp login, picks the agentsâ
     await page.goto(daemon.url(newWorkspace()));
     await expect(page.locator('.grid-empty')).toBeVisible();
     await expect(page.locator('.widget')).toHaveCount(0);
+  } finally {
+    await daemon.stop();
+  }
+  expect(problems).toEqual([]);
+});
+
+test('Configâ€™s Accounts signs in through the same omp login, and stays open while it runs', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'ac-e2e-accounts-'));
+  const sessionsDir = join(dir, 'omp-sessions');
+  mkdirSync(sessionsDir, { recursive: true });
+  /** @type {string[]} */
+  const problems = [];
+  page.on('pageerror', (err) => problems.push(err.message));
+  await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (route) => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
+
+  const daemon = await startDaemon({ port: await freePort(), stateDir: join(dir, 'state'), sessionsDir, env: { FAKE_OMP_AUTH: join(dir, 'auth') }, fresh: true });
+  try {
+    await page.goto(daemon.url(newWorkspace()));
+    const models = page.locator('.setup-step', { has: page.locator('.setup-step-title', { hasText: '2. A model provider' }) });
+    await expect(models).toHaveAttribute('data-state', 'missing');
+
+    // Opened by resting the pointer on it; a click inside pins it, so the login survives the pointer leaving.
+    await page.getByRole('button', { name: 'Config' }).hover();
+    const menu = page.locator('.config-menu');
+    const accounts = menu.locator('.config-accounts');
+    await accounts.getByRole('button', { name: 'Sign inâ€¦' }).click();
+    await page.mouse.move(5, 500);
+    const output = accounts.locator('.login-output');
+    await expect(output).toContainText('1. Fake Cloud');
+    await expect(menu).toBeVisible();
+    const answer = accounts.getByRole('textbox', { name: 'Answer omp login' });
+    await answer.fill('1');
+    await answer.press('Enter');
+    await expect(output).toContainText('Paste the authorization code');
+    await answer.fill('good');
+    await answer.press('Enter');
+    await expect(accounts.locator('.login-status')).toHaveText('omp login finished');
+    // One login for the whole daemon: Setup saw it end, and checked again.
+    await expect(models).toHaveAttribute('data-state', 'ok');
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
   } finally {
     await daemon.stop();
   }

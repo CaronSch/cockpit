@@ -335,7 +335,7 @@
   box-shadow: var(--shadow-lift);
 }
 
-/* A menu from the window's top bar (Forks, PRs, Accounts): under its button, at the window's right end. */
+/* A menu from the window's top bar (Forks, PRs): under its button, at the window's right end. */
 .omp-head-menu:popover-open {
   position-area: bottom span-left;
   width: auto;
