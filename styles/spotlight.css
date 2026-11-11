@@ -173,11 +173,16 @@
   display: none;
 }
 
-/* The top bar's Search: a quiet pill, as a search box would sit there. */
+/* The top bar's Search: a quiet pill as wide as its words, the shortcut set apart and dimmer. */
 .spotlight-open {
-  min-width: 11rem;
+  gap: 10px;
   border-color: var(--color-line);
   color: var(--color-text);
   font-weight: var(--weight-regular);
+}
+
+.spotlight-key {
+  color: var(--color-text-dim);
+  font: inherit;
 }
 
