@@ -71,11 +71,11 @@ button {
   width: calc(100% - 1px);
   height: calc(100% - 1px);
   rx: var(--orbit-radius, 8px);
-  stroke: color-mix(in oklch, var(--color-accent) 75%, transparent);
-  stroke-width: 1.25;
+  stroke: color-mix(in oklch, var(--color-accent) 45%, transparent);
+  stroke-width: 1;
   stroke-linecap: round;
-  stroke-dasharray: 14 86;
-  animation: orbit 3.2s linear infinite;
+  stroke-dasharray: 30 70;
+  animation: orbit 4s linear infinite;
 }
 
 @keyframes orbit {

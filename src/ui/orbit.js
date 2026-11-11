@@ -10,14 +10,25 @@
 import { svg } from './dom.js';
 
 /** One turn round the outline, in ms (styles/app.css `.orbit-path`). */
-const TURN_MS = 3200;
+const TURN_MS = 4000;
 
-/** The light, to append to the element it goes round. */
-export function orbit() {
+/** Where in its turn the light of `key` is, as a share of a turn: the same for one key, spread across keys. @param {string} key */
+function phaseOf(key) {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return (hash % 1000) / 1000;
+}
+
+/**
+ * The light, to append to the element it goes round. Lights of different `key`s are spread
+ * round their turn, so several side by side never line up; one redrawn with the same key (a
+ * list rebuilt) goes on where it was.
+ * @param {string} key
+ */
+export function orbit(key) {
   const ring = svg('svg', { class: 'orbit', 'aria-hidden': 'true' });
   const path = svg('rect', { class: 'orbit-path', pathLength: '100' });
-  // Every light keeps the page clock's phase, so one redrawn (a list rebuilt) goes on where it was.
-  path.style.animationDelay = `${-(performance.now() % TURN_MS)}ms`;
+  path.style.animationDelay = `${-((performance.now() + phaseOf(key) * TURN_MS) % TURN_MS)}ms`;
   ring.append(path);
   return ring;
 }
