@@ -25,7 +25,7 @@
  * (widgets/github.js); dragging one places it where it is dropped. Typing `#` in the message box
  * suggests them too (omp/pr-suggest.js).
  */
-import { button, el, setText } from '../ui/dom.js';
+import { button, el, setText, svg } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
@@ -111,23 +111,15 @@ export default {
 /** @param {unknown} v @returns {string | null} */
 const str = (v) => (typeof v === 'string' && v ? v : null);
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-/** @param {string} tag @param {Record<string, string>} attrs */
-const svgEl = (tag, attrs) => {
-  const node = document.createElementNS(SVG_NS, tag);
-  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
-  return node;
-};
-
 /** The jump-to-latest button's face: a ring (a faint track, and the arc that spins while the agent works) round a down arrow. */
 function jumpIcon() {
-  const svg = svgEl('svg', { viewBox: '0 0 28 28', 'aria-hidden': 'true' });
-  svg.append(
-    svgEl('circle', { class: 'omp-jump-track', cx: '14', cy: '14', r: '13' }),
-    svgEl('circle', { class: 'omp-jump-ring', cx: '14', cy: '14', r: '13' }),
-    svgEl('path', { class: 'omp-jump-arrow', d: 'M14 8.5v11M9.5 15l4.5 4.5 4.5-4.5' }),
+  const icon = svg('svg', { viewBox: '0 0 28 28', 'aria-hidden': 'true' });
+  icon.append(
+    svg('circle', { class: 'omp-jump-track', cx: '14', cy: '14', r: '13' }),
+    svg('circle', { class: 'omp-jump-ring', cx: '14', cy: '14', r: '13' }),
+    svg('path', { class: 'omp-jump-arrow', d: 'M14 8.5v11M9.5 15l4.5 4.5 4.5-4.5' }),
   );
-  return svg;
+  return icon;
 }
 
 /**
@@ -1641,7 +1633,7 @@ function createPane(body, ctx, daemon) {
     }
 
     function drawComposer() {
-      sendBtn.title = forkable() ? SEND_TITLE : '';
+      sendBtn.title = forkable() ? `${sendBtn.getAttribute('aria-label')} · ${SEND_TITLE}` : sendBtn.getAttribute('aria-label') ?? '';
       // The message waits in the box while the conversation wakes; it goes once omp is up.
       composer.root.classList.toggle('is-waking', waking !== null);
       draft.placeholder = state.streaming ? 'Steer the agent… (Esc stops)' : 'Message the agent… (@ files, # pull requests, / commands, ! shell)';

@@ -1431,8 +1431,39 @@
   border-color: var(--color-line-focus);
 }
 
-.omp-compose-row > .btn {
-  padding: 4px 12px;
+/* Send: a small accent square with an up arrow (a terminal prompt in shell mode). */
+.omp-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: var(--color-accent-fill);
+  color: var(--color-accent-ink);
+  cursor: pointer;
+  transition: background var(--duration-fast), opacity var(--duration-fast);
+}
+
+.omp-send:hover:not(:disabled) {
+  background: var(--color-accent);
+}
+
+.omp-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.omp-send svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /*

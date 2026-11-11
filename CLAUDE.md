@@ -177,7 +177,7 @@ What runs today:
   started by the daemon (`daemon/forks.js`) once omp has saved the conversation (a new
   session does once the model has replied). `/fork <prompt>` (the workbench's own command,
   never sent to omp) starts one in the background with that prompt, no window of its own;
-  dragging **Send** onto the grid starts one in a new window placed where it is dropped, with
+  dragging **Send** (the message box's small up-arrow button) onto the grid starts one in a new window placed where it is dropped, with
   the message in the box (the box empties once the fork is placed; a click still sends here).
   Forking while the agent works copies the conversation as of its last completed response.
   A fork is named by its first prompt, not its source's title (which omp copies): the daemon
@@ -199,7 +199,7 @@ What runs today:
   reloads; a line starting with `!` runs
   as a shell command in the session's directory, at once even mid-turn, and while
   the draft is one the box turns into a shell line (accent-coloured, `$ shell · <dir>`,
-  Run instead of Send, the cards shown as waiting for the next prompt). A message of just
+  Run, a terminal prompt icon, instead of Send's arrow, the cards shown as waiting for the next prompt). A message of just
   `.` (no comment cards or files) continues silently, as in omp's own editor: the pane sends
   omp's continue directive instead (`src/omp/message.js`; a steer while a turn runs), and
   since omp's RPC cannot send it hidden, every view recognises it by its text and shows no
@@ -706,7 +706,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
 - `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key, Shift+F10 or a ⋯ button opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
-- `src/ui/dom.js` — Element construction helpers: elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
+- `src/ui/dom.js` — Element construction helpers: elements, SVG icons, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc, a click outside it or × closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.

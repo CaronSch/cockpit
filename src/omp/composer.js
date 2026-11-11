@@ -9,7 +9,7 @@
  * in, Run for Send) and shows the cards as waiting, since a command goes without them. Tab
  * indents, as in a code editor (Esc then Tab leaves the box).
  */
-import { button, carriesFiles, el } from '../ui/dom.js';
+import { button, carriesFiles, el, svg } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
 import { autosize } from '../ui/autosize.js';
 import { tabIndent } from '../ui/indent.js';
@@ -69,7 +69,17 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
   const draft = el('textarea', 'omp-draft');
   draft.rows = 1;
   draft.setAttribute('aria-label', 'Message the agent');
-  const sendBtn = button('btn btn-accent', 'Send');
+  // Send is an icon: an up arrow, or, while the draft is a `!` command, a terminal prompt.
+  const sendBtn = button('omp-send');
+  const sendIcon = svg('svg', { viewBox: '0 0 16 16', 'aria-hidden': 'true' });
+  const sendPath = svg('path');
+  sendIcon.append(sendPath);
+  sendBtn.append(sendIcon);
+  const sendFace = (/** @type {boolean} */ isShell) => {
+    sendPath.setAttribute('d', isShell ? 'M3.5 4.5 7 8l-3.5 3.5M8.5 11.5h4' : 'M8 13V3.5M3.75 7.5 8 3.25l4.25 4.25');
+    sendBtn.setAttribute('aria-label', isShell ? 'Run' : 'Send');
+  };
+  sendFace(false);
   row.append(draft, sendBtn);
   root.append(cards, editor, mark, row);
   // Tab indents in the draft and the card editor; an open suggestion list takes it first.
@@ -217,7 +227,7 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
     shell = next;
     root.classList.toggle('is-shell', shell);
     mark.hidden = !shell;
-    sendBtn.textContent = shell ? 'Run' : 'Send';
+    sendFace(shell);
     if (shell) {
       const dir = shellDir();
       markDir.textContent = `· ${dir.label}`;
