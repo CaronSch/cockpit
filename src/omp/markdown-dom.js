@@ -28,14 +28,17 @@ import { opensInViewer } from '../ui/image-viewer.js';
 
 /**
  * How a reply is rendered: `reply` names the reply (its item and block), so the images it
- * shows are its own (see renderImage); `files` marks the text files it names.
- * @typedef {{ reply?: string, files?: boolean }} RenderOptions
+ * shows are its own (see renderImage); `files` marks the text files it names. `lastRepo` (set
+ * by renderMarkdown) is the repository the text last named, through a pull request link or an
+ * `owner/name#123`: a bare `#123` after it is of that repository, not the conversation's.
+ * @typedef {{ reply?: string, files?: boolean, lastRepo?: { name: string | null } }} RenderOptions
  */
 
 /** @param {string} source @param {RenderOptions} [options] @returns {DocumentFragment} */
 export function renderMarkdown(source, options = {}) {
+  const scope = { ...options, lastRepo: { name: null } };
   const fragment = document.createDocumentFragment();
-  for (const block of parseMarkdown(source)) fragment.append(renderBlock(block, options));
+  for (const block of parseMarkdown(source)) fragment.append(renderBlock(block, scope));
   return fragment;
 }
 
@@ -136,6 +139,7 @@ function renderInline(node, options) {
       if (pull) {
         a.classList.add('md-pr-link');
         a.dataset.repo = pull.repo;
+        if (options.lastRepo) options.lastRepo.name = pull.repo;
         a.dataset.number = String(pull.number);
         a.draggable = false; // dragged out as a pull request window, never as a link
       }
@@ -155,7 +159,9 @@ function renderText(text, options) {
     if ('number' in part) {
       const ref = el('span', 'md-pr-ref', part.text);
       ref.dataset.number = String(part.number);
-      if (part.repo) ref.dataset.repo = part.repo;
+      if (part.repo && options.lastRepo) options.lastRepo.name = part.repo;
+      const repo = part.repo ?? options.lastRepo?.name;
+      if (repo) ref.dataset.repo = repo;
       fragment.append(ref);
       continue;
     }
