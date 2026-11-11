@@ -73,7 +73,7 @@ button {
   stroke: color-mix(in oklch, var(--color-accent) 45%, transparent);
   stroke-width: 1;
   stroke-linecap: round;
-  stroke-dasharray: 30 70;
+  stroke-dasharray: 8 92;
   animation: orbit 4s linear infinite;
 }
 
