@@ -27,7 +27,7 @@ export function renderItem(item, ctx) {
     case 'user': {
       const node = el('div', `omp-msg omp-user${item.byAgent ? ' is-agent' : ''}`);
       node.dataset.key = item.key;
-      // The user's own prompts need no label (the band and prompt mark say it); another agent's do.
+      // The user's own prompts need no label (the band and its edge say it); another agent's do.
       if (item.byAgent) node.append(el('div', 'omp-role', 'another agent →'));
       node.append(promptBody(item.text, item.images));
       // The pane acts on it (omp/rewind.js); the user's own prompts can be reworded, not an agent's.
