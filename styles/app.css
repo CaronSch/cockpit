@@ -72,7 +72,7 @@ input[type='radio'],
   width: calc(100% - 1px);
   height: calc(100% - 1px);
   rx: var(--orbit-radius, 8px);
-  stroke: color-mix(in oklch, var(--color-accent) 55%, transparent);
+  stroke: color-mix(in oklch, var(--color-accent) 65%, transparent);
   stroke-width: 1;
   stroke-linecap: round;
   stroke-dasharray: 8 92;

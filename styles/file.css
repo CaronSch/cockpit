@@ -133,7 +133,7 @@
   padding: var(--space-3);
 }
 
-/* A text file a reply names: opened beside with a click, placed with a drag (files/file-window.js). */
+/* A text file a reply names: opened as a tab with a click, placed with a drag (files/file-window.js). */
 .omp-transcript .md-file-ref {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
@@ -142,4 +142,11 @@
 
 .omp-transcript .md-file-ref:hover {
   color: var(--color-accent);
+}
+
+/* Clicked, it was not there (a file of another repository, say): struck through, it opens nothing. */
+.omp-transcript .md-file-ref.is-missing {
+  color: var(--color-text-faint);
+  text-decoration: line-through;
+  cursor: default;
 }

@@ -55,7 +55,8 @@ export const APPEND_SYSTEM_PROMPT =
   '- Charts of numbers: a ```vega-lite block holding a Vega-Lite JSON spec, its data inline ("data": {"values": [...]}); for many points, write them to a JSON or CSV file and use "data": {"url": "/absolute/path.json"}.\n' +
   "- Anything else (screenshots, plots you render yourself): an image file, shown with ![what it shows](/absolute/path/to/image.png) (png, jpeg, gif, webp or avif).\n" +
   "Everything shown must be on this machine: remote URLs are not loaded.\n\n" +
-  "When something has to happen later (CI to finish, a deploy to settle, a review to come in, a long job), schedule the check yourself with the schedule tool rather than asking the user to ping you or come back.";
+  "When something has to happen later (CI to finish, a deploy to settle, a review to come in, a long job), schedule the check yourself with the schedule tool rather than asking the user to ping you or come back.\n\n" +
+  'Name a pull request or issue with its repository, as owner/name#123 or its full GitHub URL, never a bare #123: the user often works across several repositories, and the view links a bare number to the repository of the directory you started in.';
 
 /** omp settings every session runs with, over the user's own (`--config`): plain titles. */
 const OMP_OVERLAY = join(import.meta.dir, 'omp-overlay.yml');

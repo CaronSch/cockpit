@@ -14,6 +14,8 @@
  * - errors (every `error` note: a failed prompt, command, attachment, exhausted retries)
  *   and how a prompt ended (`prompt` notes: failed or aborted)
  * - slash-command output (`command` notes): the answer to what the user typed
+ * - compaction (`compaction` notes): from there on the agent works from a summary of what
+ *   came before, whether omp compacted near its context's limit or the daemon while idle
  * - unrecognised items: the pane cannot tell work from answer in what it does not know,
  *   and never hides it (CLAUDE.md, Invariants)
  * Dialogs waiting for an answer are not transcript items: the pane always shows them.
@@ -74,7 +76,7 @@ export function promptsAndResponses(items, streaming) {
 }
 
 /** Notes that belong to the conversation, not to the work: see the module comment. */
-const NOTE_SOURCES = new Set(['files', 'prompt', 'command']);
+const NOTE_SOURCES = new Set(['files', 'prompt', 'command', 'compaction']);
 
 /**
  * Whether an assistant message is a response (see the module comment): the pane's

@@ -5,6 +5,7 @@
  * it in the file window it is dropped on. A drag's release is never a click
  * (interaction/drag-controller.js).
  */
+import { DaemonError, getDaemon } from '../daemon/client.js';
 /** @import { LeafParams } from '../layout/grid-model.js' */
 /** @import { WidgetContext } from '../widgets/registry.js' */
 
@@ -48,13 +49,27 @@ export function attachFileRefs({ root, ctx, cwd }) {
     ctx.dragWidget('file', fileParams(file.path, file.line), event, { label, into: true });
   }
 
-  /** @param {MouseEvent} event */
+  /**
+   * Opens the file a click names, once the daemon says it is there: a name a reply mentions may
+   * be of a file elsewhere (another repository), and a window saying "no such file" helps no one.
+   * One that is not there is marked so (struck through) and opens nothing.
+   * @param {MouseEvent} event
+   */
   function onClick(event) {
     const file = event.button === 0 ? named(event.target) : null;
     if (!file) return;
-    const params = fileParams(file.path, file.line);
-    if (ctx.screen.get().windows.some((w) => w.widget === 'file')) ctx.showWidget('file', params);
-    else ctx.openTab('file', params);
+    const ref = /** @type {HTMLElement} */ (/** @type {Element} */ (event.target).closest('.md-file-ref'));
+    getDaemon()
+      .textFile(file.path)
+      .then(() => {
+        const params = fileParams(file.path, file.line);
+        if (ctx.screen.get().windows.some((w) => w.widget === 'file')) ctx.showWidget('file', params);
+        else ctx.openTab('file', params);
+      })
+      .catch((err) => {
+        if (err instanceof DaemonError && err.status === 404) ref.classList.add('is-missing');
+        else ctx.openTab('file', fileParams(file.path, file.line)); // the window says what went wrong
+      });
   }
 
   root.addEventListener('pointerdown', onPointerDown);
