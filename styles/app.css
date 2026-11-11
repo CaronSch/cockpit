@@ -46,7 +46,6 @@ button {
 .omp-activity::before,
 .omp-working::before,
 .omp-chip,
-.sessions-dot,
 .timeline-dot,
 .timeline-stem::after {
   corner-shape: round;

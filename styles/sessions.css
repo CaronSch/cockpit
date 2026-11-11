@@ -79,8 +79,7 @@
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  /* Room on the left for the bar marking where the conversation is shown, apart from its dot. */
-  padding: 6px var(--space-2) 6px 14px;
+  padding: 6px var(--space-2) 6px var(--space-3);
   border-radius: var(--radius-m);
   cursor: grab;
   user-select: none;
@@ -90,10 +89,12 @@
   background: var(--color-surface-raised);
 }
 
-/* Where the conversation is on this screen: a short bar at the row's left edge, in the accent
-   on the one in the agent window used last (where a click shows sessions, also filled), grey on
-   one shown in another agent window. */
-.sessions-item:is(.is-shown, .is-current)::before {
+/* A short bar at the row's left edge says, in order: the conversation has news its user has not
+   read (its agent is done or asks), in the accent, as an unread window's outline; it is in the
+   agent window this screen used last (where a click shows sessions; the row is also filled),
+   near white; it is shown in another agent window here, grey. Working and asking are said in
+   words after its time. */
+.sessions-item:is(.is-shown, .is-current, .is-unread)::before {
   content: '';
   position: absolute;
   top: 28%;
@@ -110,51 +111,21 @@
 }
 
 .sessions-item.is-current::before {
-  background: var(--color-accent);
+  background: color-mix(in oklch, var(--color-text) 80%, transparent);
 }
 
-/* How an awake conversation is doing, or that it is unread: a mark before its title (rows with
-   nothing to say keep its space, empty). Working spins in the accent; needing its user is a
-   warm dot; unread news is the accent. */
-.sessions-dot {
-  flex: none;
-  box-sizing: border-box;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: transparent;
-}
-
-.sessions-item:is(.is-starting, .is-working) .sessions-dot {
-  border: 1.25px solid color-mix(in oklch, var(--color-accent) 18%, transparent);
-  border-top-color: color-mix(in oklch, var(--color-accent) 75%, transparent);
-  animation: sessions-spin 1.4s linear infinite;
-}
-
-.sessions-item.is-starting .sessions-dot {
-  border-top-color: var(--color-text-dim);
-}
-
-.sessions-item.is-asking .sessions-dot {
-  background: var(--color-warn);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-warn) 20%, transparent);
-}
-
-.sessions-item.is-unread:not(.is-asking, .is-working, .is-starting) .sessions-dot {
+.sessions-item.is-unread::before {
   background: var(--color-unread);
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-unread) 20%, transparent);
 }
 
-@keyframes sessions-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sessions-item .sessions-dot {
-    animation: none;
-  }
+/* Words for screen readers only (the bar says it to the eye). */
+.sessions-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .sessions-main {

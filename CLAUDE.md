@@ -321,8 +321,8 @@ What runs today:
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
-  (starting or working: a small, slow spinner and the word in the accent; *needs you*: it asks a question or
-  an approval, a warm dot; *done*: it finished and nobody has read it, an indigo dot; idle: nothing).
+  (starting or working: the word in the accent; *needs you*: it asks a question or
+  an approval, the words in warm; *done*: it finished and nobody has read it, an indigo bar at its left edge; idle: nothing).
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
   the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
   prompts and the agents' replies, so a question in plain words finds the conversation that
@@ -337,7 +337,7 @@ What runs today:
   there is none; dragging it onto the middle of an agent window shows it there, and
   onto the grid elsewhere opens a new agent window where it is dropped. Showing one
   starts no omp. The conversation in the agent window this screen used last has its row filled
-  with an indigo bar at its left edge, and one shown in another agent window here a grey bar; pointing at a row
+  with a near-white bar at its left edge, and one shown in another agent window here a grey bar (an unread one's bar stays indigo); pointing at a row
   outlines its windows, and pointing at an agent window lights its row (`ctx.screen`,
   `ctx.outline`; `src/sessions/links.js`). Waking a journal a session already
   holds gets that session: the daemon never starts a second omp on one. A
@@ -354,7 +354,7 @@ What runs today:
   moves; one whose agent works is not archived until it is done. A new session
   nothing was sent to has no journal yet: Archive ends it (`DELETE /api/sessions/:id`)
   and it is gone, not archived. Nothing is ever deleted: there is no delete. An unread conversation (archived too, which
-  keeps its mark) has an indigo dot and a bold title, and the window's top bar counts the
+  keeps its mark) has an indigo bar at its left edge and a bold title, and the window's top bar counts the
   unread ones it lists; showing a session from here reads it. Right-click on a row, its
   **⋯** button, or Shift+F10 / the ContextMenu key on a focused row opens its menu
   (`src/ui/context-menu.js`, a popover the arrow keys move through): **Mark as
