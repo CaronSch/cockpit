@@ -22,7 +22,7 @@ import { createZoomControl } from './ui/zoom.js';
 import { createConfigMenu } from './ui/settings.js';
 import { createSpotlight } from './ui/spotlight.js';
 import { button, el } from './ui/dom.js';
-import { crossIcon, plusIcon } from './ui/icons.js';
+import { crossIcon, gripIcon, plusIcon } from './ui/icons.js';
 import { getDaemon } from './daemon/client.js';
 import { openScreen } from './workspace/screen.js';
 import { describeWindows } from './workspace/model.js';
@@ -142,7 +142,8 @@ export async function createApp(root) {
     frameEl.setAttribute('aria-labelledby', `title-${leaf.id}`);
 
     const head = el('header', 'widget-head');
-    const grip = button('widget-grip', '⠿');
+    const grip = button('widget-grip');
+    grip.append(gripIcon());
     grip.setAttribute('aria-label', `Move ${title}: drag, or Alt+Shift+Arrow keys`);
     const glyph = el('span', 'widget-glyph', def?.glyph ?? '?');
     glyph.setAttribute('aria-hidden', 'true');
