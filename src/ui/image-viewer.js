@@ -9,7 +9,7 @@ import { el } from './dom.js';
 let viewer = null;
 
 /** Shows the image at `src`, captioned `name`. @param {string} src @param {string} name */
-function showImage(src, name) {
+export function showImage(src, name) {
   if (!viewer) {
     const dialog = /** @type {HTMLDialogElement} */ (el('dialog', 'image-viewer'));
     dialog.setAttribute('aria-label', 'Image');

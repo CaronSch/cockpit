@@ -10,6 +10,7 @@
  * indents, as in a code editor (Esc then Tab leaves the box).
  */
 import { button, carriesFiles, el, svg } from '../ui/dom.js';
+import { crossIcon } from '../ui/icons.js';
 import { errorMessage } from '../ui/format.js';
 import { autosize } from '../ui/autosize.js';
 import { tabIndent } from '../ui/indent.js';
@@ -47,13 +48,15 @@ const size = (bytes) =>
  *   upload: (file: Blob, name: string) => Promise<string>,
  *   onError: (message: string) => void,
  *   shellDir: () => { label: string, path: string },
+ *   preview: (card: FileCard) => void,
  *   onChange?: () => void,
  * }} options `pane`: caps the draft's height and takes dropped files; `upload` stores a file
  * and answers with its path; `onError` hears about a file that could not be attached;
- * `shellDir` names the directory a shell command runs in, for shell mode's marker; `onChange`
- * hears whenever what the box keeps (`kept`) may have changed.
+ * `shellDir` names the directory a shell command runs in, for shell mode's marker; `preview`
+ * shows an attached file when its card is clicked; `onChange` hears whenever what the box keeps
+ * (`kept`) may have changed.
  */
-export function createComposer({ pane, upload, onError, shellDir, onChange = () => {} }) {
+export function createComposer({ pane, upload, onError, shellDir, preview, onChange = () => {} }) {
   const root = el('div', 'omp-composer');
   const cards = el('div', 'omp-cards');
   cards.hidden = true;
@@ -177,11 +180,16 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
     drawCards();
   }
 
-  /** @param {Card} card */
+  /**
+   * A card: a comment (a click edits it) or a file (its thumbnail, if it is an image, and its
+   * name; a click previews it). Its × sits on its corner, shown while the card is pointed at.
+   * @param {Card} card
+   */
   function cardView(card) {
     const view = el('div', `omp-card is-${card.kind}`);
-    const main = el(card.kind === 'file' ? 'div' : 'button', 'omp-card-main');
-    const removeBtn = button('omp-card-remove', '×', () => remove(card));
+    const main = button('omp-card-main');
+    const removeBtn = button('omp-card-remove', '', () => remove(card));
+    removeBtn.append(crossIcon());
     if (card.kind === 'comment') {
       main.append(el('span', 'omp-card-quote', `“${excerpt(card.quote)}”`), el('span', 'omp-card-text', excerpt(card.comment)));
       main.addEventListener('click', () =>
@@ -199,12 +207,15 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
         const thumb = el('img', 'omp-card-thumb');
         thumb.src = card.preview;
         thumb.alt = '';
-        view.prepend(thumb);
+        main.append(thumb);
       }
-      main.append(el('span', 'omp-card-text', card.name), el('span', 'omp-card-quote', card.path ? size(card.size) : 'uploading…'));
+      const text = el('span', 'omp-card-words');
+      text.append(el('span', 'omp-card-text', card.name), el('span', 'omp-card-quote', card.path ? size(card.size) : 'uploading…'));
+      main.append(text);
+      main.setAttribute('aria-label', `Preview ${card.name}`);
+      main.addEventListener('click', () => preview(card));
       removeBtn.setAttribute('aria-label', `Remove ${card.name}`);
     }
-    if (main instanceof HTMLButtonElement) main.type = 'button';
     view.append(main, removeBtn);
     return view;
   }

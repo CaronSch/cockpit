@@ -1325,16 +1325,16 @@ div.omp-compaction::after,
 }
 
 /* A shell or subagent running now: roomier, with a light going round its outline (ui/orbit.js).
-   Its height is fixed so its ends are true half circles the light can follow: its outline runs
-   half a pixel inside the edge, so its corners are the pill's radius less that half pixel. */
+   Its corners are round (not squircles) so the light can follow them: its outline runs half a
+   pixel inside the edge, so its corners are the chip's radius less that half pixel. */
 .omp-running .omp-chip.is-running {
-  --orbit-radius: 12.5px;
+  --orbit-radius: 7.5px;
   position: relative;
   box-sizing: border-box;
   height: 26px;
   gap: var(--space-2);
   padding: 0 12px;
-  border-radius: 13px;
+  border-radius: 8px;
 }
 
 /* A prompt scheduled for this conversation: when it runs, then the prompt. */
@@ -1368,7 +1368,7 @@ div.omp-compaction::after,
   max-width: 100%;
   padding: 1px 2px 1px 6px;
   border: 1px solid var(--color-line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-m);
   font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
 }
 
@@ -1753,12 +1753,15 @@ div.omp-compaction::after,
   opacity: 0.55;
 }
 
+/* A card above the draft (composer.js): a comment, or a file with its thumbnail; a click edits
+   or previews it. Its × sits on its top-right corner while it is pointed at or focused. */
 .omp-card {
+  position: relative;
   display: flex;
   align-items: stretch;
   max-width: 100%;
   border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
   background: var(--color-surface-raised);
 }
 
@@ -1770,15 +1773,34 @@ div.omp-compaction::after,
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 0;
   min-width: 0;
   max-width: 320px;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border: 0;
+  border-radius: inherit;
   background: transparent;
   color: var(--color-text);
   font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
+}
+
+.omp-card.is-file .omp-card-main {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 10px 4px 4px;
+}
+
+.omp-card-main:hover {
+  background: var(--color-hover);
+}
+
+.omp-card-words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .omp-card-quote,
@@ -1794,18 +1816,35 @@ div.omp-compaction::after,
 }
 
 .omp-card-remove {
-  flex: none;
-  width: 22px;
-  border: 0;
-  border-left: 1px solid var(--color-line);
-  background: transparent;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--color-surface-raised);
   color: var(--color-text-dim);
-  font: inherit;
   cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
 }
 
-.omp-card-remove:hover,
-.omp-card-main:hover {
+.omp-card-remove .stroke-icon {
+  width: 7px;
+  height: 7px;
+  stroke-width: 1.75;
+}
+
+.omp-card:is(:hover, :focus-within) .omp-card-remove {
+  opacity: 1;
+}
+
+.omp-card-remove:hover {
   color: var(--color-text);
 }
 
@@ -1825,15 +1864,10 @@ div.omp-compaction::after,
 
 .omp-card-thumb {
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   object-fit: cover;
-  border-right: 1px solid var(--color-line);
-  border-radius: var(--radius-s) 0 0 var(--radius-s);
-}
-
-div.omp-card-main {
-  cursor: default;
+  border-radius: var(--radius-s);
 }
 
 /* A file dragged over the pane: dropping it attaches it to the next message. */
