@@ -7,7 +7,7 @@
   padding: 0;
   overflow: hidden;
   border: 1px solid color-mix(in oklch, var(--color-line-strong) 70%, transparent);
-  border-radius: 12px;
+  border-radius: 14px;
   background: color-mix(in oklch, var(--color-surface) 60%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: var(--shadow-lift);
@@ -20,7 +20,7 @@
 }
 
 .spotlight::backdrop {
-  background: oklch(0% 0 0 / 0.25);
+  background: oklch(0% 0 0 / 0.4);
   backdrop-filter: blur(2px);
 }
 
@@ -31,7 +31,7 @@
   border-bottom: 1px solid color-mix(in oklch, var(--color-line) 80%, transparent);
   background: transparent;
   color: var(--color-text);
-  font: var(--text-lg) / 1.4 var(--font-mono);
+  font: var(--text-lg) / 1.4 var(--font-ui);
   outline: none;
 }
 
@@ -98,3 +98,16 @@
 .spotlight-status:empty {
   display: none;
 }
+
+/* The top bar's Search: a quiet pill, as a search box would sit there. */
+.spotlight-open {
+  min-width: 11rem;
+  border-color: var(--color-line);
+  color: var(--color-text-faint);
+  font-weight: 400;
+}
+
+.spotlight-open:hover {
+  color: var(--color-text-dim);
+}
+

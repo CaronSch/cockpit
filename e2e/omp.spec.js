@@ -399,11 +399,11 @@ test('a focused message box lifts its border instead of drawing the accent outli
   await openWorkbench(page);
   const pane = await startedPane(page);
   const draft = pane.locator('textarea');
-  const look = () =>
-    draft.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { outline: s.outlineStyle, border: s.borderTopColor };
-    });
+  const box = pane.locator('.omp-compose-row');
+  const look = async () => ({
+    outline: await draft.evaluate((el) => getComputedStyle(el).outlineStyle),
+    border: await box.evaluate((el) => getComputedStyle(el).borderTopColor),
+  });
   await draft.blur(); // a new agent's box starts focused
   const idle = await look();
   await draft.focus();

@@ -46,15 +46,14 @@
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text);
-  font: var(--text-xs) / 1.4 var(--font-mono);
+  font: var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
 }
 
 .gh-pick-item:hover,
 .gh-pick-item:focus-visible {
-  border-color: var(--color-line-strong);
-  background: var(--color-surface-raised);
+  background: var(--color-hover);
 }
 
 .gh-pick-title {
@@ -84,7 +83,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font: var(--text-xs) / 1.4 var(--font-mono);
+  font: var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .gh-pick-filters[hidden] {
@@ -162,7 +161,7 @@
 }
 
 .gh-state.is-open {
-  color: oklch(78% 0.15 150);
+  color: var(--color-ok);
 }
 
 .gh-state.is-draft {
@@ -178,7 +177,7 @@
 }
 
 .gh-adds {
-  color: oklch(78% 0.15 150);
+  color: var(--color-ok);
 }
 
 .gh-dels {
@@ -189,24 +188,23 @@
   flex: none;
   display: flex;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2) 0;
+  padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--color-line);
 }
 
 .gh-tab {
   padding: 3px 10px;
-  border: 1px solid transparent;
-  border-bottom: 0;
-  border-radius: var(--radius-s) var(--radius-s) 0 0;
+  border: 0;
+  border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text-dim);
-  font: var(--text-xs) / 1.4 var(--font-mono);
+  font: var(--text-xs) / 1.4 var(--font-ui);
   cursor: pointer;
 }
 
+.gh-tab:hover,
 .gh-tab[aria-selected='true'] {
-  border-color: var(--color-line);
-  background: var(--color-surface);
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -227,7 +225,7 @@
   min-height: 0;
   overflow: auto;
   padding: var(--space-2);
-  font: var(--text-sm) / var(--leading-read) var(--font-mono);
+  font: var(--text-sm) / var(--leading-read) var(--font-ui);
 }
 
 .gh-item {
@@ -242,7 +240,7 @@
   gap: var(--space-2);
   padding: 2px var(--space-2);
   border-bottom: 1px solid var(--color-line);
-  background: var(--color-surface-raised);
+  background: var(--color-field);
   font-size: var(--text-xs);
 }
 
@@ -304,6 +302,7 @@
   padding: 1px var(--space-2);
   background: color-mix(in oklch, var(--color-code) 10%, transparent);
   color: var(--color-text-faint);
+  font-family: var(--font-code);
   font-size: var(--text-xs);
   white-space: pre;
   overflow: hidden;
@@ -314,12 +313,11 @@
 .gh-line {
   display: grid;
   grid-template-columns: 6ch 6ch 1fr;
-  font-size: var(--text-xs);
-  line-height: 1.5;
+  font: var(--text-xs) / 1.5 var(--font-code);
 }
 
 .gh-line.is-add {
-  background: color-mix(in oklch, oklch(70% 0.15 150) 14%, transparent);
+  background: color-mix(in oklch, var(--color-ok) 14%, transparent);
 }
 
 .gh-line.is-del {
@@ -404,7 +402,7 @@
   display: flex;
   flex-direction: column;
   padding: 3px 8px;
-  font: var(--text-xs) / 1.4 var(--font-mono);
+  font: var(--text-xs) / 1.4 var(--font-ui);
 }
 
 .gh-note-kind {

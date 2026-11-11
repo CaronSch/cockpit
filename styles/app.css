@@ -22,7 +22,8 @@ body {
   overflow: hidden;
   background: var(--color-bg);
   color: var(--color-text);
-  font: 400 var(--text-base) / 1.4 var(--font-mono);
+  font: 400 var(--text-base) / 1.4 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
 }
 
 button {
@@ -44,6 +45,7 @@ button {
 }
 
 /* ── Top bar ─────────────────────────────────────────── */
+/* No edge of its own: it is the page the windows sit on. */
 .topbar {
   position: relative;
   z-index: 20;
@@ -51,43 +53,37 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding-inline: var(--space-4);
-  border-bottom: 1px solid var(--color-line);
+  padding-inline: var(--space-4) var(--space-2);
 }
 
 .brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
 }
 
 .brand-mark {
-  align-self: center;
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  background: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-glow), 0 0 14px var(--color-accent-glow);
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-accent-fill));
 }
 
 .brand-name {
-  font: 600 var(--text-lg) / 1 var(--font-mono);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+  font: 600 var(--text-sm) / 1 var(--font-ui);
 }
 
 .palette-hint {
   margin: 0 0 var(--space-2);
-  font: 500 var(--text-2xs) / 1.2 var(--font-mono);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  padding-inline: 4px;
+  font: var(--text-xs) / 1.3 var(--font-ui);
   color: var(--color-text-faint);
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-1);
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
@@ -104,30 +100,32 @@ button {
 
 /* The top bar's controls sit a little tighter than buttons elsewhere, to fit its height. */
 .topbar-actions .btn {
-  padding-block: 3px;
+  margin-left: var(--space-1);
+  padding-block: 4px;
 }
 
-/* Its own buttons (Notify, Config, the screen switcher) share one look; only what is
+/* Its own buttons (Notify, Config, the screen switcher): quiet until pointed at; only what is
    disabled reads faint. */
 .topbar-btn {
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  padding: 3px 10px;
-  border: 1px solid var(--color-line);
+  padding: 4px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-s);
   background: transparent;
-  color: var(--color-text);
-  font: 600 var(--text-sm) / 1.4 var(--font-mono);
+  color: var(--color-text-dim);
+  font: 500 var(--text-sm) / 1.4 var(--font-ui);
   white-space: nowrap;
   cursor: pointer;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
 }
 
 .topbar-btn:hover:enabled,
 .topbar-btn[aria-expanded='true'],
 .topbar-btn:has(+ :popover-open) {
-  border-color: var(--color-line-strong);
-  background: var(--color-surface-raised);
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .topbar-btn:disabled {
@@ -138,21 +136,22 @@ button {
 /* Text size: − 100% +, joined into one quiet control; the percentage resets it. */
 .zoom {
   display: flex;
-  border: 1px solid var(--color-line);
   border-radius: var(--radius-s);
 }
 
 .zoom-btn {
-  padding: 3px 8px;
+  padding: 4px 8px;
   border: 0;
+  border-radius: var(--radius-s);
   background: transparent;
-  color: var(--color-text);
-  font: 600 var(--text-sm) / 1.4 var(--font-mono);
+  color: var(--color-text-dim);
+  font: 500 var(--text-sm) / 1.4 var(--font-ui);
   cursor: pointer;
 }
 
 .zoom-btn:hover:enabled {
-  background: var(--color-surface-raised);
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .zoom-btn:disabled {
@@ -162,7 +161,6 @@ button {
 
 .zoom-level {
   min-width: 5ch;
-  border-inline: 1px solid var(--color-line);
   font-variant-numeric: tabular-nums;
 }
 
@@ -173,7 +171,7 @@ button {
   gap: var(--space-2);
   min-width: 0;
   padding: 3px 4px 3px 12px;
-  border: 1px solid var(--color-accent);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 50%, transparent);
   border-radius: var(--radius-m);
   background: var(--color-accent-glow);
   font-size: var(--text-sm);
@@ -206,18 +204,18 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 5px 12px;
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-s);
-  background: var(--color-surface);
+  background: var(--color-field);
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: background-color var(--duration-fast), transform var(--duration-fast);
+  transition: background-color var(--duration-fast), border-color var(--duration-fast), transform var(--duration-fast);
 }
 
 .btn:hover {
-  background: var(--color-surface-raised);
+  background: var(--color-hover);
 }
 
 .btn:active {
@@ -226,22 +224,22 @@ button {
 
 .btn-accent {
   border-color: transparent;
-  background: var(--color-accent);
+  background: var(--color-accent-fill);
   color: var(--color-accent-ink);
 }
 
 .btn-accent:hover {
-  background: oklch(86% 0.15 75);
+  background: color-mix(in oklch, var(--color-accent-fill) 85%, white);
 }
 
 .btn-danger {
-  border-color: var(--color-danger);
+  border-color: color-mix(in oklch, var(--color-danger) 60%, transparent);
   color: var(--color-danger);
 }
 
 /* A button that cannot be pressed now says so. */
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
 }
 
@@ -276,12 +274,12 @@ button {
 }
 
 .context-menu-item {
-  padding: 4px 8px;
+  padding: 5px 8px;
   border: 0;
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text);
-  font: var(--text-xs) / 1.4 var(--font-mono);
+  font: var(--text-xs) / 1.4 var(--font-ui);
   text-align: left;
   cursor: pointer;
 }
@@ -289,7 +287,7 @@ button {
 .context-menu-item:hover,
 .context-menu-item:focus-visible {
   outline: none;
-  background: var(--color-surface);
+  background: var(--color-hover);
 }
 
 /* ── Palette ─────────────────────────────────────────── */
@@ -297,10 +295,10 @@ button {
   position-area: bottom span-left;
   margin-top: 6px;
   width: min(360px, calc(100vw - 32px));
-  padding: var(--space-3);
+  padding: var(--space-2);
   border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius-m);
-  background: var(--color-surface);
+  border-radius: var(--radius-l);
+  background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
   transition: opacity var(--duration-fast);
 }
@@ -321,11 +319,11 @@ button {
 .palette-item {
   display: grid;
   grid-template-columns: 28px 1fr;
-  column-gap: var(--space-2);
+  column-gap: var(--space-3);
   width: 100%;
   padding: 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-s);
+  border: 0;
+  border-radius: var(--radius-m);
   background: transparent;
   text-align: left;
   cursor: grab;
@@ -334,8 +332,7 @@ button {
 }
 
 .palette-item:hover {
-  border-color: var(--color-line);
-  background: var(--color-surface-raised);
+  background: var(--color-hover);
 }
 
 .palette-glyph {
@@ -344,19 +341,24 @@ button {
   place-items: center;
   width: 28px;
   height: 28px;
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-s);
-  background: var(--color-deck);
+  background: var(--color-field);
+  color: var(--color-text-dim);
+}
+
+.palette-item:hover .palette-glyph {
   color: var(--color-accent);
 }
 
 .palette-name {
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .palette-desc {
   font-size: var(--text-xs);
-  color: var(--color-text-dim);
+  color: var(--color-text-faint);
 }
 
 /* ── Notify ──────────────────────────────────────────── */
@@ -374,17 +376,17 @@ button {
   margin-top: 4px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
   width: min(22rem, calc(100vw - 16px));
   /* Under the top bar (its button's bottom is under 3rem down): scrolls rather than moving up over it. */
   max-height: calc(100dvh - 3.5rem);
   overflow-y: auto;
-  padding: var(--space-2);
+  padding: var(--space-1);
   border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
-  font: var(--text-sm) / 1.4 var(--font-mono);
+  font: var(--text-sm) / 1.4 var(--font-ui);
 }
 
 .config-setting {
@@ -392,18 +394,18 @@ button {
   grid-template-columns: auto 1fr;
   align-items: baseline;
   gap: 2px var(--space-2);
-  padding: 4px 6px;
-  border-radius: var(--radius-s);
+  padding: 6px 8px;
+  border-radius: var(--radius-m);
   cursor: pointer;
 }
 
 .config-setting:hover {
-  background: var(--color-surface);
+  background: var(--color-hover);
 }
 
 .config-setting input {
   margin: 0;
-  accent-color: var(--color-accent);
+  accent-color: var(--color-accent-fill);
 }
 
 .config-detail {
@@ -494,7 +496,7 @@ button {
   padding: var(--space-1);
   overflow: auto;
   border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
 }
@@ -502,9 +504,7 @@ button {
 .screen-menu-head {
   margin: 0;
   padding: 6px 8px 2px;
-  font: 500 var(--text-2xs) / 1.2 var(--font-mono);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font: 500 var(--text-xs) / 1.2 var(--font-ui);
   color: var(--color-text-faint);
 }
 
@@ -513,11 +513,11 @@ button {
   gap: var(--space-2);
   align-items: center;
   padding: 6px 8px;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
 }
 
 .screen-row[aria-current='true'] {
-  background: var(--color-surface);
+  background: var(--color-hover);
 }
 
 .screen-row .btn {
@@ -533,7 +533,7 @@ button {
 
 .screen-row-name {
   font-size: var(--text-sm);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .screen-row[aria-current='true'] .screen-row-name::before {
@@ -546,7 +546,7 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--color-text-faint);
-  font: var(--text-2xs) / 1.4 var(--font-mono);
+  font: var(--text-2xs) / 1.4 var(--font-ui);
 }
 
 .screen-row-where {
@@ -569,12 +569,10 @@ button {
 /* ── Deck & grid ─────────────────────────────────────── */
 .deck {
   min-height: 0;
-  padding: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
   overflow-y: auto;
   overscroll-behavior: contain;
   background-color: var(--color-deck);
-  background-image: radial-gradient(oklch(100% 0 0 / 0.04) 1px, transparent 1px);
-  background-size: 12px 12px;
 }
 
 .grid {
@@ -600,12 +598,9 @@ button {
   display: grid;
   place-items: center;
   margin: 0;
-  border: 1px dashed var(--color-line-strong);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   color: var(--color-text-faint);
-  font: 500 var(--text-sm) / 1 var(--font-mono);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font: var(--text-sm) / 1 var(--font-ui);
 }
 
 .widget {
@@ -616,7 +611,7 @@ button {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--color-line);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--color-surface);
   contain: strict;
   transform-origin: 0 0;
@@ -636,7 +631,7 @@ button {
   border-color: var(--color-unread);
   box-shadow:
     inset 0 0 0 1px var(--color-unread),
-    inset 0 0 14px color-mix(in oklch, var(--color-unread) 35%, transparent);
+    inset 0 0 16px color-mix(in oklch, var(--color-unread) 22%, transparent);
 }
 
 /* The windows a Sessions row points at (ctx.outline): inset, as above, so nothing
@@ -651,8 +646,8 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 4px 0 2px;
+  height: 34px;
+  padding: 0 6px 0 4px;
   border-bottom: 1px solid var(--color-line);
   cursor: grab;
   touch-action: none;
@@ -677,8 +672,8 @@ button {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 4px;
-  font: var(--text-xs) / 1.4 var(--font-mono);
+  gap: 2px;
+  font: var(--text-xs) / 1.4 var(--font-ui);
   cursor: default;
 }
 
@@ -697,10 +692,11 @@ button {
   background: transparent;
   color: var(--color-text-faint);
   cursor: inherit;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
 }
 
 .widget-head:hover .widget-grip {
-  color: var(--color-accent);
+  color: var(--color-text-dim);
 }
 
 .widget-close {
@@ -709,12 +705,12 @@ button {
 }
 
 .widget-close:hover {
-  background: var(--color-deck);
-  color: var(--color-danger);
+  background: var(--color-hover);
+  color: var(--color-text);
 }
 
 .widget-glyph {
-  color: var(--color-accent);
+  color: var(--color-text-faint);
   font-size: 12px;
 }
 
@@ -724,10 +720,8 @@ button {
   margin: 0;
   overflow: hidden;
   color: var(--color-text-dim);
-  font: 600 var(--text-2xs) / 1 var(--font-mono);
-  letter-spacing: var(--tracking-caps);
+  font: 500 var(--text-xs) / 1 var(--font-ui);
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -735,8 +729,6 @@ button {
   margin-left: 4px;
   color: var(--color-text);
   font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
 }
 
 .widget-body {
@@ -851,7 +843,7 @@ button {
 .drop-fill {
   position: absolute;
   inset: 0;
-  clip-path: inset(50% round 6px);
+  clip-path: inset(50% round var(--radius-l));
   transition: clip-path var(--duration-snap) var(--ease-snap);
 }
 
@@ -860,21 +852,18 @@ button {
 }
 
 .drop-fill {
-  background-color: oklch(19% 0.02 72 / 0.9);
-  background-image: repeating-linear-gradient(135deg, color-mix(in oklch, var(--color-accent) 9%, transparent) 0 6px, transparent 6px 12px);
+  background-color: color-mix(in oklch, var(--color-accent-fill) 18%, oklch(15% 0.004 286 / 0.92));
 }
 
 .drop-label {
   position: absolute;
   top: 0;
   left: 0;
-  padding: 4px 8px;
+  padding: 5px 10px;
   border-radius: var(--radius-s);
-  background: var(--color-accent);
+  background: var(--color-accent-fill);
   color: var(--color-accent-ink);
-  font: 600 var(--text-2xs) / 1 var(--font-mono);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font: 500 var(--text-xs) / 1 var(--font-ui);
   white-space: nowrap;
   transition: transform var(--duration-snap) var(--ease-snap);
 }
@@ -913,13 +902,11 @@ button {
   z-index: 100;
   margin: 14px 0 0 14px;
   padding: 6px 10px;
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-s);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-m);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
-  font: 600 var(--text-2xs) / 1 var(--font-mono);
-  letter-spacing: var(--tracking-caps);
-  text-transform: uppercase;
+  font: 500 var(--text-xs) / 1 var(--font-ui);
   white-space: nowrap;
   pointer-events: none;
 }

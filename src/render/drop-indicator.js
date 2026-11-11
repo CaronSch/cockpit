@@ -9,7 +9,8 @@
 /** @import { Rect } from '../layout/compute-layout.js' */
 /** @typedef {ReturnType<typeof createDropIndicator>} DropIndicator */
 
-const RADIUS = 6;
+/** The windows' corner radius (`--radius-l`, tokens.css). */
+const RADIUS = 10;
 const BORDER = 2;
 const LABEL_OFFSET = 10;
 

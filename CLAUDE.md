@@ -239,7 +239,7 @@ What runs today:
   `get_messages` replaces every window's transcript. A pane whose
   agent finished its turn (or asks something) while its user was not in it (the last
   window they clicked, typed or put the cursor in, with the pointer over it, in a focused
-  page) gets an electric-blue border until they click in it, type in it or move the cursor
+  page) gets a cyan border until they click in it, type in it or move the cursor
   into it; hovering over it or scrolling it reads nothing (it keeps the session awake), nor
   does a modifier or shortcut (⌘K, ⌘-Tab) nor the focus the browser gives back as the page
   regains it: its session is unread, for every window and page, across reloads and daemon
@@ -333,7 +333,7 @@ What runs today:
   moves; one whose agent works is not archived until it is done. A new session
   nothing was sent to has no journal yet: Archive ends it (`DELETE /api/sessions/:id`)
   and it is gone, not archived. Nothing is ever deleted: there is no delete. An unread conversation (archived too, which
-  keeps its mark) has a blue dot and a bold title, and the window's top bar counts the
+  keeps its mark) has a cyan dot and a bold title, and the window's top bar counts the
   unread ones it lists; showing a session from here reads it. Right-click on a row, its
   **⋯** button, or Shift+F10 / the ContextMenu key on a focused row opens its menu
   (`src/ui/context-menu.js`, a popover the arrow keys move through): **Mark as

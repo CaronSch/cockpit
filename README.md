@@ -20,7 +20,7 @@ resize on a snapping grid, as many as you like, side by side.
 | **File** | A Markdown, JSON, text or code file with line numbers, opened from a path in a reply (at the line it names); Markdown shows rendered. |
 | **Setup** | What this machine needs before a first agent, checked live: omp, a model provider (sign in through omp's login from the window), the agents' browser, GitHub's CLI, your phone (optional) and the daemon's switches. Opens by itself on a machine not set up yet. |
 
-A window whose agent finished or asks something while you looked away gets a blue border and
+A window whose agent finished or asks something while you looked away gets a cyan border and
 stays unread, everywhere, until you click or type in it. **Notify** in the top bar adds desktop
 notifications.
 
