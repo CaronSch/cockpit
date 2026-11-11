@@ -546,8 +546,8 @@ telemetry views, cmux-parity features beyond the above.
   `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's (Setup checks the same
   `tailscale`). Tests, the e2e daemons included, drive `tests/fixtures/fake-tailscale.js`, never
   the real `tailscale`.
-- Before committing, all of these must pass (CI in `.github/workflows/ci.yml`
-  runs the same on every push to `main` and every PR):
+- Before committing, all of these must pass. CI (`.github/workflows/ci.yml`, on every push to
+  `main` and every PR) runs all but the browser tests, which run only here:
   - `bun run typecheck`
   - `bun run test`: `bun test` suites in `tests/`: the pure modules, plus the
     daemon end to end against `tests/fixtures/fake-omp.js`, a scripted stand-in
