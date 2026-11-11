@@ -232,7 +232,8 @@ What runs today:
   without a list shows none. A line of chips above the message box lists the shells
   and subagents running now with how long each has run, a light circling each chip's outline (`omp/running-work.js`): the
   calls the turn waits on, and the background jobs omp handed them off to (a
-  result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`), which
+  result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`
+  naming the job or, for a subagent, its agent: omp runs a revival as a job of its own, `<agent>-2`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Scheduled
   line under it lists the prompts scheduled for the conversation (its agent's `schedule` tool,
   below), each with when it runs; a missed one says so. A Markdown table in a reply has a Copy button (on

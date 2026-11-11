@@ -147,6 +147,27 @@ describe('tool cards', () => {
     const state = run([frame({ type: 'tool_execution_start', toolCallId: 'orphan', toolName: 'read', args: {} })]);
     assert.deepEqual(kinds(state), ['tool']);
   });
+
+  test('a subagent a message revived ends with its revival’s job, which omp names apart from the agent', () => {
+    // Shaped like omp 18.12's frames: a `task` spawning two subagents, a `wait` reporting the
+    // first done, a message waking it, and its answer delivered as job `Alpha-2` of agent `Alpha`.
+    /** @param {string} id @param {string} toolName @param {Record<string, any>} details */
+    const result = (id, toolName, details) => {
+      const message = { role: 'toolResult', toolCallId: id, toolName, content: [{ type: 'text', text: '' }], details, isError: false, timestamp: 2 };
+      return frame({ type: 'message_end', message, messageId: `r_${id}` });
+    };
+    const progress = ['Alpha', 'Beta'].map((id, index) => ({ index, id, agent: 'task', status: 'pending' }));
+    const delivery = { role: 'custom', customType: 'async-result', content: 'Background job Alpha-2 has completed.', display: true, timestamp: 3,
+      details: { jobs: [{ jobId: 'Alpha-2', type: 'task', status: 'completed', agentId: 'Alpha', label: 'Alpha', durationMs: 1000 }] } };
+    const state = run([
+      result('spawn', 'task', { progress, async: { state: 'running', jobId: 'Alpha', type: 'task' } }),
+      result('wait', 'wait', { jobs: [{ id: 'Alpha', type: 'task', status: 'completed', label: 'Alpha', agentUrlId: 'Alpha' }, { id: 'Beta', type: 'task', status: 'running', label: 'Beta', agentUrlId: 'Beta' }] }),
+      result('ask', 'write', { message: { op: 'send', from: 'Main', to: 'Alpha', receipts: [{ to: 'Alpha', outcome: 'woken' }] } }),
+    ]);
+    assert.deepEqual([...state.jobs.keys()], ['Beta', 'Alpha']);
+    applyEvent(state, frame({ type: 'message_end', message: delivery, messageId: 'd1' }));
+    assert.deepEqual([...state.jobs.keys()], ['Beta']);
+  });
 });
 
 describe('frames the pane does not know', () => {
