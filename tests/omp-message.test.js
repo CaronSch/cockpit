@@ -1,6 +1,6 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
-import { ANSWER_BRIEFLY, asQuote, composeAsk, composeFollowUp, composeMessage, isCommand } from '../src/omp/message.js';
+import { ANSWER_BRIEFLY, asQuote, composeAsk, composeFollowUp, composeMessage, isCommand, splitAttachments } from '../src/omp/message.js';
 
 describe('the message the agent pane sends', () => {
   test('each comment quotes its text, then says its piece, before the prompt', () => {
@@ -38,5 +38,13 @@ describe('the message the agent pane sends', () => {
     const message = composeMessage('why does this fail?', [], ['/state/attachments/2026-01-02/k1-shot.png', '/tmp/odd "name".txt']);
     assert.equal(message, 'why does this fail?\n\n@"/state/attachments/2026-01-02/k1-shot.png"\n\n@\'/tmp/odd "name".txt\'');
     assert.equal(composeMessage('', [], ['/a.png']), '@"/a.png"', 'a file alone is a message');
+  });
+
+  test('a sent prompt splits back into its text and the files it ends with; mentions in the text stay', () => {
+    const files = ['/state/attachments/2026-01-02/k1-shot.png', '/tmp/odd "name".txt'];
+    assert.deepEqual(splitAttachments(composeMessage('why does this fail?', [], files)), { text: 'why does this fail?', files });
+    assert.deepEqual(splitAttachments(composeMessage('', [], ['/a.png'])), { text: '', files: ['/a.png'] });
+    assert.deepEqual(splitAttachments('compare @"/x.md" with this\n\n@"/y.png"'), { text: 'compare @"/x.md" with this', files: ['/y.png'] });
+    assert.deepEqual(splitAttachments('no files here'), { text: 'no files here', files: [] });
   });
 });

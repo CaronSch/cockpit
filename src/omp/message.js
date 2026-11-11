@@ -64,6 +64,28 @@ export function composeMessage(draft, comments, files = []) {
   return parts.join('\n\n');
 }
 
+/** A paragraph that is one file mention as `mention` writes it: `@"<path>"` or `@'<path>'`. */
+const MENTION_PARAGRAPH = /^@(?:"([^"\n]+)"|'([^'\n]+)')$/;
+
+/**
+ * A sent prompt split as composeMessage built it: its text, and the files it ends with (each
+ * mention a paragraph of its own), which the transcript shows as attachments, not as paths.
+ * Mentions inside the text stay in it.
+ * @param {string} message @returns {{ text: string, files: string[] }}
+ */
+export function splitAttachments(message) {
+  const parts = message.split(/\n{2,}/);
+  /** @type {string[]} */
+  const files = [];
+  while (parts.length) {
+    const found = MENTION_PARAGRAPH.exec(/** @type {string} */ (parts.at(-1)).trim());
+    if (!found) break;
+    files.unshift(found[1] ?? found[2]);
+    parts.pop();
+  }
+  return { text: parts.join('\n\n'), files };
+}
+
 /** Commands (`/model`, `!ls`) go to omp as typed; comments and files wait for the next prompt. @param {string} draft */
 export const isCommand = (draft) => /^[/!]/.test(draft.trim());
 
