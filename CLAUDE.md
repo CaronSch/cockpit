@@ -202,7 +202,10 @@ What runs today:
   omp's continue directive instead (`src/omp/message.js`; a steer while a turn runs), and
   since omp's RPC cannot send it hidden, every view recognises it by its text and shows no
   prompt for it (transcript, live or from a journal, Up's history, the conversation's name,
-  Rewind, Sessions' first prompt, count and search), a queued one as `. (continue)`. While a
+  Rewind, Sessions' first prompt, count and search), a pending one as `. (continue)`. A
+  message omp holds to send later (a steer, for the agent's next step, or a follow-up, for
+  the turn's end) ends the transcript as the prompt it will be, dimmed, saying when it goes,
+  with Cancel (`renderPending` in `src/omp/items-view.js`). While a
   turn runs, the toolbar shows how far the agent is through its todo list (tasks
   done of tasks, the current one on hover), read from omp's `todo` results; work
   without a list shows none. A Running line above the message box lists the shells
@@ -214,9 +217,11 @@ What runs today:
   below), each with when it runs, the whole prompt on hover; a missed one says so. A Markdown table in a reply has a Copy button (on
   hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
   (not its language label), pinned to its corner while long lines scroll. Selected
-  reply text can be commented on (the comment goes quoted with the next prompt)
-  or asked about (omp's `btw` answers in the popup, outside the chat, where
-  follow-up questions continue the same topic, one at a time; every question asks
+  reply text shows Comment and Ask; either opens a box in the transcript under the block the
+  selection ends in (a paragraph, a whole list or table), set like the message box, with both
+  actions, the one clicked taking Enter. A comment goes quoted with the next prompt; a
+  question goes to omp's `btw`, whose answer streams into that box, outside the chat, where
+  follow-up questions continue the same topic, one at a time (every question asks
   for an answer of at most three sentences); pasted text goes into the
   message box as typed, and pasted or dropped files are stored in
   `~/.cockpit/attachments/` and sent as omp `@"<path>"` mentions, which the prompt in the transcript shows as the files themselves (images as thumbnails, others by name: `splitAttachments`). Typing `@`

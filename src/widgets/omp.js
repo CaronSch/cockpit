@@ -29,10 +29,10 @@ import { button, el, setText } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
-import { renderItem, renderReview, renderWork } from '../omp/items-view.js';
+import { renderItem, renderPending, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
-import { composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand, splitAttachments } from '../omp/message.js';
+import { composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
@@ -557,7 +557,7 @@ function createPane(body, ctx, daemon) {
     const pinToBottom = () => {
       if (stickToBottom) transcript.scrollTop = transcript.scrollHeight;
     };
-    // Heights keep changing after a draw: the dialogs, queue and composer below resize the
+    // Heights keep changing after a draw: the dialogs and composer below resize the
     // transcript, and fonts or expanded blocks reflow items. Re-pin whenever either moves.
     const resizes = new ResizeObserver(pinToBottom);
     resizes.observe(transcript);
@@ -592,7 +592,6 @@ function createPane(body, ctx, daemon) {
     node.addEventListener('keydown', onNavKey);
     ctx.headActions.addEventListener('keydown', onNavKey);
     const dialogs = el('div', 'omp-dialogs');
-    const queue = el('div', 'omp-queue');
     const running = el('div', 'omp-running');
     running.hidden = true;
     const scheduled = el('div', 'omp-scheduled');
@@ -636,12 +635,12 @@ function createPane(body, ctx, daemon) {
         cancel: (id) => void (session && daemon.rpc(session, { type: 'btw_cancel', recordId: id }).catch(() => {})),
       },
     });
-    node.append(toolbar, strip, loginStrip, banner, transcript, dialogs, running, scheduled, queue, suggestions.root, composer.root);
+    node.append(toolbar, strip, loginStrip, banner, transcript, dialogs, running, scheduled, suggestions.root, composer.root);
     const highlight = attachDragHighlight({ host: node, transcript, enabled: () => settings.get().animatedSelection });
     const offHighlight = settings.subscribe(() => highlight.refresh());
     // A click on the pane that is not on a control, in a dialog omp asked for or in the
     // selection popup puts the caret in the message box, as in a terminal.
-    focusOnClick(node, draft, '.omp-dialogs, .omp-quote-pop');
+    focusOnClick(node, draft, '.omp-dialogs, .omp-quote-pop, .omp-quote-panel');
 
     const meta = () => (session ? daemon.meta(session) : null);
     const ready = () => meta()?.status === 'ready';
@@ -1319,7 +1318,6 @@ function createPane(body, ctx, daemon) {
     const drawn = new Map();
     /** @type {Map<string, HTMLElement>} */
     const dialogNodes = new Map();
-    let queueKey = '';
     let runningKey = '';
     let scheduledKey = '';
     /** Ticks the Running line's times while it shows. @type {ReturnType<typeof setInterval> | null} */
@@ -1363,6 +1361,13 @@ function createPane(body, ctx, daemon) {
       for (const { index, at, review } of placeReviews(shown.items, daemon.decisions(ompId()) ?? {}).reverse()) {
         if (review.status === 'done' && review.decisions.length === 0) continue;
         entries.splice(index, 0, { key: `review:${at}`, rev: JSON.stringify(review), render: () => renderReview(review) });
+      }
+      // What omp holds to send later ends the transcript, as the prompts they will be.
+      for (const which of /** @type {const} */ (['steering', 'followUp'])) {
+        state.queue[which].forEach((text, i) => {
+          const cancel = () => void rpc({ type: 'remove_queued_message', message: text, queue: which });
+          entries.push({ key: `pending:${which}:${i}`, rev: text, render: () => renderPending(text, which, isContinueDirective(text), cancel) });
+        });
       }
       entries.forEach(({ key, rev, render }, i) => {
         live.add(key);
@@ -1421,32 +1426,6 @@ function createPane(body, ctx, daemon) {
         dialogs.append(n);
       }
       dialogs.hidden = state.dialogs.length === 0;
-    }
-
-    function drawQueue() {
-      const key = JSON.stringify(state.queue);
-      if (key === queueKey) return;
-      queueKey = key;
-      /** @param {string} text @param {'steering' | 'followUp'} which */
-      const chip = (text, which) => {
-        const c = el('span', `omp-chip is-${which}`);
-        // A queued continue reads as the `.` it was sent as, not omp's directive; files as
-        // their names, not the mentions they were sent as.
-        const { text: said, files } = splitAttachments(text);
-        const shown = isContinueDirective(text)
-          ? '. (continue)'
-          : [said, ...files.map((path) => `+ ${path.split('/').pop()}`)].filter(Boolean).join('  ');
-        const kind = el('span', 'omp-chip-kind', which === 'steering' ? 'Steering' : 'Queued');
-        kind.title = which === 'steering' ? 'Reaches the agent at its next step, in this turn' : 'Sent once this turn ends';
-        c.append(kind, el('span', 'omp-chip-text', shown));
-        const remove = button('omp-chip-remove', '×');
-        remove.setAttribute('aria-label', `Remove queued message: ${shown}`);
-        remove.addEventListener('click', () => void rpc({ type: 'remove_queued_message', message: text, queue: which }));
-        c.append(remove);
-        return c;
-      };
-      queue.replaceChildren(...state.queue.steering.map((t) => chip(t, 'steering')), ...state.queue.followUp.map((t) => chip(t, 'followUp')));
-      queue.hidden = queue.childElementCount === 0;
     }
 
     /** The shells and subagents running now, each with how long it has run (omp/running-work.js). */
@@ -1688,7 +1667,6 @@ function createPane(body, ctx, daemon) {
       drawDialogs();
       drawRunning();
       drawScheduled();
-      drawQueue();
       drawComposer();
       selectionPopup.refresh();
       // News heard as it landed under the reader's eyes is read (see follow). A mark the user
