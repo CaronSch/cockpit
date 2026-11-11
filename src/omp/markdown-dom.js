@@ -23,6 +23,7 @@ import { tableCopy } from './table-copy.js';
 import { renderVisual } from './visuals.js';
 import { pullOfUrl, splitRefs } from '../github/pr-refs.js';
 import { fileRefOf, splitFileRefs } from '../files/file-refs.js';
+import { opensInViewer } from '../ui/image-viewer.js';
 /** @import { Block, Inline, TableBlock } from './markdown.js' */
 
 /**
@@ -186,8 +187,8 @@ function markFile(node, file) {
 }
 
 /**
- * An image file on this machine, served by the daemon (`/api/file`): a click opens it full
- * size. One that cannot be shown (gone, unreadable) says so, with its path.
+ * An image file on this machine, served by the daemon (`/api/file`): a click shows it in the
+ * image viewer (ui/image-viewer.js). One that cannot be shown (gone, unreadable) says so, with its path.
  *
  * Its address names the reply too: a page shows the image it already loaded from an address
  * however the response said not to keep it, so an agent's chart redrawn under the same name
@@ -207,6 +208,7 @@ function renderImage(path, alt, options) {
   img.alt = alt;
   img.addEventListener('error', () => a.replaceWith(el('span', 'md-image-missing', `${alt ? `${alt}: ` : ''}image not found (${path})`)), { once: true });
   a.append(img);
+  opensInViewer(/** @type {HTMLAnchorElement} */ (a), alt || path.split('/').pop() || path);
   return a;
 }
 

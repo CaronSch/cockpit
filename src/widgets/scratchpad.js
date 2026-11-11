@@ -14,6 +14,7 @@ import { onZoom } from '../ui/zoom.js';
 import { getDaemon } from '../daemon/client.js';
 import { getScratchpad } from '../scratchpad/store.js';
 import { IMAGE_TYPES, DEFAULT_PAD, PAD_ID, assetUrl, insertAsset, parseBlocks, serializeBlocks, titleOf, withGaps } from '../scratchpad/blocks.js';
+import { opensInViewer } from '../ui/image-viewer.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { ScratchpadStore } from '../scratchpad/store.js' */
@@ -140,6 +141,7 @@ function createScratchpadWindow(body, ctx, daemon) {
       img.alt = block.name;
       img.loading = 'lazy';
       link.append(img);
+      opensInViewer(/** @type {HTMLAnchorElement} */ (link), block.name);
     } else {
       link.download = block.name;
       link.textContent = block.name;

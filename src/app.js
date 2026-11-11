@@ -13,7 +13,7 @@ import { createDropIndicator } from './render/drop-indicator.js';
 import { attachSashController } from './interaction/sash-controller.js';
 import { createDragController } from './interaction/drag-controller.js';
 import { createPalette } from './ui/palette.js';
-import { createScreenSwitcher } from './ui/screen-switcher.js';
+import { createSaveNotice } from './ui/save-notice.js';
 import { createUpdateNotice } from './ui/update-notice.js';
 import { createNotifier } from './sessions/notify.js';
 import { sessionLinks } from './sessions/links.js';
@@ -23,7 +23,6 @@ import { createSpotlight } from './ui/spotlight.js';
 import { button, el } from './ui/dom.js';
 import { getDaemon } from './daemon/client.js';
 import { openScreen } from './workspace/screen.js';
-import { describeWindows } from './workspace/model.js';
 import { WIDGETS, newWidgetLeaf } from './widgets/registry.js';
 /** @import { Leaf, LeafParams, Tree } from './layout/grid-model.js' */
 /** @import { ScreenWindows, WidgetContext } from './widgets/registry.js' */
@@ -71,9 +70,6 @@ function stackProjection(tree) {
   const leaves = listLeaves(tree);
   return leaves.length > 1 ? branch('col', leaves) : (leaves[0] ?? null);
 }
-
-/** @param {string} widget */
-const titleOf = (widget) => WIDGETS[widget]?.title ?? widget;
 
 /** @param {ParentNode} root */
 export async function createApp(root) {
@@ -429,9 +425,7 @@ export async function createApp(root) {
     onAdd: addWidget,
   });
 
-  query(root, '.topbar-actions').prepend(
-    createScreenSwitcher({ opened, describe: (tree) => describeWindows(tree, titleOf) }).root,
-  );
+  query(root, '.topbar-actions').prepend(createSaveNotice({ opened }).root);
   query(root, '.topbar-actions').prepend(createZoomControl().root);
   query(root, '.topbar-actions').prepend(createSpotlight({ daemon, show: (params) => showWidget('omp', params) }).root);
   // Desktop notifications follow every awake session; Config turns them on or off.

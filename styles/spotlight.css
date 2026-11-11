@@ -24,6 +24,55 @@
   backdrop-filter: blur(2px);
 }
 
+/* The image viewer (ui/image-viewer.js): a picture as large as the window allows, on the same
+   dimmed backdrop, its name under it and × in the corner. */
+.image-viewer {
+  max-width: 92vw;
+  max-height: 92vh;
+  margin: auto;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+}
+
+.image-viewer::backdrop {
+  background: oklch(0% 0 0 / 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.image-viewer-img {
+  display: block;
+  max-width: 92vw;
+  max-height: calc(92vh - 2rem);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-lift);
+}
+
+.image-viewer-caption {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.image-viewer-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* The field, with Ask at its end. */
 .spotlight-bar {
   flex: none;
