@@ -21,7 +21,7 @@ import { sessionLinks } from './sessions/links.js';
 import { createZoomControl } from './ui/zoom.js';
 import { createConfigMenu } from './ui/settings.js';
 import { createSpotlight } from './ui/spotlight.js';
-import { button, el } from './ui/dom.js';
+import { button, crossIcon, el } from './ui/dom.js';
 import { getDaemon } from './daemon/client.js';
 import { openScreen } from './workspace/screen.js';
 import { describeWindows } from './workspace/model.js';
@@ -157,7 +157,8 @@ export async function createApp(root) {
     tabs.setAttribute('aria-label', 'Windows here');
     // The widget's own controls for the window, before its close button.
     const actions = el('div', 'widget-actions');
-    const close = button('widget-close', '×');
+    const close = button('widget-close');
+    close.append(crossIcon());
     close.setAttribute('aria-label', `Close ${title}`);
     head.append(grip, glyph, heading, tabs, actions, close);
 
