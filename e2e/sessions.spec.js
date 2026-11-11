@@ -471,7 +471,7 @@ test('waking a conversation shown from its journal never blanks its window', asy
     requestAnimationFrame(look);
   });
   await pane.locator('textarea').focus(); // reaching for the box wakes it
-  await expect.poll(async () => (await awake(page, fileOf('login'))).some((s) => s.status === 'ready')).toBe(true);
+  await expect.poll(async () => (await awake(page, fileOf('login'))).some((/** @type {any} */ s) => s.status === 'ready')).toBe(true);
   await expect(pane.locator('.omp-user').first()).toContainText('fix the login bug');
   expect(await page.evaluate(() => /** @type {any} */ (window).__blanked)).toBe(false);
 });
