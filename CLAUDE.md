@@ -411,8 +411,9 @@ What runs today:
   conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a
   conversation shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
   /api/schedule/:id`; saved, it is no longer missed). Only a failure is written under the axis.
-- Nothing pops up on hover but the Config menu: no tooltips (no `title` attributes), and no
-  other menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
+- Nothing pops up on hover but the top bar's Config and + Widget menus (`src/ui/hover-menu.js`:
+  open while pointed at, pinned by a click): no tooltips (no `title` attributes), and no other
+  menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
 - Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
   deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
@@ -732,6 +733,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key or Shift+F10 opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
 - `src/ui/dom.js` — Element construction helpers: elements, SVG elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
+- `src/ui/hover-menu.js` — Top bar menus that open while the pointer rests on their button (Config, + Widget): the menu follows the pointer, closing a moment after it leaves, and a click on the button or in the menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
 - `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
