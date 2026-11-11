@@ -76,6 +76,8 @@ import { settings } from '../ui/settings.js';
 const SEEN_EVERY_MS = 60_000;
 const MAX_SUGGESTIONS = 8;
 const BOTTOM_SLACK_PX = 24;
+/** How long the jump to the latest takes, whatever the distance. */
+const JUMP_MS = 150;
 /** ⌘ on Apple's keyboards, Ctrl elsewhere: the modifier of the previous/next response keys. */
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const REFUSED = 'The daemon refused this page.';
@@ -577,10 +579,27 @@ function createPane(body, ctx, daemon) {
     });
     // Scrolled up, a small arrow at the transcript's foot goes back to the latest; its ring spins
     // while the agent works (the window's outline says when it is done or asks).
-    const jump = button('omp-jump', '', () => {
-      stickToBottom = true;
-      transcript.scrollTo({ top: transcript.scrollHeight, behavior: 'smooth' });
-    });
+    const jump = button('omp-jump', '', jumpToLatest);
+    /**
+     * Scrolls to the latest in a quick glide (JUMP_MS, easing out; at once if the user asks for
+     * less motion): the browser's own smooth scroll takes longer the further it goes. The bottom
+     * is aimed at afresh each frame, as new output may move it.
+     */
+    function jumpToLatest() {
+      const from = transcript.scrollTop;
+      const start = performance.now();
+      const instant = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      /** @param {number} now */
+      const step = (now) => {
+        const t = instant ? 1 : Math.min(1, (now - start) / JUMP_MS);
+        const bottom = transcript.scrollHeight - transcript.clientHeight;
+        transcript.scrollTop = from + (bottom - from) * (1 - (1 - t) ** 3);
+        if (t < 1) return void requestAnimationFrame(step);
+        stickToBottom = true; // follows new output again
+        drawJump();
+      };
+      requestAnimationFrame(step);
+    }
     jump.append(jumpIcon());
     const jumpWrap = el('div', 'omp-jump-wrap');
     jumpWrap.hidden = true;
