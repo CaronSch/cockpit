@@ -28,17 +28,7 @@ export function renderItem(item, ctx) {
       node.dataset.key = item.key;
       // The user's own prompts need no label (the band and prompt mark say it); another agent's do.
       if (item.byAgent) node.append(el('div', 'omp-role', 'another agent →'));
-      const body = el('div', 'omp-md');
-      // The files it was sent with show as themselves (images as thumbnails), not as their paths.
-      const { text, files } = splitAttachments(item.text);
-      body.append(renderMarkdown(text, { files: true }));
-      if (files.length) {
-        const attached = el('div', 'omp-attachments');
-        attached.append(...files.map(renderAttachment));
-        body.append(attached);
-      }
-      if (item.images) body.append(statusLine('muted', `[${item.images} image${item.images === 1 ? '' : 's'}]`));
-      node.append(body);
+      node.append(promptBody(item.text, item.images));
       // The pane acts on it (omp/rewind.js); the user's own prompts can be reworded, not an agent's.
       if (!item.byAgent) {
         const rewind = button('omp-rewind-btn', 'Rewind');
@@ -91,6 +81,38 @@ export function renderItem(item, ctx) {
     case 'unrecognised':
       return collapsible(ctx, item.key, 'omp-unrecognised', [`unrecognised: ${item.label}`], () => [el('pre', 'omp-pre', item.raw)]);
   }
+}
+
+/** A prompt's text, the files it was sent with as themselves (images as thumbnails), not as their paths. @param {string} message @param {number} [images] */
+function promptBody(message, images = 0) {
+  const body = el('div', 'omp-md');
+  const { text, files } = splitAttachments(message);
+  body.append(renderMarkdown(text, { files: true }));
+  if (files.length) {
+    const attached = el('div', 'omp-attachments');
+    attached.append(...files.map(renderAttachment));
+    body.append(attached);
+  }
+  if (images) body.append(statusLine('muted', `[${images} image${images === 1 ? '' : 's'}]`));
+  return body;
+}
+
+/**
+ * A prompt omp holds to send later, at the end of the transcript, as the prompt it will be,
+ * dimmed, with when it goes and Cancel beside it: a steer reaches the agent at its next step,
+ * a follow-up once the turn ends. A continue reads as the `.` it was sent as.
+ * @param {string} text @param {'steering' | 'followUp'} which @param {boolean} continues @param {() => void} cancel
+ */
+export function renderPending(text, which, continues, cancel) {
+  const node = el('div', 'omp-msg omp-user is-pending');
+  const side = el('div', 'omp-pending-side');
+  const label = el('span', 'omp-pending-label', which === 'steering' ? 'Pending · next step' : 'Pending · after this turn');
+  label.title = which === 'steering' ? 'Reaches the agent at its next step, in this turn' : 'Sent once this turn ends';
+  const remove = button('omp-pending-cancel', 'Cancel', cancel);
+  remove.title = 'Take this message back';
+  side.append(label, remove);
+  node.append(continues ? el('div', 'omp-md', '. (continue)') : promptBody(text), side);
+  return node;
 }
 
 /**

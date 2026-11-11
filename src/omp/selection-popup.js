@@ -1,11 +1,14 @@
 /**
  * Actions on highlighted transcript text: select part of a reply and Comment and Ask buttons
  * appear at the end of the selection. A selection dragged with the pointer snaps out to whole
- * words when it is let go, so a rough drag quotes clean text. Comment opens a box for a comment, handed to the
- * composer with the selected text as its quote. Ask opens a box for a side question about it,
- * whose short answer streams into the popup and never enters the chat (omp's `btw`); follow-up
- * questions continue the same topic there, one at a time. Where questions are queued instead
- * (the pull request window's review), Ask hands the question over as Comment does.
+ * words when it is let go, so a rough drag quotes clean text. Either button opens a box in the
+ * transcript itself, right under the block the selection ends in (a paragraph, a list, a table,
+ * a diff line), the width of the transcript and set like the message box: the quote, a field,
+ * and both actions, the one clicked taking Enter. Comment hands the comment to the composer
+ * with the selected text as its quote. Ask asks a side question about it, whose short answer
+ * streams into the box and never enters the chat (omp's `btw`); follow-up questions continue
+ * the same topic there, one at a time. Where questions are queued instead (the pull request
+ * window's review), Ask hands the question over as Comment does.
  */
 import { button, el } from '../ui/dom.js';
 import { autosize } from '../ui/autosize.js';
@@ -17,7 +20,9 @@ import { withMentions } from './file-suggest.js';
 
 const GAP_PX = 6;
 const EDGE_PX = 8;
-const INPUT_MAX_PX = 160;
+const INPUT_MAX_PX = 200;
+/** Where the box goes: after the block of a reply or a diff the selection ends in. */
+const BLOCK = '.omp-md > *, .gh-item-body > *, .gh-line, .gh-thread';
 
 /**
  * How Ask reaches omp: `send` asks a side question about `quote`, or a follow-up in topic
@@ -42,13 +47,6 @@ const INPUT_MAX_PX = 160;
  * @typedef {{ question: string, turn: number | null, error: string | null }} Asked
  */
 
-/** What each action's box says. */
-const ACTIONS = {
-  comment: { placeholder: 'Your comment on this…', label: 'Comment on the selected text', submit: 'Add comment' },
-  ask: { placeholder: 'Ask about this; the answer stays out of the chat…', label: 'Ask about the selected text', submit: 'Ask' },
-  queue: { placeholder: 'Your question about this; it goes to the agent with your review…', label: 'Ask about the selected text', submit: 'Add question' },
-};
-
 /**
  * @param {{
  *   host: HTMLElement,
@@ -57,9 +55,10 @@ const ACTIONS = {
  *   ask: SideQuestions | QueuedQuestions,
  *   cite?: (range: Range) => string | null,
  *   listDir?: ListDir,
- * }} options `host`: the positioned element the popup lives in; `transcript`: where selections count;
- * `cite` says where a selection is, for the comment or question on it (e.g. a file and its lines);
- * `listDir`, if given, lists the folders `@` paths typed in its boxes name, to suggest their entries.
+ * }} options `host`: the positioned element the buttons float in; `transcript`: where selections
+ * count, and where the box goes; `cite` says where a selection is, for the comment or question
+ * on it (e.g. a file and its lines); `listDir`, if given, lists the folders `@` paths typed in
+ * the box name, to suggest their entries.
  * Call `refresh()` whenever the session's state changes, so a shown thread keeps up.
  */
 export function attachSelectionPopup({ host, transcript, onComment, ask, cite = () => null, listDir }) {
@@ -68,6 +67,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   const pop = el('div', 'omp-quote-pop');
   pop.hidden = true;
   host.append(pop);
+  const panel = el('div', 'omp-quote-panel');
   /** @type {'closed' | 'buttons' | 'editing' | 'thread'} */
   let mode = 'closed';
   let quote = '';
@@ -89,8 +89,8 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     const newest = asked.at(-1);
     return mode === 'thread' && newest !== undefined && newest.error === null && (answerTo(newest)?.status ?? 'running') === 'running';
   };
-  /** Whether the popup's box holds something written and not sent yet. */
-  const drafted = () => Boolean(pop.querySelector('textarea')?.value.trim());
+  /** Whether the box holds something written and not sent yet. */
+  const drafted = () => Boolean(panel.querySelector('textarea')?.value.trim());
 
   function close() {
     if (topic !== null && running()) side?.cancel(topic);
@@ -100,11 +100,12 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     drawThread = null;
     mode = 'closed';
     pop.hidden = true;
-    pop.classList.remove('is-answer');
     pop.replaceChildren();
+    panel.replaceChildren();
+    panel.remove();
   }
 
-  /** Places the popup under (or, without room, over) `rect`, inside the host. @param {DOMRect} rect */
+  /** Floats the buttons under (or, without room, over) `rect`, inside the host. @param {DOMRect} rect */
   function place(rect) {
     pop.hidden = false;
     const box = host.getBoundingClientRect();
@@ -117,137 +118,174 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     pop.style.top = `${top}px`;
   }
 
-  /** The selected transcript text, where its last line ends, and where it is, if there is one. */
+  /**
+   * Where the box goes for a selection ending at `node`: after the block it ends in, or at the
+   * end of the transcript's entry holding it (never between entries, which the window places).
+   * @param {Node} node @returns {{ below: Element } | { inside: Element } | null}
+   */
+  function spot(node) {
+    const start = node instanceof Element ? node : node.parentElement;
+    const block = start?.closest(BLOCK);
+    if (block && transcript.contains(block)) {
+      // A list item or a table cell takes the box after its whole list or table.
+      const list = block.parentElement?.closest('.omp-md > ul, .omp-md > ol');
+      return { below: list ?? block };
+    }
+    let entry = start;
+    while (entry && entry.parentElement !== transcript) entry = entry.parentElement;
+    return entry ? { inside: entry } : null;
+  }
+
+  /** The selected transcript text, where its last line ends, where the box would go and what it cites. */
   function selection() {
     const sel = document.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
     const range = sel.getRangeAt(0);
-    if (!transcript.contains(range.commonAncestorContainer)) return null;
+    if (!transcript.contains(range.commonAncestorContainer) || panel.contains(range.commonAncestorContainer)) return null;
     const text = sel.toString().trim();
     const rects = range.getClientRects();
     const end = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
-    return text ? { text, end, cite: cite(range) } : null;
+    const at = spot(range.endContainer);
+    return text && at ? { text, end, at, cite: cite(range) } : null;
   }
 
   /** @param {string} label @param {string} title @param {() => void} onClick */
   function actionButton(label, title, onClick) {
-    const action = button('btn omp-quote-btn', label, onClick);
+    const action = button('omp-quote-btn', label, onClick);
     action.title = title;
     // Keep the selection (and its highlight) while the button is pressed.
     action.addEventListener('pointerdown', (e) => e.preventDefault());
     return action;
   }
 
+  const COMMENT_TITLE = `Comment on the selected text; the comment goes ${queued ? 'to the agent with your review' : 'with your next message'}`;
+  const ASK_TITLE = queued
+    ? 'Ask a question about the selected text; it goes to the agent with your other notes'
+    : 'Ask a quick question about the selected text; the answer is not added to the chat';
+
   function offerButtons() {
-    if (mode === 'editing') return;
+    if (mode === 'editing' && drafted()) return;
     const found = selection();
     // A shown thread stays until it is closed, or replaced by a new selection once nothing in
     // it is running or written and not sent.
     if (mode === 'thread' && (!found || running() || drafted())) return;
-    if (!found) return close();
+    if (!found) {
+      if (mode === 'buttons') close();
+      return;
+    }
     if (mode === 'buttons' && found.text === quote) return; // already offered for it
     close();
     quote = found.text;
     quoteCite = found.cite;
     pop.replaceChildren(
-      actionButton('Comment', `Comment on the selected text; the comment goes ${queued ? 'to the agent with your review' : 'with your next message'}`, () => openEditor(found.end, 'comment')),
-      queued
-        ? actionButton('Ask', 'Ask a question about the selected text; it goes to the agent with your other notes', () => openEditor(found.end, 'queue'))
-        : actionButton('Ask', 'Ask a quick question about the selected text; the answer is not added to the chat', () => openEditor(found.end, 'ask')),
+      actionButton('Comment', COMMENT_TITLE, () => openBox(found.at, 'comment')),
+      actionButton('Ask', ASK_TITLE, () => openBox(found.at, 'ask')),
     );
     mode = 'buttons';
     place(found.end);
   }
 
-  /**
-   * Wires a box and its button: the button sends once something is written, Enter sends and
-   * Shift+Enter starts a new line, as in the composer.
-   * @param {HTMLTextAreaElement} box @param {HTMLButtonElement} submitBtn @param {() => void} submit
-   */
-  function wireBox(box, submitBtn, submit) {
-    submitBtn.disabled = true;
-    box.addEventListener('input', () => {
-      submitBtn.disabled = !box.value.trim();
-      autosize(box, { max: INPUT_MAX_PX });
-    });
+  /** Puts the box where `at` says, and keeps it in view. @param {{ below: Element } | { inside: Element }} at */
+  function insertPanel(at) {
+    if ('below' in at) at.below.after(panel);
+    else at.inside.append(panel);
+    panel.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** The field, grown with its text, Enter sending and Shift+Enter starting a new line. @param {string} placeholder @param {() => void} enter */
+  function field(placeholder, enter) {
+    const box = el('textarea', 'omp-quote-input');
+    box.rows = 1;
+    box.placeholder = placeholder;
+    box.setAttribute('aria-label', placeholder);
+    box.addEventListener('input', () => autosize(box, { max: INPUT_MAX_PX }));
     box.addEventListener('keydown', (e) => {
       if (e.isComposing || e.defaultPrevented) return; // an open @ list took it
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        submit();
+        enter();
       }
     });
-    submitBtn.addEventListener('click', submit);
+    return box;
   }
 
-  /** @param {DOMRect} anchor @param {keyof typeof ACTIONS} action */
-  function openEditor(anchor, action) {
-    const words = ACTIONS[action];
+  /**
+   * The box for a comment or a question on the quote, both offered, `first` taking Enter.
+   * @param {{ below: Element } | { inside: Element }} at @param {'comment' | 'ask'} first
+   */
+  function openBox(at, first) {
     mode = 'editing';
-    const preview = el('blockquote', 'omp-quote-preview', quote);
-    const box = el('textarea', 'omp-quote-input');
-    box.rows = 2;
-    box.placeholder = words.placeholder;
-    box.setAttribute('aria-label', words.label);
-    const submitBtn = button('btn btn-accent', words.submit);
-    const cancel = button('btn', 'Cancel', close);
-    const actions = el('div', 'omp-row');
-    actions.append(submitBtn, cancel);
-    pop.replaceChildren(preview, withMentions(box, listDir), actions);
-    place(anchor);
-    box.focus();
-    wireBox(box, submitBtn, () => {
+    pop.hidden = true;
+    /** @param {'comment' | 'ask'} action */
+    const submit = (action) => {
       const text = box.value.trim();
       if (!text) return;
       document.getSelection()?.removeAllRanges();
       if (action === 'comment') {
         onComment(quote, text, quoteCite);
         close();
-      } else if (action === 'queue') {
-        queued?.queue(quote, text, quoteCite);
+      } else if (queued) {
+        queued.queue(quote, text, quoteCite);
         close();
       } else {
-        openThread(anchor);
+        openThread();
         askInThread(text);
       }
-    });
+    };
+    const box = field(
+      first === 'comment' ? 'Your comment on this…' : queued ? 'Your question about this; it goes to the agent with your review…' : 'Ask about this; the answer stays out of the chat…',
+      () => submit(first),
+    );
+    const commentBtn = button(first === 'comment' ? 'btn btn-accent' : 'btn', queued ? 'Add comment' : 'Comment', () => submit('comment'));
+    commentBtn.title = COMMENT_TITLE;
+    const askBtn = button(first === 'ask' ? 'btn btn-accent' : 'btn', queued ? 'Add question' : 'Ask', () => submit('ask'));
+    askBtn.title = ASK_TITLE;
+    const sync = () => {
+      commentBtn.disabled = askBtn.disabled = !box.value.trim();
+    };
+    box.addEventListener('input', sync);
+    sync();
+    const actions = el('div', 'omp-quote-actions');
+    actions.append(button('btn', 'Cancel', close), commentBtn, askBtn);
+    panel.replaceChildren(el('blockquote', 'omp-quote-preview', quote), withMentions(box, listDir), actions);
+    insertPanel(at);
+    box.focus({ preventScroll: true });
   }
 
   /**
-   * Shows the side questions about the quote, each with its answer as it streams in, and a box
-   * for a follow-up that is available whenever no answer is on its way.
-   * @param {DOMRect} anchor
+   * Shows the side questions about the quote in the box, each with its answer as it streams
+   * in, and a field for a follow-up that is available whenever no answer is on its way.
    */
-  function openThread(anchor) {
+  function openThread() {
     mode = 'thread';
-    pop.classList.add('is-answer');
     const thread = el('div', 'omp-ask-thread');
     thread.setAttribute('aria-live', 'polite');
-    const box = el('textarea', 'omp-quote-input');
-    box.rows = 1;
-    box.placeholder = 'Ask a follow-up…';
-    box.setAttribute('aria-label', 'Ask a follow-up');
     const askBtn = button('btn btn-accent', 'Ask');
     const closeBtn = button('btn', 'Close', close);
-    const actions = el('div', 'omp-row');
-    actions.append(askBtn, closeBtn);
-    pop.replaceChildren(el('blockquote', 'omp-quote-preview', quote), thread, withMentions(box, listDir), actions);
-    closeBtn.focus(); // Esc closes from here while the box is unavailable
-    wireBox(box, askBtn, () => {
+    const send = () => {
       const text = box.value.trim();
-      if (!text) return;
+      if (!text || running()) return;
       box.value = '';
-      askBtn.disabled = true;
       autosize(box, { max: INPUT_MAX_PX });
+      askBtn.disabled = true;
       closeBtn.focus();
       askInThread(text);
+    };
+    const box = field('Ask a follow-up…', send);
+    askBtn.addEventListener('click', send);
+    box.addEventListener('input', () => {
+      askBtn.disabled = !box.value.trim() || running();
     });
+    askBtn.disabled = true;
+    const actions = el('div', 'omp-quote-actions');
+    actions.append(closeBtn, askBtn);
+    panel.replaceChildren(el('blockquote', 'omp-quote-preview', quote), thread, withMentions(box, listDir), actions);
+    closeBtn.focus({ preventScroll: true }); // Esc closes from here while the field is unavailable
 
     /** Each question's answer as drawn, by its place in `asked`. @type {{ body: HTMLElement, key: string }[]} */
     const drawn = [];
     let wasRunning = false;
     drawThread = () => {
-      const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 4;
       let changed = false;
       asked.forEach((entry, i) => {
         let view = drawn[i];
@@ -261,15 +299,13 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
         view.body.replaceChildren(...build());
         changed = true;
       });
-      // omp answers one side question at a time: the box waits while one is on its way.
+      // omp answers one side question at a time: the field waits while one is on its way.
       const busy = running();
       box.disabled = busy;
-      // Once the answer is in, the box takes over from Close, unless the reader moved on.
-      if (wasRunning && !busy && document.activeElement === closeBtn) box.focus();
+      // Once the answer is in, the field takes over from Close, unless the reader moved on.
+      if (wasRunning && !busy && document.activeElement === closeBtn) box.focus({ preventScroll: true });
       wasRunning = busy;
-      if (!changed) return;
-      place(anchor);
-      if (atBottom) thread.scrollTop = thread.scrollHeight;
+      if (changed && panel.isConnected) panel.scrollIntoView({ block: 'nearest' });
     };
   }
 
@@ -331,7 +367,8 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   const onPointerUp = () => {
     pressed = false;
     const sel = document.getSelection();
-    if (sel && sel.rangeCount && transcript.contains(sel.getRangeAt(0).commonAncestorContainer)) snapToWords(sel);
+    const within = sel && sel.rangeCount ? sel.getRangeAt(0).commonAncestorContainer : null;
+    if (sel && within && transcript.contains(within) && !panel.contains(within)) snapToWords(sel);
     offerButtons();
   };
   const onPointerCancel = () => {
@@ -346,14 +383,15 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   };
   /** @param {KeyboardEvent} e */
   const onKeyDown = (e) => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' || e.defaultPrevented) return; // an open @ list closes first
     e.stopPropagation(); // not the pane's Esc-to-stop
     close();
   };
   /** @param {PointerEvent} e */
   const onOutside = (e) => {
-    if (pop.contains(/** @type {Node} */ (e.target))) return;
-    // A half-written box and an answer still coming are not thrown away by a stray click.
+    const target = /** @type {Node} */ (e.target);
+    if (pop.contains(target) || panel.contains(target)) return;
+    // A written box and an answer still coming are not thrown away by a stray click.
     if (drafted()) return;
     if ((mode === 'editing' || mode === 'thread') && !running()) close();
   };
@@ -362,6 +400,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   document.addEventListener('pointercancel', onPointerCancel, true);
   transcript.addEventListener('scroll', onScroll);
   pop.addEventListener('keydown', onKeyDown);
+  panel.addEventListener('keydown', onKeyDown);
   document.addEventListener('selectionchange', onSelectionChange);
   document.addEventListener('pointerdown', onOutside, true);
 
