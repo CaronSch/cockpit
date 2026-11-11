@@ -4,7 +4,7 @@
  * words when it is let go, so a rough drag quotes clean text. Either button opens a box in the
  * transcript itself, right under the block the selection ends in (a paragraph, a list, a table,
  * a diff line), the width of the transcript and set like the message box: the quote, a field,
- * and both actions, the one clicked taking Enter. Comment hands the comment to the composer
+ * and the action clicked, which Enter does too. Comment hands the comment to the composer
  * with the selected text as its quote. Ask asks a side question about it, whose short answer
  * streams into the box and never enters the chat (omp's `btw`); follow-up questions continue
  * the same topic there, one at a time. Where questions are queued instead (the pull request
@@ -210,14 +210,13 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   }
 
   /**
-   * The box for a comment or a question on the quote, both offered, `first` taking Enter.
-   * @param {{ below: Element } | { inside: Element }} at @param {'comment' | 'ask'} first
+   * The box for a comment or a question on the quote, as `action` chose; Enter sends it.
+   * @param {{ below: Element } | { inside: Element }} at @param {'comment' | 'ask'} action
    */
-  function openBox(at, first) {
+  function openBox(at, action) {
     mode = 'editing';
     pop.hidden = true;
-    /** @param {'comment' | 'ask'} action */
-    const submit = (action) => {
+    const submit = () => {
       const text = box.value.trim();
       if (!text) return;
       document.getSelection()?.removeAllRanges();
@@ -233,20 +232,18 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       }
     };
     const box = field(
-      first === 'comment' ? 'Your comment on this…' : queued ? 'Your question about this; it goes to the agent with your review…' : 'Ask about this; the answer stays out of the chat…',
-      () => submit(first),
+      action === 'comment' ? 'Your comment on this…' : queued ? 'Your question about this; it goes to the agent with your review…' : 'Ask about this; the answer stays out of the chat…',
+      submit,
     );
-    const commentBtn = button(first === 'comment' ? 'btn btn-accent' : 'btn', queued ? 'Add comment' : 'Comment', () => submit('comment'));
-    commentBtn.title = COMMENT_TITLE;
-    const askBtn = button(first === 'ask' ? 'btn btn-accent' : 'btn', queued ? 'Add question' : 'Ask', () => submit('ask'));
-    askBtn.title = ASK_TITLE;
+    const go = button('btn btn-accent', action === 'comment' ? (queued ? 'Add comment' : 'Comment') : queued ? 'Add question' : 'Ask', submit);
+    go.title = action === 'comment' ? COMMENT_TITLE : ASK_TITLE;
     const sync = () => {
-      commentBtn.disabled = askBtn.disabled = !box.value.trim();
+      go.disabled = !box.value.trim();
     };
     box.addEventListener('input', sync);
     sync();
     const actions = el('div', 'omp-quote-actions');
-    actions.append(button('btn', 'Cancel', close), commentBtn, askBtn);
+    actions.append(button('btn', 'Cancel', close), go);
     panel.replaceChildren(el('blockquote', 'omp-quote-preview', quote), withMentions(box, listDir), actions);
     insertPanel(at);
     box.focus({ preventScroll: true });
@@ -378,8 +375,16 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     if (!pressed) offerButtons();
     else if (mode === 'buttons' && !selection()) close();
   };
+  // New output scrolls the transcript under a selection: the buttons follow it, and go only
+  // with it.
   const onScroll = () => {
-    if (mode === 'buttons') close();
+    if (mode !== 'buttons') return;
+    const found = selection();
+    if (!found) return close();
+    // Scrolled out of view, the selection keeps its buttons hidden until it is back.
+    const view = transcript.getBoundingClientRect();
+    if (found.end.bottom < view.top || found.end.top > view.bottom) pop.hidden = true;
+    else place(found.end);
   };
   /** @param {KeyboardEvent} e */
   const onKeyDown = (e) => {
