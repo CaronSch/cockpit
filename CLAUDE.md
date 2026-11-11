@@ -310,7 +310,10 @@ What runs today:
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
   the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
   prompts and the agents' replies, so a question in plain words finds the conversation that
-  answers it, best first, with the passage that matched and its words marked; Enter shows the
+  answers it, best first, with the passage that matched and its words marked; **Ask** (⌘↵) hands
+  the question to an agent instead, a one-shot `omp -p` with read-only tools reading an index of
+  the conversations and their journals (`daemon/ask.js`), whose answer shows above the conversations
+  it names; Enter shows the
   conversation as a Sessions click does). The window's title bar holds its controls: a directory
   menu and **View** (sort order, Reverse order, Archived sessions); the list follows the
   daemon, so nothing refreshes it. A click on a conversation (or Enter) shows it in the
