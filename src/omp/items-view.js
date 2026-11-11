@@ -1,6 +1,7 @@
 /**
  * DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes,
- * unrecognised frames), and for a turn's decision review, built from text nodes only.
+ * unrecognised frames), a stretch of folded work (visibility.js `compactWork`), and a turn's
+ * decision review, built from text nodes only.
  */
 import { button, el } from '../ui/dom.js';
 import { json } from '../ui/format.js';
@@ -8,6 +9,7 @@ import { renderAttachment, renderMarkdown } from './markdown-dom.js';
 import { splitAttachments } from './message.js';
 /** @import { Block, Item, ToolRun } from './transcript.js' */
 /** @import { Review } from './decisions.js' */
+/** @import { WorkItem } from './visibility.js' */
 
 /**
  * `open` remembers which collapsible parts the user expanded, so redrawing an item while
@@ -89,6 +91,40 @@ export function renderItem(item, ctx) {
     case 'unrecognised':
       return collapsible(ctx, item.key, 'omp-unrecognised', [`unrecognised: ${item.label}`], () => [el('pre', 'omp-pre', item.raw)]);
   }
+}
+
+/**
+ * A stretch of the agent's work as one line: how it went (running, failed, done), how many
+ * tool calls and which (`edit ×2`), opening to the thinking and tool calls themselves.
+ * @param {WorkItem} work @param {ItemContext} ctx @returns {HTMLElement}
+ */
+export function renderWork(work, ctx) {
+  /** @type {Array<{ name: string, status: ToolRun['status'] }>} */
+  const calls = [];
+  for (const part of work.parts) {
+    if (part.kind === 'tool') {
+      const run = ctx.tools.get(part.toolCallId);
+      calls.push({ name: run?.name || 'tool', status: run?.status ?? 'running' });
+      continue;
+    }
+    for (const block of part.blocks) {
+      if (block.kind !== 'toolCall') continue;
+      const run = block.id ? ctx.tools.get(block.id) : undefined;
+      calls.push({ name: run?.name || block.name || 'tool', status: run?.status ?? (block.id ? 'pending' : 'running') });
+    }
+  }
+  const has = (/** @type {ToolRun['status']} */ s) => calls.some((c) => c.status === s);
+  const status = has('running') ? 'running' : has('error') ? 'error' : has('pending') ? 'pending' : 'ok';
+  /** Each run of one tool once, counted: `read, edit ×2, bash`. */
+  const names = calls.reduce((/** @type {Array<{ name: string, n: number }>} */ acc, c) => {
+    const last = acc.at(-1);
+    if (last?.name === c.name) last.n++;
+    else acc.push({ name: c.name, n: 1 });
+    return acc;
+  }, []);
+  const label = calls.length ? `${calls.length} step${calls.length === 1 ? '' : 's'} · ${names.map((n) => (n.n > 1 ? `${n.name} ×${n.n}` : n.name)).join(', ')}` : 'thinking';
+  const head = calls.length ? [el('span', 'omp-status', STATUS_GLYPH[status]), el('span', 'omp-work-summary', label)] : [el('span', 'omp-work-summary', label)];
+  return collapsible(ctx, work.key, `omp-work is-${status}`, head, () => work.parts.map((part) => renderItem(part, ctx)));
 }
 
 /**

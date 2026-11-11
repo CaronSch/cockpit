@@ -1,7 +1,7 @@
 /**
- * Which transcript items an agent pane shows when it is set to only prompts and responses:
- * what the user said and ran, and what the agent finally answered, without the work in
- * between. A view over `transcript.js` items, computed at render time: switching back
+ * Which transcript items an agent pane shows: everything; everything with the work folded
+ * (`compactWork`); or only prompts and responses: what the user said and ran, and what the
+ * agent finally answered, without the work in between. A view over `transcript.js` items, computed at render time: switching back
  * shows everything again, because nothing is ever removed from the transcript.
  *
  * Shown:
@@ -30,7 +30,7 @@
  * off for good (omp exited mid-stream) is neither. While a turn runs, the work since the
  * user's prompt is summarised as `working`.
  */
-/** @import { AssistantItem, Item } from './transcript.js' */
+/** @import { AssistantItem, Item, ToolItem } from './transcript.js' */
 
 /**
  * `working` is set while a turn runs: its work so far, counted in steps (assistant
@@ -98,4 +98,75 @@ const saysSomething = (item, streaming) =>
 function withoutWork(item) {
   const blocks = item.blocks.filter((b) => b.kind === 'text' || b.kind === 'other');
   return blocks.length === item.blocks.length ? item : { ...item, blocks };
+}
+
+/**
+ * A stretch of the agent's work between two things it said: its thinking and tool calls, shown
+ * as one line that opens to show them (items-view.js `renderWork`). `parts` are assistant
+ * messages holding only that work, and tool runs.
+ * @typedef {{ kind: 'work', key: string, rev: string, parts: Array<AssistantItem | ToolItem> }} WorkItem
+ */
+
+/** Thinking and tool calls: the work, as against what the agent says. @param {AssistantItem['blocks'][number]} block */
+const isWork = (block) => block.kind === 'thinking' || block.kind === 'toolCall';
+
+/**
+ * The items with the agent's work folded: every run of thinking and tool calls between two
+ * things it said (or the user did) becomes one WorkItem; what it says stays as it is. An
+ * assistant message is split where its text and its work meet; how it ended (an error, aborted)
+ * shows after its last piece, outside any fold.
+ * @param {readonly Item[]} items @returns {Array<Item | WorkItem>}
+ */
+export function compactWork(items) {
+  /** @type {Array<Item | WorkItem>} */
+  const out = [];
+  /** @type {WorkItem | null} */
+  let work = null;
+  const flush = () => {
+    if (!work) return;
+    work.rev = work.parts.map((p) => `${p.key}@${p.rev}`).join(',');
+    out.push(work);
+    work = null;
+  };
+  /** @param {AssistantItem | ToolItem} part */
+  const fold = (part) => {
+    work ??= { kind: 'work', key: `work:${part.key}`, rev: '', parts: [] };
+    work.parts.push(part);
+  };
+  for (const item of items) {
+    if (item.kind === 'tool') fold(item);
+    else if (item.kind !== 'assistant') {
+      flush();
+      out.push(item);
+    } else {
+      // Its blocks in runs of work and of text; empty text is nothing to show.
+      /** @type {Array<{ work: boolean, blocks: AssistantItem['blocks'] }>} */
+      const runs = [];
+      for (const block of item.blocks) {
+        if (block.kind === 'text' && !block.text.trim()) continue;
+        const last = runs.at(-1);
+        if (last && last.work === isWork(block)) last.blocks.push(block);
+        else runs.push({ work: isWork(block), blocks: [block] });
+      }
+      // Only the last piece says how the message ended; the others are done, quietly.
+      const quiet = { ended: true, stopReason: 'toolUse', errorMessage: null };
+      runs.forEach((run, i) => {
+        const last = i === runs.length - 1;
+        const piece = { ...item, ...(last && !run.work ? {} : quiet), key: `${item.key}:${i}`, blocks: run.blocks };
+        if (run.work) fold(piece);
+        else {
+          flush();
+          out.push(piece);
+        }
+      });
+      // Still to say anything, or ended badly after its work: shown as itself, its blocks folded.
+      const ending = !item.ended || item.errorMessage || item.stopReason === 'aborted' || item.stopReason === 'length';
+      if ((runs.length === 0 || runs.at(-1)?.work) && ending) {
+        flush();
+        out.push({ ...item, key: `${item.key}:end`, blocks: [] });
+      }
+    }
+  }
+  flush();
+  return out;
 }

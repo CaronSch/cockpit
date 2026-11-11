@@ -45,8 +45,8 @@ const TOOL_CHARS = 400;
 /** @param {string} text @param {number} max */
 const clip = (text, max) => (text.length > max ? `${text.slice(0, max)} […]` : text);
 
-/** @param {Item} item @returns {item is Extract<Item, { kind: 'user' }>} */
-const isPrompt = (item) => item.kind === 'user' && !item.byAgent;
+/** @param {Item | { kind: string }} item @returns {item is Extract<Item, { kind: 'user' }>} */
+const isPrompt = (item) => item.kind === 'user' && !(/** @type {Extract<Item, { kind: 'user' }>} */ (item)).byAgent;
 
 /**
  * The turn that just ended, for the reviewer: its prompt's time and the turn as text.
@@ -102,7 +102,7 @@ export function parseDecisions(answer) {
 /**
  * Where each review shows among `items` (a transcript's, or those it shows): before the
  * user's next prompt after the one it reviews, else at the end; in order.
- * @param {readonly Item[]} items @param {Reviews} reviews
+ * @param {ReadonlyArray<Item | { kind: string }>} items @param {Reviews} reviews
  * @returns {Array<{ index: number, at: number, review: Review }>}
  */
 export function placeReviews(items, reviews) {

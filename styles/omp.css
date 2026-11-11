@@ -910,8 +910,24 @@
 
 /* Tool calls and shell runs: a header line, then what they took and gave, indented under it. */
 .omp-tool > :not(summary),
+.omp-work > :not(summary),
 .omp-bash > :not(.omp-bash-head) {
   margin-left: 1em;
+}
+
+/* A stretch of folded work (Compact work): one line, its status coloured as a tool's. */
+.omp-work > summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.omp-work-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-dim);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .omp-tool > summary {
@@ -1146,12 +1162,63 @@
   margin-top: var(--space-1);
 }
 
+/* Messages waiting for the agent: small cards over the message box, in line with it, what each
+   will do (Steering, Queued) over up to two lines of the message; × shows on hover. */
 .omp-queue {
   flex: none;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2) 0;
+  padding: var(--space-2) var(--space-3) 0;
+}
+
+.omp-queue .omp-chip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1px var(--space-2);
+  padding: 6px 6px 6px 10px;
+  border: 1px solid var(--color-line);
+  border-inline-start: 2px solid var(--color-accent);
+  border-radius: var(--radius-m);
+  background: var(--color-surface-raised);
+}
+
+.omp-queue .omp-chip.is-followUp {
+  border-inline-start-color: var(--color-line-strong);
+}
+
+.omp-queue .omp-chip-kind {
+  font-size: var(--text-2xs);
+  font-weight: 500;
+}
+
+.omp-queue .omp-chip.is-followUp .omp-chip-kind {
+  color: var(--color-text-faint);
+}
+
+.omp-queue .omp-chip-text {
+  grid-column: 1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.omp-queue .omp-chip-remove {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+  opacity: 0;
+}
+
+.omp-queue .omp-chip:is(:hover, :focus-within) .omp-chip-remove {
+  opacity: 1;
 }
 
 .omp-running,

@@ -24,8 +24,9 @@ A window whose agent finished or asks something while you looked away gets a cya
 stays unread, everywhere, until you click or type in it; *Desktop notifications* in **Config**
 tells you as well.
 
-**Config** in the top bar holds the switches. Per browser: *Only prompts and responses* hides
-the agent's work in between; *Animated selection* glides between words as you select; *Desktop
+**Config** in the top bar holds the switches. Per browser: *Compact work* (on) folds each stretch
+of the agent's thinking and tool calls into one line; *Only prompts and responses* hides the
+agent's work in between; *Animated selection* glides between words as you select; *Desktop
 notifications* (off) notifies you when an agent finishes or needs you. Kept by the daemon, for
 every browser:
 
