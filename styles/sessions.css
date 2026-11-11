@@ -226,25 +226,18 @@
   cursor: default;
 }
 
-/* Mark read or unread: a hollow dot marks a row unread; an unread row's dot is filled, in the
-   accent, and marks it read. */
-.sessions-mark {
+/* Actions drawn as icons (ui/icons.js): Archive or Restore, and mark unread (a closed envelope)
+   or read (an open one), as a mail client has them. */
+.sessions-icon {
   display: grid;
   place-items: center;
-  padding-inline: 6px;
+  padding: 3px 6px;
 }
 
-.sessions-mark svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.5;
-}
-
-.sessions-item.is-unread .sessions-mark svg {
-  fill: var(--color-accent);
-  stroke: var(--color-accent);
+.sessions-icon .stroke-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.25;
 }
 
 /* A pinned row's ★ stays in view; another row's ☆ shows with its actions. */

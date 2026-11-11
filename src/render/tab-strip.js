@@ -10,7 +10,8 @@
  * controller's.
  */
 import { listStacks } from '../layout/grid-model.js';
-import { button, crossIcon, el } from '../ui/dom.js';
+import { button, el } from '../ui/dom.js';
+import { crossIcon } from '../ui/icons.js';
 /** @import { Stack, Tree } from '../layout/grid-model.js' */
 /** What a tab shows of its window. @typedef {{ glyph: string, name: string, unread: boolean }} TabFace */
 

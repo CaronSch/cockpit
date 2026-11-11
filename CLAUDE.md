@@ -165,16 +165,16 @@ What runs today:
   idle, before the prompt cache expired"), with the summary. Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
-  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New** and **Forks**
-  sit in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
+  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **Forks**
+  sits in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring
   spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`).
   **⌘↑** and **⌘↓** (Ctrl elsewhere, anywhere in the window, the message box; on the phone, its **↑** and **↓** buttons)
   put the agent's previous or next response (as *Only prompts and responses* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again
   (`src/omp/response-nav.js`).
-  **New** starts another one there, in the same directory unless the setup
-  screen's Directory is changed, while the one shown before carries on. The
+  A **+** after the window's title (or its stack's tabs; registry.js `newTab`) opens another agent window there as a
+  tab, in the same directory unless the setup screen's Directory is changed, while the one shown before carries on. The
   toolbar keeps to one line (the directory gives way first). Another provider or account is
   signed in from Config's **Accounts** (`src/ui/login.js`: the daemon's `omp login`, as Setup runs it); **Sign in** shows in the toolbar while an awake
   session's model needs a login (no model, or its provider is one omp logs in to
@@ -359,7 +359,7 @@ What runs today:
   window to one directory, together with View's choices; like
   those, the choice is the window's own. An untitled session is listed by its first
   prompt. Row actions show on hover or focus. A fork is listed as a
-  session of its own, under the title its first prompt gave it (until then, the one it copied from its source). **Archive** moves a
+  session of its own, under the title its first prompt gave it (until then, the one it copied from its source). **Archive** (a box with an arrow into it; **Restore**, an arrow out) moves a
   session's journal and its folder out of omp's sessions into
   `~/.cockpit/archive/sessions/` at the same relative path, so neither the list nor omp's
   own resume offers it; View's **Archived sessions** lists archived sessions (the label says
@@ -369,8 +369,8 @@ What runs today:
   nothing was sent to has no journal yet: Archive ends it (`DELETE /api/sessions/:id`)
   and it is gone, not archived. Nothing is ever deleted: there is no delete. An unread conversation (archived too, which
   keeps its mark) has an indigo bar at its left edge and a bold title, and the window's top bar counts the
-  unread ones it lists; showing a session from here reads it. A row's dot button (with its other
-  actions, shown while the row is pointed at or focused) marks it unread, or an unread one read.
+  unread ones it lists; showing a session from here reads it. As in a mail client, a row's closed envelope (with its other
+  actions, shown while the row is pointed at or focused) marks it unread, an unread one's open envelope marks it read.
   Right-click on a row, or Shift+F10 / the ContextMenu key on a focused row, opens its menu
   (`src/ui/context-menu.js`, a popover the arrow keys move through): **Mark as
   unread** or **Mark as read**, **Pin to top** or **Unpin**, with Show and Archive /
@@ -726,8 +726,9 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
 - `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key or Shift+F10 opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
-- `src/ui/dom.js` — Element construction helpers: elements, SVG icons, buttons that never submit a form, text that keeps a selection, and file-drag checks.
+- `src/ui/dom.js` — Element construction helpers: elements, SVG elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
+- `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
 - `src/ui/login.js` — Signing omp in to a model provider, or another account, without a conversation: `omp login`, run by the daemon (daemon/setup.js) and shown as it goes, its questions answered from a line here.

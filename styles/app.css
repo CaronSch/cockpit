@@ -924,6 +924,8 @@ input[type='radio']:checked {
 
 .widget-actions {
   flex: none;
+  /* Pushed to the bar's right end, whatever sits before it (a title, a stack's tabs, its +). */
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -936,6 +938,7 @@ input[type='radio']:checked {
 }
 
 .widget-grip,
+.widget-plus,
 .widget-close {
   display: grid;
   place-items: center;
@@ -953,12 +956,13 @@ input[type='radio']:checked {
   color: var(--color-text-dim);
 }
 
+.widget-plus,
 .widget-close {
   cursor: pointer;
 }
 
-/* A drawn ×, centred in its button (ui/dom.js crossIcon). */
-.cross-icon {
+/* A drawn × or +, centred in its button (ui/dom.js crossIcon, plusIcon). */
+.stroke-icon {
   width: 10px;
   height: 10px;
   fill: none;
@@ -967,11 +971,12 @@ input[type='radio']:checked {
   stroke-linecap: round;
 }
 
-.widget-tab-close .cross-icon {
+.widget-tab-close .stroke-icon {
   width: 8px;
   height: 8px;
 }
 
+.widget-plus:hover,
 .widget-close:hover {
   background: var(--color-hover);
   color: var(--color-text);
@@ -983,7 +988,7 @@ input[type='radio']:checked {
 }
 
 .widget-title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   margin: 0;
   overflow: hidden;
@@ -1002,7 +1007,7 @@ input[type='radio']:checked {
 /* A stack's tabs, in its shown window's head instead of the glyph and title (render/tab-strip.js). */
 .widget-tabs {
   display: none;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   align-self: stretch;
   overflow-x: auto;

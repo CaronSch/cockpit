@@ -100,6 +100,8 @@ export default {
   title: 'Agent',
   glyph: '✦',
   description: 'Chat with a coding agent in a directory',
+  /** The + after its tabs: another agent window beside it, starting in the same directory. @param {LeafParams} params */
+  newTab: (params) => ({ cwd: typeof params.cwd === 'string' ? params.cwd : null }),
 
   /** @param {HTMLElement} body @param {WidgetContext} ctx */
   mount(body, ctx) {
@@ -545,7 +547,6 @@ function createPane(body, ctx, daemon) {
     const costEl = el('span', 'omp-meter');
     const errorBadge = el('span', 'omp-badge-error', 'error');
     const spacer = el('span', 'omp-spacer');
-    const newBtn = toolButton('New', 'omp-new');
     // The conversation's forks and the one it was forked from; forks start from `/fork <prompt>`
     // (in the background) or by dragging Send onto the grid (in a new window).
     const forksBtn = toolButton('Forks', 'omp-forks');
@@ -560,7 +561,7 @@ function createPane(body, ctx, daemon) {
     const prevBtn = navButton('↑', `Previous response (${navKey}↑)`, () => toResponse('previous'));
     const nextBtn = navButton('↓', `Next response (${navKey}↓)`, () => toResponse('next'));
     // The conversation's own controls go in the window's top bar, for as long as it is shown.
-    ctx.headActions.replaceChildren(prevBtn, nextBtn, newBtn, forksBtn, prsBtn, stopBtn);
+    ctx.headActions.replaceChildren(prevBtn, nextBtn, forksBtn, prsBtn, stopBtn);
 
     const strip = el('div', 'omp-strip');
     const loginStrip = el('div', 'omp-login');
@@ -1230,11 +1231,6 @@ function createPane(body, ctx, daemon) {
       },
       { className: 'omp-head-menu', empty: NO_FORKS },
     );
-    newBtn.addEventListener('click', () => {
-      // The setup screen starts it, in this conversation's directory unless the user picks another.
-      ctx.setParams({ session: null, cwd: cwd() || null, sessionFile: null, name: null, fork: null, prompt: null });
-      schedule();
-    });
     // Whatever needs omp is about to: start it as the box is reached for, not once it is sent.
     draft.addEventListener('focus', () => {
       if (!ready()) wake().catch(() => {}); // send() says why, if the message cannot go

@@ -20,8 +20,8 @@
  *
  * A conversation with news its user has not read (daemon/unread.js) has an indigo bar at its left edge and a bold
  * title, archived or not, and the window's top bar counts those it lists. Showing one from
- * here reads it. A row's dot button marks it read or unread, as its menu (a right-click, the
- * ContextMenu key, Shift+F10) does, beside the row's other actions.
+ * here reads it. As in a mail client, a row's envelope marks it unread (closed) or read (open),
+ * as its menu (a right-click, the ContextMenu key, Shift+F10) does, beside the row's other actions.
  *
  * Pinned conversations (daemon/pins.js) come first, in the window's order, each with a ★; the
  * ☆ on a row pointed at, or its menu, pins it.
@@ -33,7 +33,8 @@
  * once the pointer moves on) outlines its windows, and pointing at an agent window lights its
  * conversation's row.
  */
-import { button, el, svg } from '../ui/dom.js';
+import { button, el } from '../ui/dom.js';
+import { archiveIcon, mailIcon, mailOpenIcon, unarchiveIcon } from '../ui/icons.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
@@ -284,14 +285,12 @@ function createSessionsWindow(body, ctx, daemon) {
     return unread ? [el('span', 'sessions-sr', 'Unread')] : [];
   }
 
-  /** The row's mark: a hollow dot marks it unread, an unread one's filled dot marks it read. @param {boolean} unread */
-  function markButton(unread) {
-    const mark = button('sessions-action sessions-mark');
-    const icon = svg('svg', { viewBox: '0 0 12 12', 'aria-hidden': 'true' });
-    icon.append(svg('circle', { cx: '6', cy: '6', r: '3.5' }));
-    mark.append(icon);
-    mark.setAttribute('aria-label', unread ? 'Mark as read' : 'Mark as unread');
-    return mark;
+  /** A row action drawn as an icon: `label` says what it does, to screen readers. @param {string} name @param {SVGElement} icon @param {string} label */
+  function iconAction(name, icon, label) {
+    const action = button(`sessions-action sessions-icon ${name}`);
+    action.append(icon);
+    action.setAttribute('aria-label', label);
+    return action;
   }
 
   /** The row's ★ (pinned) or ☆, which pins or unpins it. @param {boolean} pinned */
@@ -320,9 +319,10 @@ function createSessionsWindow(body, ctx, daemon) {
     const work = workOf(c);
     if (work) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', `${work} running`));
     const actions = el('div', 'sessions-actions');
-    if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
-    else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
-    if (c.meta?.ompId || c.id) actions.append(markButton(unread));
+    if (archived) actions.append(iconAction('sessions-restore', unarchiveIcon(), 'Restore'));
+    else if (archivable(c)) actions.append(iconAction('sessions-archive', archiveIcon(), 'Archive'));
+    // As a mail client: a closed envelope marks it unread, an open one marks an unread one read.
+    if (c.meta?.ompId || c.id) actions.append(unread ? iconAction('sessions-mark', mailOpenIcon(), 'Mark as read') : iconAction('sessions-mark', mailIcon(), 'Mark as unread'));
     // Over the row's right end, not beside its text: hidden, they take none of its width.
     const tools = el('div', 'sessions-tools');
     tools.append(actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
