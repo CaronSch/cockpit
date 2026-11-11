@@ -124,8 +124,8 @@ What runs today:
   workspace, saved by the daemon; the top bar's switcher says which screen this
   window is, lists every screen with what it holds and where it is open, and opens
   one that is open nowhere in this window (a reload, so its agents keep running)
-  or deletes it (asking first; the agents it showed keep running). A tab running older UI code than the daemon serves says so in the top
-  bar and offers Reload (the files' version: `daemon/ui-files.js`).
+  or deletes it (asking first; the agents it showed keep running). A tab running older UI code than the daemon serves shows a
+  **Reload** button among the top bar's own (the files' version: `daemon/ui-files.js`).
 - The daemon and the Agent window (the `omp` widget; "Agent" to the user, omp underneath): start omp in a directory (the Directory field
   suggests folders as the path is typed, relative to home, `~/`, `../` or absolute,
   and lists home's folders while empty or `~/`; Tab completes and opens a folder on its
@@ -150,8 +150,8 @@ What runs today:
   compaction is on or not, dims its window until it is used again (anything in it focused) or
   works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New** and **Forks**
   sit in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
-  Before them, **↑** and **↓** (⌘↑ / ⌘↓, Ctrl elsewhere, anywhere in the window, the message box
-  too) put the agent's previous or next response (as *Only prompts and responses* counts them)
+  **⌘↑** and **⌘↓** (Ctrl elsewhere, anywhere in the window, the message box; on the phone, its **↑** and **↓** buttons)
+  put the agent's previous or next response (as *Only prompts and responses* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again
   (`src/omp/response-nav.js`).
   **New** starts another one there, in the same directory unless the setup
@@ -696,7 +696,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it, or to open a copy of this one in a new tab.
 - `src/ui/settings.js` — App-wide settings, picked in the top bar's Config menu and kept per browser.
 - `src/ui/spotlight.js` — Spotlight: a floating search over every conversation, as macOS's.
-- `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
+- `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: a Reload button among the top bar's own, shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.
 - `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).

@@ -429,7 +429,6 @@ export async function createApp(root) {
     onAdd: addWidget,
   });
 
-  query(root, '.brand').after(createUpdateNotice({ daemon }).root);
   query(root, '.topbar-actions').prepend(
     createScreenSwitcher({ opened, describe: (tree) => describeWindows(tree, titleOf) }).root,
   );
@@ -442,6 +441,8 @@ export async function createApp(root) {
     show: (params) => showWidget('omp', params),
   });
   query(root, '.topbar-actions').prepend(createConfigMenu({ daemon, notifier }).root);
+  // Shown only while this page runs older UI files than the daemon serves.
+  query(root, '.topbar-actions').prepend(createUpdateNotice({ daemon }).root);
 
   // Until this machine has what agents need (daemon/settings.js `setupDone`), an empty screen
   // opens Setup: decided once, as the page first hears the daemon's settings.

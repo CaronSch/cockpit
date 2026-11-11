@@ -166,42 +166,6 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* This page is running older UI code than the daemon now serves. */
-.update-notice {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  padding: 3px 4px 3px 12px;
-  border: 1px solid color-mix(in oklch, var(--color-accent) 50%, transparent);
-  border-radius: var(--radius-m);
-  background: var(--color-accent-glow);
-  font-size: var(--text-sm);
-}
-
-.update-notice-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.update-notice .btn {
-  padding: 2px 10px;
-}
-
-.update-notice-dismiss {
-  padding: 0 6px;
-  border: 0;
-  background: transparent;
-  color: var(--color-text-dim);
-  font: inherit;
-  cursor: pointer;
-}
-
-.update-notice-dismiss:hover {
-  color: var(--color-text);
-}
-
 .btn {
   display: inline-flex;
   align-items: center;
