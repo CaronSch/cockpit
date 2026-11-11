@@ -10,9 +10,12 @@ import timeline from './timeline.js';
 
 /**
  * Widgets the palette can add, keyed by type.
- * Contract: { type, title, glyph, description, newParams?(), mount(body, ctx) → { destroy(), paramsChanged?() } }.
+ * Contract: { type, title, glyph, description, newParams?(), newTab?(params), mount(body, ctx) → { destroy(), paramsChanged?() } }.
  * `newParams()` gives a window its starting settings when one is created (e.g. a fresh
  * scratchpad id); windows restored from a saved layout keep theirs.
+ * `newTab(params)`, if a widget has it, puts a + after its window's title (or its stack's tabs):
+ * a click opens another window of its type as a tab beside it, with the settings `newTab` draws
+ * from this window's (an agent window: the same directory).
  * A window owns nothing but its settings: what must outlive it (an agent, a pad) lives with
  * the daemon, so closing a window never ends anything.
  * `ctx.params` is this window's saved settings (read it when needed: it changes after
@@ -71,6 +74,7 @@ import timeline from './timeline.js';
 /**
  * @typedef {{ type: string, title: string, glyph: string, description: string,
  *   newParams?: () => LeafParams,
+ *   newTab?: (params: LeafParams) => LeafParams,
  *   mount(body: HTMLElement, ctx: WidgetContext): { destroy(): void, paramsChanged?(): void } }} WidgetDef
  */
 

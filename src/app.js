@@ -4,7 +4,7 @@
  * The layout is this window's screen of its workspace (workspace/screen.js), which the daemon
  * keeps; the app starts once the screen is claimed and loaded.
  */
-import { activateTab, applyDrop, branch, findLeaf, insertBeside, listLeaves, moveLeaf, removeLeaf, setLeafParams } from './layout/grid-model.js';
+import { activateTab, addTab, applyDrop, branch, findLeaf, insertBeside, listLeaves, moveLeaf, removeLeaf, setLeafParams } from './layout/grid-model.js';
 import { computeLayout } from './layout/compute-layout.js';
 import { findNeighbor, DIRECTION_KEYS } from './layout/neighbors.js';
 import { createAtom } from './state/atom.js';
@@ -21,7 +21,8 @@ import { sessionLinks } from './sessions/links.js';
 import { createZoomControl } from './ui/zoom.js';
 import { createConfigMenu } from './ui/settings.js';
 import { createSpotlight } from './ui/spotlight.js';
-import { button, crossIcon, el } from './ui/dom.js';
+import { button, el } from './ui/dom.js';
+import { crossIcon, plusIcon } from './ui/icons.js';
 import { getDaemon } from './daemon/client.js';
 import { openScreen } from './workspace/screen.js';
 import { describeWindows } from './workspace/model.js';
@@ -155,12 +156,21 @@ export async function createApp(root) {
     const tabs = el('div', 'widget-tabs');
     tabs.setAttribute('role', 'tablist');
     tabs.setAttribute('aria-label', 'Windows here');
+    // A widget that opens more of its kind as tabs (registry.js `newTab`) has a + after its title.
+    /** @type {HTMLElement[]} */
+    const plus = [];
+    if (def?.newTab) {
+      const add = button('widget-plus');
+      add.append(plusIcon());
+      add.setAttribute('aria-label', `New ${title} here`);
+      plus.push(add);
+    }
     // The widget's own controls for the window, before its close button.
     const actions = el('div', 'widget-actions');
     const close = button('widget-close');
     close.append(crossIcon());
     close.setAttribute('aria-label', `Close ${title}`);
-    head.append(grip, glyph, heading, tabs, actions, close);
+    head.append(grip, glyph, heading, tabs, ...plus, actions, close);
 
     const body = el('div', 'widget-body');
     body.id = panelId(leaf.id);
@@ -421,6 +431,15 @@ export async function createApp(root) {
   /** @param {string} id */
   const closeWindow = (id) => api.commitTree(removeLeaf(layoutAtom.get(), id), { animate: true });
 
+  /** Opens another window of window `id`'s kind as a tab beside it, as its `newTab` says. @param {string} id */
+  function newTabBeside(id) {
+    const tree = layoutAtom.get();
+    const leaf = tree && findLeaf(tree, id);
+    const make = leaf && WIDGETS[leaf.widget]?.newTab;
+    if (!leaf || !make) return;
+    api.commitTree(addTab(tree, id, newWidgetLeaf(leaf.widget, make(leaf.params ?? {}))), { animate: true });
+  }
+
   /** @param {Event} event */
   const windowAt = (event) => /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest?.('.widget'))?.dataset.id ?? null;
   for (const type of ['pointerdown', 'focusin']) {
@@ -460,7 +479,7 @@ export async function createApp(root) {
   gridEl.addEventListener('pointerdown', (event) => {
     const target = /** @type {Element} */ (event.target);
     const head = target.closest('.widget-head');
-    if (!head || isStacked() || target.closest('.widget-close, .widget-actions, .widget-tab-close')) return;
+    if (!head || isStacked() || target.closest('.widget-close, .widget-plus, .widget-actions, .widget-tab-close')) return;
     const tab = tabAt(target);
     if (tab && event.button === 1) event.preventDefault(); // a middle click closes it, never scrolls
     if (event.button !== 0) return;
@@ -478,7 +497,9 @@ export async function createApp(root) {
     if (tab && target.closest('.widget-tab-close')) return closeWindow(/** @type {string} */ (tab.dataset.id));
     if (tab) return showTab(/** @type {string} */ (tab.dataset.id));
     const close = target.closest('.widget-close');
-    if (close) closeWindow(/** @type {string} */ (/** @type {HTMLElement} */ (close.closest('.widget')).dataset.id));
+    if (close) return closeWindow(/** @type {string} */ (/** @type {HTMLElement} */ (close.closest('.widget')).dataset.id));
+    const add = target.closest('.widget-plus');
+    if (add) newTabBeside(/** @type {string} */ (/** @type {HTMLElement} */ (add.closest('.widget')).dataset.id));
   });
 
   gridEl.addEventListener('auxclick', (event) => {
