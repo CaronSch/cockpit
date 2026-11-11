@@ -454,7 +454,8 @@
 }
 
 /* Back to the latest (omp.js `drawJump`): a small round arrow over the transcript's foot, shown
-   once scrolled up; its ring says how the agent is doing. */
+   once scrolled up; drawn as SVG (ring and arrow), so both are smooth and centred. Its ring
+   spins in the accent while the agent works. */
 .omp-jump-wrap {
   position: relative;
   z-index: 3;
@@ -467,8 +468,6 @@
   bottom: var(--space-2);
   left: 50%;
   translate: -50% 0;
-  display: grid;
-  place-items: center;
   width: 28px;
   height: 28px;
   padding: 0;
@@ -478,40 +477,61 @@
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
   color: var(--color-text);
-  font: 600 14px / 1 var(--font-ui);
   cursor: pointer;
 }
 
-.omp-jump::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border: 1.5px solid var(--color-line-strong);
-  border-radius: 50%;
-  corner-shape: round;
+.omp-jump svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.omp-jump:hover {
-  background: var(--color-hover-solid, var(--color-surface-raised));
+.omp-jump-track,
+.omp-jump-ring {
+  stroke-width: 1.25;
 }
 
-.omp-jump.is-done::before {
-  border-color: var(--color-unread);
+.omp-jump-track {
+  stroke: var(--color-line-strong);
 }
 
-.omp-jump.is-asking::before {
-  border-color: var(--color-warn);
+.omp-jump-ring {
+  stroke: none;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
-.omp-jump.is-working::before {
-  border-color: color-mix(in oklch, var(--color-accent) 25%, transparent);
-  border-top-color: var(--color-accent);
+.omp-jump-arrow {
+  stroke: currentcolor;
+  stroke-width: 1.75;
+}
+
+.omp-jump:hover .omp-jump-track {
+  stroke: var(--color-text-faint);
+}
+
+.omp-jump.is-working .omp-jump-track {
+  stroke: color-mix(in oklch, var(--color-accent) 30%, transparent);
+}
+
+.omp-jump.is-working .omp-jump-ring {
+  stroke: var(--color-accent);
+  stroke-dasharray: 20 62;
   animation: omp-jump-spin 0.9s linear infinite;
 }
 
 @keyframes omp-jump-spin {
   to {
     rotate: 1turn;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omp-jump.is-working .omp-jump-ring {
+    animation: none;
   }
 }
 
@@ -923,45 +943,47 @@
   border-top: 1px solid var(--color-line);
 }
 
-/* A collapsed row opens from its arrow and words only, not from the empty width beside them. */
+/* A collapsed row: no marker; it brightens under the pointer and opens on a click on its words
+   (not the empty width beside them). Opened, what it holds hangs off a thin rule under it. */
 .omp details > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   width: fit-content;
   max-width: 100%;
+  color: var(--color-text-dim);
   cursor: pointer;
   list-style: none;
+  transition: color var(--duration-fast);
 }
 
 .omp details > summary::-webkit-details-marker {
   display: none;
 }
 
-.omp details > summary::before {
-  content: '▸';
-  display: inline-block;
-  width: 1em;
-  color: var(--color-text-faint);
-  transition: transform var(--duration-fast);
-}
-
-.omp details[open] > summary::before {
-  transform: rotate(90deg);
+.omp details > summary:hover,
+.omp details[open] > summary {
+  color: var(--color-text);
 }
 
 .omp details[open] {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
-.omp-thinking > summary,
-.omp-unrecognised > summary {
-  color: var(--color-text-faint);
+.omp-details-body,
+.omp-bash > :not(.omp-bash-head) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-left: 3px;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-line);
 }
 
 .omp-thinking-text {
-  margin-left: 0.5em;
-  padding-left: calc(0.5em + var(--space-1));
-  border-left: 1px solid var(--color-line-strong);
   color: var(--color-text-dim);
   white-space: pre-wrap;
 }
@@ -970,64 +992,52 @@
   color: var(--color-accent);
 }
 
-/* Tool calls and shell runs: a header line, then what they took and gave, indented under it. */
-.omp-tool > :not(summary),
-.omp-work > :not(summary),
-.omp-bash > :not(.omp-bash-head) {
-  margin-left: 1em;
-}
-
-/* A stretch of folded work (Compact work): one line, its status coloured as a tool's. */
-.omp-work > summary {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-.omp-work-summary {
+/* A stretch of folded work: what it did, in a line; a step that failed says so in red. */
+.omp-work-summary,
+.omp-tool-summary {
   min-width: 0;
   overflow: hidden;
-  color: var(--color-text-dim);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.omp-tool > summary {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-width: 0;
+.omp-work-failed {
+  flex: none;
+  color: var(--color-danger);
 }
 
 .omp-tool-name {
+  flex: none;
+  color: var(--color-text);
   font-weight: 500;
 }
 
 .omp-tool-summary {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-dim);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.omp-status {
   color: var(--color-text-faint);
 }
 
-.is-running > summary .omp-status,
-.omp-bash.is-running .omp-status {
-  color: var(--color-accent);
-}
-
-.is-ok > summary .omp-status,
-.omp-bash.is-ok .omp-status {
-  color: var(--color-ok);
-}
-
-.is-error > summary .omp-status,
-.omp-bash.is-error .omp-status {
+.omp-tool.is-error .omp-tool-name,
+.omp-bash.is-error .omp-bash-cmd {
   color: var(--color-danger);
+}
+
+/* A step still running: the toolbar's spinner, small, before it. */
+.omp-spin {
+  flex: none;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  corner-shape: round;
+  animation: omp-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omp-spin {
+    animation: none;
+  }
 }
 
 .omp-bash {

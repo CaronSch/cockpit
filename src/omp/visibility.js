@@ -1,6 +1,6 @@
 /**
- * Which transcript items an agent pane shows: everything; everything with the work folded
- * (`compactWork`); or only prompts and responses: what the user said and ran, and what the
+ * Which transcript items an agent pane shows: everything, each stretch of work folded into one
+ * line (`compactWork`); or only prompts and responses: what the user said and ran, and what the
  * agent finally answered, without the work in between. A view over `transcript.js` items, computed at render time: switching back
  * shows everything again, because nothing is ever removed from the transcript.
  *

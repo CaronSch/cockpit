@@ -18,7 +18,7 @@
  * Restore. An archived one shows as any other, to read: carrying it on means restoring it. One whose agent is working is not archived until it is done. A new session
  * nothing was sent to has no journal yet: archiving it ends it, and it is gone, not archived.
  *
- * A conversation with news its user has not read (daemon/unread.js) has a green dot and a bold
+ * A conversation with news its user has not read (daemon/unread.js) has an indigo dot and a bold
  * title, archived or not, and the window's top bar counts those it lists. Showing one from
  * here reads it. Each row's menu (a right-click, the ContextMenu key, Shift+F10, or its ⋯
  * button) marks it read or unread, beside the row's other actions.
