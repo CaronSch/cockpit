@@ -31,7 +31,10 @@ const FOUND = 30;
  */
 export function createSpotlight({ daemon, show }) {
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
-  const open = button('btn spotlight-open', `Search ${mac ? '⌘K' : 'Ctrl+K'}`, () => toggle());
+  const open = button('btn spotlight-open', undefined, () => toggle());
+  open.append(el('span', '', 'Search'), el('kbd', 'spotlight-key', mac ? '⌘K' : 'Ctrl+K'));
+  open.setAttribute('aria-label', 'Search');
+  open.setAttribute('aria-keyshortcuts', mac ? 'Meta+K' : 'Control+K');
   open.title = 'Find a conversation: type words, or ask where something was said';
 
   const dialog = el('dialog', 'spotlight');
