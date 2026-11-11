@@ -52,6 +52,7 @@ import { nameFork } from './fork-title.js';
 import { loadSettings } from './settings.js';
 import { createSetup, ompVersion } from './setup.js';
 import { createTerminals } from './terminals.js';
+import { RESTART_AFTER_MS, noteInterrupted, startSuccessor, wakeInterrupted } from './restart.js';
 
 const ROOT = resolve(import.meta.dir, '..');
 
@@ -115,7 +116,11 @@ const hub = createHub({
   onRewoundId: (from, to) => void forks.moved(from, to),
   onTurnEnded: decisions.turnEnded,
   // "I have ADHD" adds its rules to every agent's system prompt; the browser choice, its environment.
-  launchWith: () => ({ appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd), env: browserEnv(settings.all().browser) }),
+  // An agent's shell also knows which daemon it runs under, so `bun run restart` reaches it.
+  launchWith: () => ({
+    appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd),
+    env: { ...browserEnv(settings.all().browser), COCKPIT_PORT: String(port), COCKPIT_STATE_DIR: stateDir },
+  }),
   // Every agent may schedule prompts for its own conversation.
   hostTools: scheduleTools(() => schedule),
 });
@@ -166,6 +171,7 @@ const daemon = createDaemon({
   remote,
   terminals,
   ask: (question) => askAgent(question, { ompPath, history }),
+  restart,
   token,
   root: ROOT,
   config: {
@@ -193,16 +199,31 @@ ompVersion(ompPath).then((version) =>
     version ? `omp: ${version}` : `omp: not found at "${ompPath}": install it (https://omp.sh), then follow Setup in the workbench`,
   ),
 );
+// The agents a restart (`bun run restart`) cut short carry on.
+void wakeInterrupted(stateDir, delivery.deliver);
 
 let stopping = false;
-async function shutdown() {
+/** Stops the daemon, as Ctrl+C does; with `successor`, starts it again once stopped (restart.js). */
+async function shutdown(successor = false) {
   if (stopping) return process.exit(1); // second Ctrl+C: stop waiting
   stopping = true;
   void server.stop(true);
   void remote.stop();
   setup.login.cancel();
   await Promise.all([hub.closeAll(), terminals.closeAll()]);
+  if (successor) startSuccessor(stateDir);
   process.exit(0);
 }
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => shutdown());
+process.on('SIGTERM', () => shutdown());
+
+/** Restarts the daemon (`POST /api/restart`), noting the agents it cuts short so they carry on after. */
+function restart() {
+  if (stopping) return;
+  setTimeout(async () => {
+    const working = hub.list().flatMap((m) => (m.sessionFile && hub.working(m.id) ? [{ sessionFile: m.sessionFile, cwd: m.cwd }] : []));
+    await noteInterrupted(stateDir, working).catch((err) => console.error('[daemon] could not note the agents the restart interrupts:', err));
+    console.log(`Restarting; the daemon's output goes to ${join(stateDir, 'daemon.log')} from now on`);
+    await shutdown(true);
+  }, RESTART_AFTER_MS);
+}

@@ -70,6 +70,8 @@ let setup;
 let remote;
 /** The suite's terminals: plain `sh`, whatever the user's shell. @type {import('../daemon/terminals.js').Terminals} */
 let terminals;
+/** How many times the suite's daemon was asked to restart (`POST /api/restart`). */
+let restarts = 0;
 /** What the suite's daemon is made of, for other daemons on the same sessions. @type {DaemonOptions} */
 let daemonOptions;
 /** The file the fake Tailscale's `status --json` prints. */
@@ -240,6 +242,7 @@ beforeAll(async () => {
     remote,
     terminals,
     ask: (question) => askAgent(question, { ompPath: FAKE_OMP, history }),
+    restart: () => restarts++,
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
@@ -307,6 +310,15 @@ describe('loopback guard', () => {
       assert.equal(res.status, 403, `Origin ${name}`);
     }
     assert.equal(hub.list().length, sessionsBefore);
+  });
+
+  test('the daemon restarts, ending every agent, only with the token cookie and the page’s own Origin', async () => {
+    assert.equal((await call({ method: 'POST', path: '/api/restart', auth: false })).status, 401);
+    assert.equal((await call({ method: 'POST', path: '/api/restart', headers: { origin: 'http://evil.example' } })).status, 403);
+    assert.equal((await call({ method: 'POST', path: '/api/restart', origin: false })).status, 403);
+    assert.equal(restarts, 0);
+    assert.equal((await call({ method: 'POST', path: '/api/restart' })).status, 202);
+    assert.equal(restarts, 1);
   });
 
   test('a shell starts, and is typed into, only with the token cookie and the page’s own Origin', async () => {
