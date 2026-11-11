@@ -39,7 +39,7 @@ export function todoPhases(value) {
  * with nothing to do. A status omp adds later counts as not done.
  * @param {readonly TodoPhase[]} phases @returns {TodoProgress | null}
  */
-export function todoProgress(phases) {
+function todoProgress(phases) {
   const tasks = phases.flatMap((phase) => phase.tasks).filter((task) => task.status !== 'abandoned');
   if (tasks.length === 0) return null;
   return {

@@ -6,9 +6,9 @@
  */
 
 /** The scale's knee: up to about this far ahead the scale is near linear, beyond it logarithmic. */
-export const KNEE_MS = 10 * 60_000;
+const KNEE_MS = 10 * 60_000;
 /** The least the future side spans: a day, so a lone prompt in ten minutes is not at the far end. */
-export const MIN_SPAN_MS = 24 * 3_600_000;
+const MIN_SPAN_MS = 24 * 3_600_000;
 
 /**
  * How far along the future side `ms` from now sits: 0 at now, 1 at `span`, on a log scale.

@@ -73,7 +73,7 @@ export function indent(text, start, end) {
  * @param {string} text @param {number} start @param {number} end
  * @returns {IndentEdit | null} null when no line starts indented
  */
-export function outdent(text, start, end) {
+function outdent(text, start, end) {
   return editLines(text, start, end, (line) => ({ add: '', remove: line.startsWith('\t') ? 1 : leadingSpaces(line.slice(0, INDENT.length)) }));
 }
 
@@ -83,7 +83,7 @@ export function outdent(text, start, end) {
  * @param {string} text @param {number} start @param {number} end
  * @returns {IndentEdit | null} null when Backspace should delete as usual
  */
-export function unindent(text, start, end) {
+function unindent(text, start, end) {
   if (start !== end) return null;
   const lineStart = text.lastIndexOf('\n', start - 1) + 1;
   const before = text.slice(lineStart, start);

@@ -41,6 +41,7 @@ button {
   corner-shape: squircle;
 }
 
+input[type='radio'],
 .config-setting input,
 .config-setting input::before,
 .omp-activity::before,
@@ -503,18 +504,31 @@ button {
   background: white;
 }
 
-/* One of a choice: a ring, filled with a dot while picked, in the toggle's column. */
-.config-setting input[type='radio'] {
-  justify-self: center;
+/* A choice of one, anywhere (Config, an agent's questions): no ring, a soft disc that turns the
+   accent, with a white centre, once picked. */
+input[type='radio'] {
+  flex: none;
   width: 14px;
   height: 14px;
-  border: 1.5px solid var(--color-line-focus);
+  margin: 0;
+  border: 0;
   border-radius: 50%;
+  appearance: none;
+  background: oklch(100% 0 0 / 0.1);
+  cursor: pointer;
+  transition: background var(--duration-fast);
 }
 
-.config-setting input[type='radio']:checked {
-  border-color: var(--color-accent-fill);
-  background: radial-gradient(var(--color-accent-fill) 0 3.5px, transparent 4px);
+input[type='radio']:hover {
+  background: oklch(100% 0 0 / 0.16);
+}
+
+input[type='radio']:checked {
+  background: radial-gradient(var(--color-accent-ink) 0 2.5px, transparent 3px), var(--color-accent-fill);
+}
+
+.config-setting input[type='radio'] {
+  justify-self: center;
 }
 
 .config-detail {
@@ -867,10 +881,10 @@ button {
 
 /* Inset, because `contain: strict` clips anything painted outside the frame. */
 .widget.is-unread {
-  border-color: var(--color-unread);
+  border-color: var(--color-accent);
   box-shadow:
-    inset 0 0 0 1px var(--color-unread),
-    inset 0 0 0 4px color-mix(in oklch, var(--color-unread) 12%, transparent);
+    inset 0 0 0 1px var(--color-accent),
+    inset 0 0 0 4px color-mix(in oklch, var(--color-accent) 12%, transparent);
 }
 
 /* The windows a Sessions row points at (ctx.outline): inset, as above, so nothing

@@ -40,7 +40,7 @@ const SETTLE_MS = 1000;
  * the turn back or stops to ask its user something.
  * @param {SessionEvent} event @param {boolean} replayed @returns {Alert | null}
  */
-export function alertFor(event, replayed) {
+function alertFor(event, replayed) {
   if (replayed || event.kind !== 'frame' || !awaitsUser(event)) return null;
   const frame = /** @type {Record<string, any>} */ (event.frame);
   if (frame.type === 'agent_end') return { kind: 'done', question: null };
@@ -49,7 +49,7 @@ export function alertFor(event, replayed) {
 }
 
 /** The notification's text under the session's name. @param {Alert} alert */
-export const alertText = (alert) => (alert.kind === 'done' ? 'Finished' : alert.question ? `Needs your input: ${alert.question}` : 'Needs your input');
+const alertText = (alert) => (alert.kind === 'done' ? 'Finished' : alert.question ? `Needs your input: ${alert.question}` : 'Needs your input');
 
 /**
  * Whether the user is looking at a conversation here: this tab is in front and focused, and

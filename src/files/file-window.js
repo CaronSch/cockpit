@@ -13,14 +13,14 @@
  * param is set, so a window it is dropped on shows only it.
  * @param {string} path @param {number | null} line @returns {LeafParams}
  */
-export const fileParams = (path, line) => ({ path, line });
+const fileParams = (path, line) => ({ path, line });
 
 /**
  * `path` as written in text, made absolute: a relative one is in `cwd` (the conversation's
  * directory), or from home when there is none, as the daemon reads it.
  * @param {string} path @param {string | null} cwd
  */
-export const placedPath = (path, cwd) => (/^[~/]/.test(path) || !cwd ? path : `${cwd.replace(/\/$/, '')}/${path.replace(/^\.\//, '')}`);
+const placedPath = (path, cwd) => (/^[~/]/.test(path) || !cwd ? path : `${cwd.replace(/\/$/, '')}/${path.replace(/^\.\//, '')}`);
 
 /**
  * Lets the text files named in `root`'s text be clicked open or dragged out as file windows.

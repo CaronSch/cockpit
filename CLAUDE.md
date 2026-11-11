@@ -401,7 +401,7 @@ What runs today:
   under it, when; they stack in as many lanes as the window is tall enough for, a stem down to
   their time, and past that one goes on beside the one before it, its stem bent back along the
   axis; a missed one is marked so. A label is the start of its conversation's name; a conversation with news its user has not read (a
-  scheduled prompt that ran, say) is ringed in blue, as an unread window is, until it is read
+  scheduled prompt that ran, say) is ringed in the accent, as an unread window is, until it is read
   anywhere. Dragged onto the grid, a label opens its conversation as a Sessions row does; while
   one is dragged a bin shows over the axis (the drag controller's `target`), which archives the
   conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a

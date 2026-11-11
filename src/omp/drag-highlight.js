@@ -21,7 +21,7 @@ import { snappedRange } from '../ui/word-snap.js';
  * overlap vertically by more than half the shorter one's height. Empty boxes are dropped.
  * @param {Iterable<Box>} boxes @returns {Box[]} top to bottom
  */
-export function lineBoxes(boxes) {
+function lineBoxes(boxes) {
   /** @type {Box[]} */
   const lines = [];
   for (const box of boxes) {

@@ -136,7 +136,7 @@ export class DaemonError extends Error {
  * @param {{ scoped?: boolean }} [options] scoped: hear only the sessions subscribed to (see above)
  * @returns {DaemonClient}
  */
-export function createDaemonClient(env = {}, { scoped = false } = {}) {
+function createDaemonClient(env = {}, { scoped = false } = {}) {
   const { fetch: doFetch, EventSource: Source, setTimeout: later } = {
     fetch: globalThis.fetch.bind(globalThis),
     EventSource: globalThis.EventSource,

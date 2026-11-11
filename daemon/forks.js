@@ -117,7 +117,7 @@ const SETTLED = new Set(['stop', 'length']);
  * @param {string} text
  * @returns {string | null}
  */
-export function settledJournal(text) {
+function settledJournal(text) {
   const lines = text.split('\n');
   /** @type {Map<Record<string, any>, number>} */
   const lineOf = new Map();

@@ -12,20 +12,20 @@
 import { tmpdir } from 'node:os';
 
 /** How long the title may take before the prompt's first words stand in for it. */
-export const FORK_TITLE_TIMEOUT_MS = 60_000;
+const FORK_TITLE_TIMEOUT_MS = 60_000;
 /** Titles stay short enough for a window's top bar. */
 const MAX_TITLE_CHARS = 60;
 /** The prompt is all the model needs of a fork; a long paste adds nothing to its title. */
 const MAX_PROMPT_CHARS = 4000;
 
-export const FORK_TITLE_SYSTEM_PROMPT =
+const FORK_TITLE_SYSTEM_PROMPT =
   'You title a fork of a coding-agent conversation: a copy of the conversation that goes on in a new direction, beside the original. ' +
   "You are given the original conversation's title and the first message sent in the fork. " +
   'Reply with the fork\'s title only: 2 to 6 words, sentence case, no quotes, no trailing punctuation, saying what the fork sets out to do. ' +
   "It must differ from the original's title: name what is new in the fork, not the shared topic.";
 
 /** What the title model reads: the source's title, then the fork's first prompt. @param {string} prompt @param {string | null} sourceTitle */
-export const forkTitleInput = (prompt, sourceTitle) =>
+const forkTitleInput = (prompt, sourceTitle) =>
   `Original conversation's title: ${sourceTitle?.trim() || '(untitled)'}\n\nFirst message in the fork:\n${prompt.trim().slice(0, MAX_PROMPT_CHARS)}`;
 
 /** `text` on one line, cut to fit a top bar. @param {string} text */
@@ -40,7 +40,7 @@ function oneLine(text) {
  * order); null when there is none.
  * @param {string} answer
  */
-export function parseForkTitle(answer) {
+function parseForkTitle(answer) {
   const line = answer
     .split('\n')
     .map((l) => l.trim())
