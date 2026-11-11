@@ -6,7 +6,7 @@
  * one of its screens, like an extra monitor, with a layout tree of its own.
  */
 import { listLeaves } from '../layout/grid-model.js';
-/** @import { Tree } from '../layout/grid-model.js' */
+/** @import { GridNode, Leaf, Tree } from '../layout/grid-model.js' */
 
 export const DEFAULT_WORKSPACE = 'main';
 /** A workspace name becomes a file name: lowercase only, since macOS disks ignore case. */
@@ -44,11 +44,15 @@ export const claimOrder = (remembered, saved) =>
  * @param {Tree} tree @param {() => string} [newId] @returns {Tree}
  */
 export function copyLayout(tree, newId = () => `w_${crypto.randomUUID().slice(0, 8)}`) {
-  /** @param {import('../layout/grid-model.js').GridNode} node @returns {import('../layout/grid-model.js').GridNode} */
-  const copy = (node) =>
-    node.kind === 'leaf'
-      ? { ...node, id: newId(), ...(node.params ? { params: { ...node.params } } : {}) }
-      : { ...node, children: node.children.map(copy), sizes: [...node.sizes] };
+  /** @param {Leaf} leaf @returns {Leaf} */
+  const copyLeaf = (leaf) => ({ ...leaf, id: newId(), ...(leaf.params ? { params: { ...leaf.params } } : {}) });
+  /** @param {GridNode} node @returns {GridNode} */
+  const copy = (node) => {
+    if (node.kind === 'leaf') return copyLeaf(node);
+    if (node.kind === 'branch') return { ...node, children: node.children.map(copy), sizes: [...node.sizes] };
+    const tabs = node.tabs.map(copyLeaf);
+    return { ...node, tabs, active: tabs[node.tabs.findIndex((t) => t.id === node.active)].id };
+  };
   return tree && copy(tree);
 }
 

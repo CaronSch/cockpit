@@ -9,7 +9,10 @@ import {
   insertAtEdge,
   removeLeaf,
   moveLeaf,
-  swapLeaves,
+  addTab,
+  activateTab,
+  moveTab,
+  findSlot,
   applyDrop,
   canDropInto,
   setSizes,
@@ -18,7 +21,7 @@ import {
   setLeafParams,
 } from '../src/layout/grid-model.js';
 
-/** @import { Tree, GridNode, Branch, Leaf } from '../src/layout/grid-model.js' */
+/** @import { Tree, GridNode, Branch, Leaf, Stack } from '../src/layout/grid-model.js' */
 
 /** Narrow to a branch, failing the test otherwise. @param {Tree | undefined} node @returns {Branch} */
 const asBranch = (node) => {
@@ -28,6 +31,11 @@ const asBranch = (node) => {
 /** Narrow to a leaf, failing the test otherwise. @param {GridNode | undefined} node @returns {Leaf} */
 const asLeaf = (node) => {
   assert.ok(node?.kind === 'leaf', 'expected a leaf');
+  return node;
+};
+/** Narrow to a stack, failing the test otherwise. @param {GridNode | null | undefined} node @returns {Stack} */
+const asStack = (node) => {
+  assert.ok(node?.kind === 'stack', 'expected a stack');
   return node;
 };
 /** @param {Tree} tree */
@@ -124,7 +132,7 @@ describe('removeLeaf', () => {
   });
 });
 
-describe('moveLeaf / swapLeaves', () => {
+describe('moveLeaf', () => {
   test('moves a leaf beside another target', () => {
     const tree = branch('row', [leaf('a', 'x'), leaf('b', 'x'), leaf('c', 'x')]);
     const next = moveLeaf(tree, 'a', 'c', 'right');
@@ -136,12 +144,74 @@ describe('moveLeaf / swapLeaves', () => {
     assert.equal(moveLeaf(tree, 'a', 'a', 'left'), tree);
   });
 
-  test('center drop swaps widgets without changing geometry', () => {
-    const tree = branch('row', [leaf('a', 'log'), leaf('b', 'clock')], [0.7, 0.3]);
+  test('center drop stacks the window onto the target as its shown tab', () => {
+    const tree = branch('row', [leaf('a', 'log'), leaf('b', 'clock'), leaf('c', 'x')], [0.2, 0.5, 0.3]);
     const next = asBranch(moveLeaf(tree, 'a', 'b', 'center'));
-    assert.deepEqual(ids(next), ['b', 'a']);
     assert.deepEqual(next.sizes, [0.7, 0.3]);
-    assert.deepEqual(swapLeaves(tree, 'a', 'b'), next);
+    assert.deepEqual(asStack(next.children[0]), { kind: 'stack', tabs: [leaf('b', 'clock'), leaf('a', 'log')], active: 'a' });
+  });
+});
+
+describe('stacks', () => {
+  const stacked = () => branch('row', [leaf('a', 'x'), { kind: 'stack', tabs: [leaf('b', 'x'), leaf('c', 'x'), leaf('d', 'x')], active: 'c' }]);
+
+  test('every tab is a window of the tree', () => {
+    assert.deepEqual(ids(stacked()), ['a', 'b', 'c', 'd']);
+    assert.equal(findSlot(stacked(), 'd')?.kind, 'stack');
+    assert.equal(isValidTree(stacked()), true);
+  });
+
+  test('closing the shown tab shows the next one, else the one before; one left is a plain window', () => {
+    assert.equal(asStack(asBranch(removeLeaf(stacked(), 'c')).children[1]).active, 'd');
+    const lastShown = activateTab(stacked(), 'd');
+    assert.equal(asStack(asBranch(removeLeaf(lastShown, 'd')).children[1]).active, 'c');
+    const one = asBranch(removeLeaf(removeLeaf(stacked(), 'b'), 'c'));
+    assert.deepEqual(one.children[1], leaf('d', 'x'));
+    assert.deepEqual(one.sizes, [0.5, 0.5], 'the slot keeps its size');
+  });
+
+  test('moveTab puts a tab at an index among the others, and is a no-op in place', () => {
+    const tree = stacked();
+    assert.deepEqual(ids(moveTab(tree, 'b', 2)), ['a', 'c', 'd', 'b']);
+    assert.deepEqual(ids(moveTab(tree, 'd', 0)), ['a', 'd', 'b', 'c']);
+    assert.equal(moveTab(tree, 'c', 1), tree);
+  });
+
+  test('splitting beside a tab splits beside its whole stack', () => {
+    const next = asBranch(insertBeside(stacked(), 'b', 'down', leaf('n', 'x')));
+    const col = asBranch(next.children[1]);
+    assert.equal(col.axis, 'col');
+    assert.equal(asStack(col.children[0]).tabs.length, 3);
+    assert.deepEqual(col.children[1], leaf('n', 'x'));
+  });
+
+  test('a tab moved to an edge of its own stack leaves it for a slot beside it', () => {
+    const next = asBranch(moveLeaf(stacked(), 'c', 'c', 'right'));
+    assert.deepEqual(ids(next), ['a', 'b', 'd', 'c']);
+    assert.equal(asStack(next.children[1]).active, 'd');
+    const tree = stacked();
+    assert.equal(moveLeaf(tree, 'c', 'b', 'center'), tree, 'into its own stack: nothing moves');
+  });
+
+  test('applyDrop into tabs: reorders within a stack, joins another at the index', () => {
+    const tree = stacked();
+    const reordered = applyDrop(tree, { source: { kind: 'move', id: 'b' }, target: { kind: 'tab', id: 'c', index: 1 }, dir: 'center' });
+    assert.deepEqual(ids(reordered), ['a', 'c', 'b', 'd']);
+    const joined = asStack(applyDrop(tree, { source: { kind: 'move', id: 'a' }, target: { kind: 'tab', id: 'c', index: 0 }, dir: 'center' }));
+    assert.deepEqual(joined.tabs.map((t) => t.id), ['a', 'b', 'c', 'd']);
+    assert.equal(joined.active, 'a');
+    const fresh = asStack(applyDrop(leaf('a', 'x'), { source: { kind: 'new', leaf: leaf('n', 'y') }, target: { kind: 'leaf', id: 'a' }, dir: 'center' }));
+    assert.deepEqual(fresh.tabs.map((t) => t.id), ['a', 'n']);
+    assert.deepEqual(addTab(leaf('a', 'x'), 'a', leaf('n', 'y'), 0), { kind: 'stack', tabs: [leaf('n', 'y'), leaf('a', 'x')], active: 'n' });
+  });
+
+  test('isValidTree rejects malformed stacks', () => {
+    const stack = (/** @type {unknown} */ tabs, active = 'a') => ({ kind: 'stack', tabs, active });
+    assert.equal(isValidTree(stack([leaf('a', 'x')])), false, 'one tab');
+    assert.equal(isValidTree(stack([leaf('a', 'x'), leaf('b', 'x')], 'z')), false, 'shows none of its tabs');
+    assert.equal(isValidTree(stack([leaf('a', 'x'), branch('row', [leaf('b', 'x'), leaf('c', 'x')])])), false, 'a branch as a tab');
+    const children = [leaf('a', 'x'), stack([leaf('a', 'x'), leaf('b', 'x')])];
+    assert.equal(isValidTree({ kind: 'branch', axis: 'row', children, sizes: [0.5, 0.5] }), false, 'duplicate ids');
   });
 });
 
@@ -179,7 +249,8 @@ describe('applyDrop', () => {
     assert.equal(canDropInto(tree, { kind: 'new', leaf: shown, into: true }, 'a'), true);
     assert.equal(canDropInto(tree, { kind: 'new', leaf: shown }, 'a'), false, 'only when asked for');
     assert.equal(canDropInto(tree, { kind: 'new', leaf: leaf('n', 'other'), into: true }, 'a'), false, 'only onto its own type');
-    assert.equal(applyDrop(tree, { source: { kind: 'new', leaf: shown }, target: { kind: 'leaf', id: 'a' }, dir: 'center' }), tree);
+    const stacked = applyDrop(tree, { source: { kind: 'new', leaf: shown }, target: { kind: 'leaf', id: 'a' }, dir: 'center' });
+    assert.deepEqual(ids(stacked), ['a', 'n', 'b'], 'otherwise it stacks');
   });
 
   test('handles a drop into an empty grid', () => {
@@ -224,11 +295,11 @@ describe('leaf params', () => {
     assert.equal(setLeafParams(tree, 'missing', { session: 's3' }), tree);
   });
 
-  test('params travel with their window through moves and swaps', () => {
+  test('params travel with their window through moves and stacking', () => {
     const bound = { ...leaf('a', 'omp'), params: { session: 's1' } };
     const tree = branch('row', [bound, leaf('b', 'x'), leaf('c', 'x')]);
     assert.deepEqual(findLeaf(moveLeaf(tree, 'a', 'c', 'down'), 'a')?.params, { session: 's1' });
-    assert.deepEqual(findLeaf(swapLeaves(tree, 'a', 'b'), 'a')?.params, { session: 's1' });
+    assert.deepEqual(findLeaf(moveLeaf(tree, 'a', 'b', 'center'), 'a')?.params, { session: 's1' });
   });
 
   test('isValidTree accepts flat JSON params and rejects anything else', () => {

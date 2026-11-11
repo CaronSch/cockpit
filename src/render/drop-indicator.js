@@ -2,7 +2,8 @@
  * Landing preview for drag & drop, plus the sash snap guide.
  *
  * Both layers cover the whole grid; the visible rect is carved out with
- * `clip-path: inset()`, which transitions without triggering layout.
+ * `clip-path: inset()`, which transitions without triggering layout. A drop into a window's
+ * tabs also shows a caret in its head where the tab goes.
  */
 
 /** @import { Axis } from '../layout/grid-model.js' */
@@ -30,13 +31,14 @@ export function createDropIndicator(gridEl) {
   const edge = /** @type {HTMLElement} */ (root.querySelector('.drop-edge'));
   const fill = /** @type {HTMLElement} */ (root.querySelector('.drop-fill'));
   const label = /** @type {HTMLElement} */ (root.querySelector('.drop-label'));
+  const caret = /** @type {HTMLElement} */ (root.querySelector('.drop-caret'));
   const guide = /** @type {HTMLElement} */ (gridEl.querySelector('.snap-guide'));
 
   let lastKey = '';
 
-  /** @param {Rect} rect @param {Rect} bounds @param {string} text */
-  function show(rect, bounds, text) {
-    const key = `${rect.x},${rect.y},${rect.w},${rect.h}|${text}`;
+  /** @param {Rect} rect @param {Rect} bounds @param {string} text @param {Rect | null} [tab] where a tab goes */
+  function show(rect, bounds, text, tab = null) {
+    const key = `${rect.x},${rect.y},${rect.w},${rect.h}|${text}|${tab ? `${tab.x},${tab.y},${tab.h}` : ''}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -48,6 +50,12 @@ export function createDropIndicator(gridEl) {
     fill.style.clipPath = insetFor(rect, bounds, BORDER);
     label.textContent = text;
     label.style.transform = `translate3d(${rect.x + LABEL_OFFSET}px, ${rect.y + LABEL_OFFSET}px, 0)`;
+    caret.classList.toggle('is-visible', tab !== null);
+    if (tab) {
+      caret.style.transform = `translate3d(${tab.x}px, ${tab.y}px, 0)`;
+      caret.style.width = `${tab.w}px`;
+      caret.style.height = `${tab.h}px`;
+    }
     root.classList.add('is-visible');
 
     if (entering) requestAnimationFrame(() => root.classList.remove('is-entering'));

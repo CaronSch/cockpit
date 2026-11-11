@@ -121,7 +121,21 @@ Planned capabilities:
 What runs today:
 
 - The split-tree window grid: windows (widgets) are dragged, dropped, split and
-  resized with magnetic snapping. Each browser window is a screen of its
+  resized with magnetic snapping. Windows also stack: several share one slot as tabs
+  (a `stack` node of the tree, its windows in tab order and the one shown, each keeping
+  its id and settings). A window, a palette widget or anything else that opens one, dropped
+  on another window's middle, joins it as the last tab, unless that window takes what is
+  dropped there (a conversation dragged onto an agent window, a file onto a file window or a
+  pull request onto a pull request window shows there); dropped on a window's head, it joins
+  where the pointer is between its tabs, whatever the window. The window shown carries the
+  strip in its head in place of its title: each tab its glyph and name (an agent's
+  conversation), an indigo dot while unread, a × on hover and on the shown one; its own
+  head actions and close act on it. A click shows a tab, a middle click or its × closes it, a
+  drag along the strip reorders and out of it moves the window (an edge of its own slot
+  splits it out); arrows, Home and End move between tabs and show them, Delete closes one.
+  The windows behind stay mounted, hidden and inert, so nothing in them ends or forgets
+  its scroll; a stack closed down to one window is a plain window again, and the narrow
+  column shows every tab as a window of its own. Each browser window is a screen of its
   workspace, saved by the daemon; the top bar's switcher says which screen this
   window is, lists every screen with what it holds and where it is open, and opens
   one that is open nowhere in this window (a reload, so its agents keep running)
@@ -699,6 +713,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/phone.js` — The phone page (`/phone`, phone.html): the Sessions list, then one conversation full screen, then Back, for a phone reaching the daemon over its owner's tailnet (daemon/remote.js).
 - `src/render/drop-indicator.js` — Landing preview for drag & drop, plus the sash snap guide.
 - `src/render/grid-renderer.js` — Imperative, diffed DOM writer for the grid.
+- `src/render/tab-strip.js` — Tab strips of stacked windows: the window a stack shows carries, in place of its title, a tab for each window of the stack (its glyph and title, a dot while it is unread), the one shown marked.
 - `src/scratchpad/blocks.js` — A scratchpad's text as blocks to edit: runs of text, and the images and files it references, kept free of the DOM so the round trip can be tested.
 - `src/scratchpad/store.js` — The page's copy of one scratchpad: every window in the page showing that pad edits this one object, so they agree as you type; it saves to the daemon after a pause and follows what other pages save.
 - `src/sessions/links.js` — Which agent windows of this screen show which conversations, so the Sessions window can mark its rows and point at their windows.

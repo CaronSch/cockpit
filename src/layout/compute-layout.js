@@ -12,7 +12,11 @@
  * @typedef {Rect & { path: number[], index: number, axis: Axis, pos: number, start: number, end: number,
  *   minBefore: number, minAfter: number }} Sash
  */
-/** @typedef {{ leaves: Map<string, Rect>, sashes: Sash[] }} Layout */
+/**
+ * `leaves`: every window's rect (a stack's tabs share their slot's); `hidden`: the tabs stacked
+ * behind the one their stack shows, which the renderer hides and drops never land on.
+ * @typedef {{ leaves: Map<string, Rect>, hidden: Set<string>, sashes: Sash[] }} Layout
+ */
 
 /** @param {number[]} xs */
 const sum = (xs) => xs.reduce((a, b) => a + b, 0);
@@ -24,7 +28,7 @@ const sum = (xs) => xs.reduce((a, b) => a + b, 0);
  */
 export function minSize(node, axis, opts) {
   if (!node) return 0;
-  if (node.kind === 'leaf') return axis === 'row' ? opts.minWidth : opts.minHeight;
+  if (node.kind !== 'branch') return axis === 'row' ? opts.minWidth : opts.minHeight;
   const mins = node.children.map((c) => minSize(c, axis, opts));
   return node.axis === axis ? sum(mins) + opts.gap * (mins.length - 1) : Math.max(...mins);
 }
@@ -49,6 +53,13 @@ function childEdges(node, start, total, gap) {
 function place(node, rect, path, opts, out) {
   if (node.kind === 'leaf') {
     out.leaves.set(node.id, rect);
+    return;
+  }
+  if (node.kind === 'stack') {
+    for (const tab of node.tabs) {
+      out.leaves.set(tab.id, rect);
+      if (tab.id !== node.active) out.hidden.add(tab.id);
+    }
     return;
   }
 
@@ -84,7 +95,7 @@ function place(node, rect, path, opts, out) {
 /** @param {Tree} tree @param {Rect} bounds @param {LayoutOptions} opts @returns {Layout} */
 export function computeLayout(tree, bounds, opts) {
   /** @type {Layout} */
-  const out = { leaves: new Map(), sashes: [] };
+  const out = { leaves: new Map(), hidden: new Set(), sashes: [] };
   if (tree) place(tree, bounds, [], opts, out);
   return out;
 }
