@@ -46,10 +46,10 @@ export function tableCopy(block, table) {
 
 /**
  * Reports a copy on `copy`'s label for a moment: `Copied`, or `Copy failed` with why as its
- * tooltip, before it reads `Copy` again.
- * @param {HTMLButtonElement} copy @returns {(label: string, title?: string) => void}
+ * tooltip, before it reads `rest` (`Copy`) again.
+ * @param {HTMLButtonElement} copy @param {string} [rest] @returns {(label: string, title?: string) => void}
  */
-export function copyReport(copy) {
+export function copyReport(copy, rest = 'Copy') {
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   let reset;
   return (label, title = '') => {
@@ -57,7 +57,7 @@ export function copyReport(copy) {
     copy.title = title;
     clearTimeout(reset);
     reset = setTimeout(() => {
-      copy.textContent = 'Copy';
+      copy.textContent = rest;
       copy.title = '';
     }, REPORT_MS);
   };

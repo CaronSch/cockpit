@@ -210,6 +210,15 @@ function renderImage(path, alt, options) {
   return a;
 }
 
+/** A file a prompt was sent with (message.js `splitAttachments`): an image as a thumbnail, anything else as its name. @param {string} path @returns {HTMLElement} */
+export function renderAttachment(path) {
+  const name = path.split('/').pop() ?? path;
+  if (/\.(png|jpe?g|gif|webp|avif)$/i.test(path)) return renderImage(path, name, {});
+  const chip = el('span', 'md-attachment', name);
+  chip.title = path;
+  return chip;
+}
+
 /**
  * Display math is a block of its own, scrolling sideways when wide, as a table does.
  * @param {string} tex @param {boolean} display @returns {HTMLElement}

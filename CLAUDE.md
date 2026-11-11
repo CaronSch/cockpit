@@ -136,7 +136,7 @@ What runs today:
   `src/omp/recent-dirs.js`), each start omp there with one click), chat with it from its
   structured event stream (streamed replies with Markdown, tables, TeX math as
   MathML, `mermaid` diagrams and `vega-lite` charts drawn once their fence closes
-  (`src/omp/visuals.js`: kept as SVG by source, live on hover; Vega's loader reads
+  (`src/omp/visuals.js`: kept as SVG by source, live on hover, in a card whose **Save** saves an SVG or PNG file or copies a PNG; Vega's loader reads
   only local files), and images on this machine, `![alt](/abs/path.png)`; images and
   chart data are served by `/api/file`, raster and data types only, sandboxed;
   nothing remote is ever fetched, so a URL can't carry out what an agent read), thinking,
@@ -218,7 +218,7 @@ What runs today:
   follow-up questions continue the same topic, one at a time; every question asks
   for an answer of at most three sentences); pasted text goes into the
   message box as typed, and pasted or dropped files are stored in
-  `~/.cockpit/attachments/` and sent as omp `@"<path>"` mentions. Typing `@`
+  `~/.cockpit/attachments/` and sent as omp `@"<path>"` mentions, which the prompt in the transcript shows as the files themselves (images as thumbnails, others by name: `splitAttachments`). Typing `@`
   suggests the entries of the session's directory, or of the folder the path after
   it names (`@src/`, `@../`, `@~/`, `@/abs`), filtered by what follows the last `/`;
   Tab completes (a folder opens on its contents), arrows, Enter or a click pick, and

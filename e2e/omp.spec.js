@@ -202,6 +202,17 @@ test('a reply draws its mermaid diagrams and vega-lite charts, reading data only
   await expect(inline.locator('.mark-rect path')).toHaveCount(2);
   await expect(fromFile.locator('.mark-rect path')).toHaveCount(3);
 
+  // Each saves: Save (on hover) downloads the drawing as SVG or PNG.
+  const card = reply.locator('.md-visual-block').first();
+  await card.hover();
+  const save = card.getByRole('button', { name: 'Save', exact: true });
+  for (const [item, name] of [['SVG file', 'diagram.svg'], ['PNG file', 'diagram.png']]) {
+    await save.click();
+    const downloaded = page.waitForEvent('download');
+    await page.getByRole('button', { name: item, exact: true }).click();
+    expect((await downloaded).suggestedFilename()).toBe(name);
+  }
+
   // Bars on a log scale are drawn: Vega-Lite would stack them from zero, which a log scale lacks.
   await send(pane, ['say: Log scale:', chart({ ...bars, encoding: { ...bars.encoding, y: { ...bars.encoding.y, scale: { type: 'log' } } }, data: { values: [{ build: 'a', p90: 15 }, { build: 'b', p90: 1000 }] } })].join('\n'));
   const logBars = pane.locator('.omp-assistant').last().locator('.mark-rect path');
@@ -1315,7 +1326,9 @@ test('pasted text is typing, however long; pasted or dropped files go with the n
   // A screenshot pasted from the clipboard shows as a thumbnail once stored.
   await draft.evaluate((node) => {
     const data = new DataTransfer();
-    data.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'image.png', { type: 'image/png' }));
+    // A real 1×1 PNG, so the transcript can show it as a picture once sent.
+    const png = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+    data.items.add(new File([png], 'image.png', { type: 'image/png' }));
     node.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   });
   const files = pane.locator('.omp-card.is-file');
@@ -1353,6 +1366,12 @@ test('pasted text is typing, however long; pasted or dropped files go with the n
   expect(paths[1]).toMatch(/-notes\.txt$/);
   expect(readFileSync(paths[1], 'utf8')).toBe('hello from a file');
   await expect(pane.locator('.omp-card')).toHaveCount(0);
+  // In the transcript the prompt shows its files, not their paths: the image as a thumbnail, the text file by name.
+  const prompt = pane.locator('.omp-user').last();
+  await expect(prompt.locator('.omp-attachments img')).toHaveCount(1);
+  await expect(prompt.locator('.md-attachment')).toHaveText(/-notes\.txt$/);
+  await expect(prompt.locator('.omp-md > p').first()).toHaveText('what are these?');
+  await expect(prompt).not.toContainText('@"');
 });
 
 test('a final response that lands while you are elsewhere lights the pane until you click or type in it, not as you hover or scroll', async ({ page }) => {

@@ -717,6 +717,8 @@
 
 .md-table-block:hover > .md-table-copy,
 .md-table-block:focus-within > .md-table-copy,
+.md-visual-block:hover > .md-visual-save,
+.md-visual-block:focus-within > .md-visual-save,
 .md-code-block:hover > .md-code-copy,
 .md-code-block:focus-within > .md-code-copy,
 .md-table-copy:has(+ :popover-open) {
@@ -735,11 +737,27 @@
   width: max-content;
 }
 
-/* A diagram or chart drawn from a reply's fence: its own size, shrunk to fit within limits. */
-.md-visual {
+/* A diagram or chart drawn from a reply's fence: in a quiet card, as wide as its drawing, with
+   Save in its corner (shown while pointed at); its own size, shrunk to fit within limits. */
+.md-visual-block {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
   margin: var(--space-2) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  background: var(--color-inset);
+}
+
+.md-visual {
   max-width: 100%;
   overflow-x: auto;
+}
+
+.md-visual-save {
+  top: 6px;
+  right: 6px;
 }
 
 .md-visual svg {
@@ -772,6 +790,35 @@
 .md-image-missing {
   color: var(--color-text-dim);
   font-style: italic;
+}
+
+/* The files a prompt was sent with (message.js `splitAttachments`): images as thumbnails (a
+   click opens one full size), anything else as its name. */
+.omp-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.omp-attachments .md-image {
+  margin: 0;
+}
+
+.omp-attachments .md-image img {
+  max-width: 240px;
+  max-height: 96px;
+  border: 1px solid var(--color-line-strong);
+  background: none;
+}
+
+.md-attachment {
+  padding: 2px 8px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-s);
+  color: var(--color-text-dim);
+  font: var(--text-xs) / 1.5 var(--font-code);
 }
 
 .md-table-wrap {

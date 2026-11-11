@@ -4,7 +4,8 @@
  */
 import { button, el } from '../ui/dom.js';
 import { json } from '../ui/format.js';
-import { renderMarkdown } from './markdown-dom.js';
+import { renderAttachment, renderMarkdown } from './markdown-dom.js';
+import { splitAttachments } from './message.js';
 /** @import { Block, Item, ToolRun } from './transcript.js' */
 /** @import { Review } from './decisions.js' */
 
@@ -26,7 +27,14 @@ export function renderItem(item, ctx) {
       // The user's own prompts need no label (the band and prompt mark say it); another agent's do.
       if (item.byAgent) node.append(el('div', 'omp-role', 'another agent →'));
       const body = el('div', 'omp-md');
-      body.append(renderMarkdown(item.text, { files: true }));
+      // The files it was sent with show as themselves (images as thumbnails), not as their paths.
+      const { text, files } = splitAttachments(item.text);
+      body.append(renderMarkdown(text, { files: true }));
+      if (files.length) {
+        const attached = el('div', 'omp-attachments');
+        attached.append(...files.map(renderAttachment));
+        body.append(attached);
+      }
       if (item.images) body.append(statusLine('muted', `[${item.images} image${item.images === 1 ? '' : 's'}]`));
       node.append(body);
       // The pane acts on it (omp/rewind.js); the user's own prompts can be reworded, not an agent's.
