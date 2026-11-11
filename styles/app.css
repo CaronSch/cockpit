@@ -1074,13 +1074,16 @@ input[type='radio']:checked {
   box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 
+/* Outlined, from the keyboard or from elsewhere, a tab's corners are round, as a window's are. */
 .widget-tab:focus-visible {
   outline-offset: -2px;
+  border-radius: var(--radius-m);
 }
 
 /* Pointed at from elsewhere (ctx.outline) while stacked behind another window. */
 .widget-tab.is-outlined {
   color: var(--color-text);
+  border-radius: var(--radius-m);
   box-shadow: inset 0 0 0 1px var(--color-text);
 }
 
