@@ -1409,7 +1409,7 @@
 }
 
 /* The message box: a card lifted off the window by a soft shadow, its edge a faint hairline that
-   turns indigo, with a soft glow, while it is typed in. */
+   lifts a little, still grey, while it is typed in. */
 .omp-compose-row {
   display: flex;
   align-items: flex-end;
@@ -1424,8 +1424,7 @@
 }
 
 .omp-compose-row:focus-within {
-  border-color: color-mix(in oklch, var(--color-accent) 55%, transparent);
-  box-shadow: 0 0 0 3px var(--color-accent-glow), 0 8px 24px -12px oklch(0% 0 0 / 0.6);
+  border-color: var(--color-line-strong);
 }
 
 /* Send: a small accent square with an up arrow (a terminal prompt in shell mode). */
@@ -1583,8 +1582,7 @@
 }
 
 .omp-quote-panel:focus-within {
-  border-color: color-mix(in oklch, var(--color-accent) 55%, transparent);
-  box-shadow: 0 0 0 3px var(--color-accent-glow), var(--shadow-lift);
+  border-color: var(--color-line-strong);
 }
 
 .omp-quote-panel .omp-quote-input {

@@ -189,7 +189,7 @@ What runs today:
   shows one beside the window (or points at the window already showing it) and reads it, as
   showing one from Sessions does; a drag places it. Windows of related conversations on one screen get the same colour in their top bars
   (`ctx.setFamily`, `src/omp/fork-family.js`). The message box is a card set like the transcript (Inter; code, notes,
-  paths and the spend are monospace), lifted by a soft shadow, its faint edge turning indigo while it is typed in,
+  paths and the spend are monospace), lifted by a soft shadow, its faint grey edge a little stronger while it is typed in,
   starts one line high and grows with the prompt; a plain click anywhere else in the pane
   (not on a control, in a dialog omp asked for, or ending a text selection) puts the caret
   at its end without scrolling, as in a terminal (`src/ui/click-focus.js`); Tab indents by two spaces as in a code
