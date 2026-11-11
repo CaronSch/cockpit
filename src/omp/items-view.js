@@ -17,8 +17,20 @@ import { splitAttachments } from './message.js';
  * @typedef {{ tools: ReadonlyMap<string, ToolRun>, open: Set<string> }} ItemContext
  */
 
-/** A run still going shows a small spinner before it; how one ended shows in its colour. @param {string} status */
-const spinnerIf = (status) => (status === 'running' ? [el('span', 'omp-spin')] : []);
+/** One turn of a spinner, in ms (styles/omp.css `.omp-spin`). */
+const SPIN_MS = 1400;
+/**
+ * A run still going shows a small spinner before it; how one ended shows in its colour. A work
+ * line is redrawn with every event of its run: each new spinner takes up the page clock's phase,
+ * so the spin carries on through the redraws instead of starting over each time.
+ * @param {string} status
+ */
+function spinnerIf(status) {
+  if (status !== 'running') return [];
+  const spin = el('span', 'omp-spin');
+  spin.style.animationDelay = `${-(performance.now() % SPIN_MS)}ms`;
+  return [spin];
+}
 const NOTE_INLINE_CHARS = 200;
 
 /** @param {Item} item @param {ItemContext} ctx @returns {HTMLElement} */
