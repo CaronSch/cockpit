@@ -936,13 +936,13 @@ test('the top bar sizes all text up and down, resets it, and keeps it across a r
   await level.click();
 });
 
-test('the response arrows, New and Forks sit in the window’s top bar, Esc stops a turn; pressing them never drags the window, its title still does', async ({ page }) => {
+test('New and Forks sit in the window’s top bar, Esc stops a turn; pressing them never drags the window, its title still does', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   const head = pane.locator('.widget-head');
   const toolbar = pane.locator('.omp-toolbar');
   // PRs shows only in a GitHub repository, which the test project is not.
-  await expect(head.locator('.widget-actions button:visible')).toHaveText(['↑', '↓', 'New', 'Forks']);
+  await expect(head.locator('.widget-actions button:visible'), 'the response arrows are the phone’s: ⌘↑ / ⌘↓ here').toHaveText(['New', 'Forks']);
   for (const name of ['New', 'Forks', 'Stop']) await expect(toolbar.getByRole('button', { name, exact: true })).toHaveCount(0);
   await expect(head.getByRole('button', { name: 'More actions' }), 'no menu of the rest: there is no rest').toHaveCount(0);
 
@@ -968,7 +968,7 @@ test('the response arrows, New and Forks sit in the window’s top bar, Esc stop
     if (!box) throw new Error('not laid out');
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   };
-  const previous = head.getByRole('button', { name: 'Previous response', exact: false });
+  const previous = head.getByRole('button', { name: 'Forks', exact: true });
   for (const [from, picks] of /** @type {const} */ ([[previous, false], [head.getByRole('button', { name: 'New', exact: true }), false], [pane.locator('.widget-title'), true]])) {
     const [start, end] = [await at(from), await at(target)];
     await page.mouse.move(start.x, start.y);
@@ -985,7 +985,7 @@ test('the response arrows, New and Forks sit in the window’s top bar, Esc stop
   await expect(head.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0);
 });
 
-test('the response arrows and ⌘↑ / ⌘↓ step through the agent’s replies, one each press, and past the last back to following the bottom', async ({ page }) => {
+test('⌘↑ / ⌘↓ step through the agent’s replies, one each press, and past the last back to following the bottom', async ({ page }) => {
   await openWorkbench(page);
   const pane = await startedPane(page);
   // Replies each taller than the transcript, so only one starts in view at a time.
@@ -1015,9 +1015,8 @@ test('the response arrows and ⌘↑ / ⌘↓ step through the agent’s replies
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await atTop('three');
 
-  await pane.locator('.widget-head').getByRole('button', { name: 'Previous response', exact: false }).click();
+  await box.press('ControlOrMeta+ArrowUp');
   await atTop('two');
-  // The focus is on the arrow in the top bar now: the keys work there too.
   await page.keyboard.press('ControlOrMeta+ArrowUp');
   await atTop('one');
   await page.keyboard.press('ControlOrMeta+ArrowUp');

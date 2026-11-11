@@ -119,15 +119,23 @@
   margin: 0;
 }
 
-/* Recent directories under the field: the strip keeps one button's height while it waits for
-   them (or has none), so the centred form does not move as they arrive. */
+/* Recent directories under the field: "Recent" on a line of its own, like the field's label,
+   then the directories, their text in line with it however they wrap (the buttons' padding hangs
+   out to the left). The strip keeps its height while it waits for them (or has none), so the
+   centred form does not move as they arrive. */
 .omp-recent {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1);
-  min-height: calc(1lh + 6px);
+  gap: 2px 0;
+  min-height: calc(2lh + 8px);
+  margin-left: -8px;
   font-size: var(--text-xs);
+}
+
+.omp-recent > .omp-label {
+  flex-basis: 100%;
+  padding-left: 8px;
 }
 
 .omp-recent-dir {
@@ -215,13 +223,14 @@
   color: var(--color-text);
 }
 
-/* The desktop stops a turn with Esc in the message box; the phone, with no Esc, keeps Stop
-   (its actions are not a window's: phone.js). */
-.widget-actions .omp-stop {
+/* The desktop stops a turn with Esc in the message box, and steps through responses with ⌘↑ /
+   ⌘↓; the phone, with neither, keeps Stop and the arrows (its actions are not a window's:
+   phone.js). */
+.widget-actions :is(.omp-stop, .omp-nav-btn) {
   display: none;
 }
 
-/* The previous/next response arrows in the top bar, before New: narrow. */
+/* The previous/next response arrows, on the phone: narrow. */
 .omp-nav-btn {
   padding-inline: 4px;
 }
