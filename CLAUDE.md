@@ -244,7 +244,9 @@ What runs today:
   question goes to omp's `btw`, whose answer streams into that box, outside the chat, where
   follow-up questions continue the same topic, one at a time (every question asks
   for an answer of at most three sentences); pasted text goes into the
-  message box as typed, and pasted or dropped files are stored in
+  message box as typed, and pasted or dropped files wait over the box as cards (a thumbnail
+  for an image, the name and size, a × on the corner while pointed at; a click previews one:
+  an image in the image viewer, another file as a file tab), are stored in
   `~/.cockpit/attachments/` and sent as omp `@"<path>"` mentions, which the prompt in the transcript shows as the files themselves (images as thumbnails, others by name: `splitAttachments`). Typing `@`
   suggests the entries of the session's directory, or of the folder the path after
   it names (`@src/`, `@../`, `@~/`, `@/abs`), filtered by what follows the last `/`;

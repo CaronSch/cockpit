@@ -27,6 +27,7 @@
  */
 import { button, el, setText, svg } from '../ui/dom.js';
 import { orbit } from '../ui/orbit.js';
+import { showImage } from '../ui/image-viewer.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
@@ -661,6 +662,11 @@ function createPane(body, ctx, daemon) {
         schedule();
       },
       shellDir: () => ({ label: tildeHome(cwd(), home), path: cwd() }),
+      // An attached image shows in the image viewer; any other file as a file window's tab.
+      preview: (card) => {
+        if (card.preview) showImage(card.preview, card.name);
+        else if (card.path) ctx.openTab('file', { path: card.path, line: null });
+      },
       // Kept for the conversation; while rewinding, what the box held before (see `rewind`).
       onChange: () => keepDraft(),
     });
