@@ -67,7 +67,7 @@ const axisFor = (dir) => (dir === 'left' || dir === 'right' ? 'row' : 'col');
 const isBefore = (dir) => dir === 'left' || dir === 'up';
 
 /** A slot's windows, in tab order. @param {Slot} slot @returns {Leaf[]} */
-export const tabsOf = (slot) => (slot.kind === 'stack' ? slot.tabs : [slot]);
+const tabsOf = (slot) => (slot.kind === 'stack' ? slot.tabs : [slot]);
 
 /**
  * The slot holding `tabs`, showing `active` (else the first): a stack, or the window alone.
