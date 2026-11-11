@@ -20,8 +20,8 @@
  *
  * A conversation with news its user has not read (daemon/unread.js) has an indigo bar at its left edge and a bold
  * title, archived or not, and the window's top bar counts those it lists. Showing one from
- * here reads it. Each row's menu (a right-click, the ContextMenu key, Shift+F10, or its ⋯
- * button) marks it read or unread, beside the row's other actions.
+ * here reads it. A row's dot button marks it read or unread, as its menu (a right-click, the
+ * ContextMenu key, Shift+F10) does, beside the row's other actions.
  *
  * Pinned conversations (daemon/pins.js) come first, in the window's order, each with a ★; the
  * ☆ on a row pointed at, or its menu, pins it.
@@ -33,7 +33,7 @@
  * once the pointer moves on) outlines its windows, and pointing at an agent window lights its
  * conversation's row.
  */
-import { button, el } from '../ui/dom.js';
+import { button, el, svg } from '../ui/dom.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
@@ -77,7 +77,6 @@ function createSessionsWindow(body, ctx, daemon) {
   /** What the directory options were last built from, so an open menu is not rebuilt for nothing. */
   let directoriesSignature = '';
   const view = button('omp-tool-btn sessions-view', 'View');
-  view.title = 'Sort order and archived sessions';
   view.setAttribute('aria-haspopup', 'menu');
   ctx.headActions.replaceChildren(directories, view);
   // Loading, failing, empty: said once, above the list; a full list says nothing.
@@ -285,19 +284,19 @@ function createSessionsWindow(body, ctx, daemon) {
     return unread ? [el('span', 'sessions-sr', 'Unread')] : [];
   }
 
-  /** The row's ⋯ button, which opens its menu. */
-  function moreButton() {
-    const more = button('sessions-action sessions-more', '⋯');
-    more.title = 'More: mark read or unread, and the rest (or right-click the row)';
-    more.setAttribute('aria-label', 'More actions');
-    more.setAttribute('aria-haspopup', 'menu');
-    return more;
+  /** The row's mark: a hollow dot marks it unread, an unread one's filled dot marks it read. @param {boolean} unread */
+  function markButton(unread) {
+    const mark = button('sessions-action sessions-mark');
+    const icon = svg('svg', { viewBox: '0 0 12 12', 'aria-hidden': 'true' });
+    icon.append(svg('circle', { cx: '6', cy: '6', r: '3.5' }));
+    mark.append(icon);
+    mark.setAttribute('aria-label', unread ? 'Mark as read' : 'Mark as unread');
+    return mark;
   }
 
   /** The row's ★ (pinned) or ☆, which pins or unpins it. @param {boolean} pinned */
   function pinButton(pinned) {
     const star = button('sessions-action sessions-pin', pinned ? '★' : '☆');
-    star.title = pinned ? 'Unpin' : 'Pin to the top';
     star.setAttribute('aria-label', 'Pin to top');
     star.setAttribute('aria-pressed', String(pinned));
     return star;
@@ -315,8 +314,6 @@ function createSessionsWindow(body, ctx, daemon) {
     const row = el('li', `sessions-item${state ? ` is-${state}` : ''}${archived ? ' is-archived' : ''}${unread ? ' is-unread' : ''}${pinned ? ' is-pinned' : ''}`);
     row.tabIndex = 0;
     row.dataset.key = c.key;
-    const hint = `Click to ${archived ? 'read' : 'show'} it in the last agent window used, or drag it onto one`;
-    row.title = `${c.title && c.firstPrompt ? `${c.firstPrompt}\n` : ''}${c.file || c.cwd}\nLast active ${new Date(c.modifiedAt).toLocaleString()}\n${hint}`;
     const facts = [shortDir(c.cwd), relativeTime(c.modifiedAt, now), ...(c.prompts ? [`${c.prompts} prompt${c.prompts === 1 ? '' : 's'}`] : [])];
     const main = rowText(nameOf(c) ?? 'New session', facts);
     if (state && SAID.has(state)) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', STATE_LABELS[state]));
@@ -325,7 +322,7 @@ function createSessionsWindow(body, ctx, daemon) {
     const actions = el('div', 'sessions-actions');
     if (archived) actions.append(button('sessions-action sessions-restore', 'Restore'));
     else if (archivable(c)) actions.append(button('sessions-action sessions-archive', 'Archive'));
-    actions.append(moreButton());
+    if (c.meta?.ompId || c.id) actions.append(markButton(unread));
     // Over the row's right end, not beside its text: hidden, they take none of its width.
     const tools = el('div', 'sessions-tools');
     tools.append(actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
@@ -467,7 +464,7 @@ function createSessionsWindow(body, ctx, daemon) {
     const c = conversationAt(row);
     if (!control) show(row);
     else if (c && control.classList.contains('sessions-pin')) pin(row, !isPinned(c));
-    else if (control.classList.contains('sessions-more')) openRowMenu(row, /** @type {HTMLElement} */ (control));
+    else if (control.classList.contains('sessions-mark')) mark(row, !row.classList.contains('is-unread'));
     else if (c && (control.classList.contains('sessions-archive') || control.classList.contains('sessions-restore'))) void move(c, /** @type {HTMLButtonElement} */ (control));
   });
   root.addEventListener('keydown', (event) => {

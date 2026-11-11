@@ -1,6 +1,6 @@
 /**
- * A small menu of actions on one thing, as a right-click, the ContextMenu key, Shift+F10 or a
- * ⋯ button opens it: a native popover at the pointer or beside the control, whose items the
+ * A small menu of actions on one thing, as a right-click, the ContextMenu key or Shift+F10
+ * opens it: a native popover at the pointer or beside the control, whose items the
  * arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
  * Focus starts on the first item and goes back where it was when the menu closes. An item with
  * `checked` is a switch, ticked while on; `'separator'` draws a line between groups.

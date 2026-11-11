@@ -58,7 +58,6 @@ function createScratchpadWindow(body, ctx, daemon) {
   const bar = el('div', 'pad-bar');
   const switcher = button('pad-switch');
   switcher.setAttribute('aria-haspopup', 'menu');
-  switcher.title = 'Switch notes';
   const switchTitle = el('span', 'pad-title');
   switcher.append(switchTitle, el('span', 'pad-caret', '▾'));
   const menu = el('div', 'pad-menu');
@@ -71,9 +70,7 @@ function createScratchpadWindow(body, ctx, daemon) {
   const conflict = el('div', 'scratchpad-conflict');
   conflict.setAttribute('role', 'alert');
   const keepMine = button('btn btn-accent', 'Keep mine');
-  keepMine.title = 'Save this text over the other version';
   const takeTheirs = button('btn', 'Use theirs');
-  takeTheirs.title = 'Replace this text with the other version';
   const conflictActions = el('div', 'scratchpad-row');
   conflictActions.append(keepMine, takeTheirs);
   const theirsView = el('details', 'scratchpad-theirs');
@@ -135,7 +132,6 @@ function createScratchpadWindow(body, ctx, daemon) {
     if (block.kind === 'image') {
       link.target = '_blank';
       link.rel = 'noopener';
-      link.title = `${block.name}: open full size`;
       const img = el('img', '');
       img.src = url;
       img.alt = block.name;
@@ -145,7 +141,6 @@ function createScratchpadWindow(body, ctx, daemon) {
     } else {
       link.download = block.name;
       link.textContent = block.name;
-      link.title = `Download ${block.name}`;
     }
     const remove = button('pad-remove', '×');
     remove.setAttribute('aria-label', `Remove ${block.name}`);
@@ -203,7 +198,6 @@ function createScratchpadWindow(body, ctx, daemon) {
     if (paths) {
       const file = `${paths.dir}/${padId()}.md`;
       where.textContent = tildeHome(file, paths.home);
-      where.title = file;
     }
   }
 

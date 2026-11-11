@@ -138,7 +138,6 @@ function renderInline(node, options) {
         a.dataset.repo = pull.repo;
         a.dataset.number = String(pull.number);
         a.draggable = false; // dragged out as a pull request window, never as a link
-        a.title = PULL_HINT;
       }
       return a;
     }
@@ -149,11 +148,6 @@ function renderInline(node, options) {
   }
 }
 
-/** What a pull request named in text does, on hover. */
-const PULL_HINT = 'Click to open on GitHub · drag out to review it here';
-/** What a text file named in text does, on hover. */
-const FILE_HINT = 'Click to open beside · drag out to place it';
-
 /** Plain text, its `#123` references (and text file paths) marked. @param {string} text @param {RenderOptions} options @returns {Node} */
 function renderText(text, options) {
   const fragment = document.createDocumentFragment();
@@ -162,7 +156,6 @@ function renderText(text, options) {
       const ref = el('span', 'md-pr-ref', part.text);
       ref.dataset.number = String(part.number);
       if (part.repo) ref.dataset.repo = part.repo;
-      ref.title = PULL_HINT;
       fragment.append(ref);
       continue;
     }
@@ -182,7 +175,6 @@ function markFile(node, file) {
   node.classList.add('md-file-ref');
   node.dataset.path = file.path;
   if (file.line !== null) node.dataset.line = String(file.line);
-  node.title = FILE_HINT;
   return node;
 }
 
@@ -202,7 +194,6 @@ function renderImage(path, alt, options) {
   a.href = src;
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
-  a.title = path;
   const img = el('img');
   img.src = src;
   img.alt = alt;
@@ -217,7 +208,6 @@ export function renderAttachment(path) {
   const name = path.split('/').pop() ?? path;
   if (/\.(png|jpe?g|gif|webp|avif)$/i.test(path)) return renderImage(path, name, {});
   const chip = el('span', 'md-attachment', name);
-  chip.title = path;
   return chip;
 }
 
@@ -242,7 +232,6 @@ function renderMath(tex, display) {
     }
   } catch (err) {
     const source = el('code', 'md-inline-code md-math-error', display ? `$$${tex}$$` : `$${tex}$`);
-    source.title = err instanceof Error ? err.message : String(err);
     box.replaceChildren(source);
   }
   return box;

@@ -190,7 +190,7 @@
   color: var(--color-text);
 }
 
-/* Just the start of the name; pointing at a label shows it all (.timeline-face). */
+/* Just the start of the name. */
 .timeline-name {
   max-width: 12ch;
   overflow: hidden;
@@ -304,33 +304,6 @@
 .timeline-chip.is-failed {
   border-color: var(--color-danger);
 }
-
-/* The whole name, over the label pointed at (and when a scheduled prompt runs, under it). */
-.timeline-face:popover-open {
-  position: fixed;
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 20px;
-  border: 1px solid var(--color-line-focus);
-  border-radius: var(--radius-s);
-  background: var(--color-surface-raised);
-  box-shadow: var(--shadow-lift);
-  font: var(--weight-regular) var(--text-xs) / 1.4 var(--font-ui);
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.timeline-face.is-future:popover-open {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  line-height: 15px;
-}
-
-.timeline-face-when {
-  color: var(--color-text-faint);
-}
-
 /* ── what went wrong, if anything; the bin, over the axis while a label is dragged ── */
 .timeline-status {
   flex: none;

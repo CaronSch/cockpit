@@ -10,7 +10,6 @@ import { button } from './dom.js';
 /** @param {{ daemon: DaemonClient, reload?: () => void }} options */
 export function createUpdateNotice({ daemon, reload = () => location.reload() }) {
   const root = button('btn btn-accent update-notice', 'Reload', () => reload());
-  root.title = 'Cockpit was updated: reload to use the new version';
   root.hidden = true;
 
   // A daemon restart reports its files on reconnect; a `git pull` under a running daemon

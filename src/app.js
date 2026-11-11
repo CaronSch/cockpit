@@ -183,7 +183,6 @@ export async function createApp(root) {
         if (label.textContent === (text ?? '')) return;
         label.textContent = text ?? '';
         label.hidden = !text;
-        heading.title = text ?? '';
       },
       headActions: actions,
       screen: screenAtom,
