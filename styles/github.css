@@ -380,20 +380,19 @@
   border-top: 1px solid var(--color-line);
 }
 
+/* Scrolls when long; its padding keeps each card's × (over its corner) inside it. */
 .gh-notes {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   max-height: 30vh;
   overflow: auto;
+  padding: 6px 6px 0 0;
 }
 
-.gh-note-card.is-comment {
-  border-left: 2px solid var(--color-accent);
-}
-
+/* A question's quote bar in its own colour (the bar: omp.css, as the message box's comments). */
 .gh-note-card.is-question {
-  border-left: 2px solid var(--color-code);
+  --quote-bar: var(--color-code);
 }
 
 .gh-note-body {
