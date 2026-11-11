@@ -122,9 +122,10 @@ What runs today:
 
 - The split-tree window grid: windows (widgets) are dragged, dropped, split and
   resized with magnetic snapping. Each browser window is a screen of its
-  workspace, saved by the daemon: a new window takes the first saved screen no window
-  shows, else a new one, and nothing more of screens shows; while its layout is not being
-  saved the top bar says **Not saved**, with why on hover (`src/ui/save-notice.js`). Corners
+  workspace, saved by the daemon; the top bar's switcher says which screen this
+  window is, lists every screen with what it holds and where it is open, and opens
+  one that is open nowhere in this window (a reload, so its agents keep running)
+  or deletes it (asking first; the agents it showed keep running). Corners
   are squircles where the browser draws `corner-shape`. A tab running older UI code than the daemon serves shows a
   **Reload** button among the top bar's own (the files' version: `daemon/ui-files.js`).
 - The daemon and the Agent window (the `omp` widget; "Agent" to the user, omp underneath): start omp in a directory (the Directory field
@@ -188,9 +189,8 @@ What runs today:
   shows one beside the window (or points at the window already showing it) and reads it, as
   showing one from Sessions does; a drag places it. Windows of related conversations on one screen get the same colour in their top bars
   (`ctx.setFamily`, `src/omp/fork-family.js`). The message box is a card set like the transcript (Inter; code, notes,
-  paths and the spend are monospace), lifted by a soft shadow, its faint edge turning indigo while it is typed in and a
-  light going round it while the agent works (`src/ui/orbit.js`, as round a running shell or subagent, or a working
-  session in Sessions), starts one line high and grows with the prompt; a plain click anywhere else in the pane
+  paths and the spend are monospace), lifted by a soft shadow, its faint edge turning indigo while it is typed in,
+  starts one line high and grows with the prompt; a plain click anywhere else in the pane
   (not on a control, in a dialog omp asked for, or ending a text selection) puts the caret
   at its end without scrolling, as in a terminal (`src/ui/click-focus.js`); Tab indents by two spaces as in a code
   editor (every selected line; Shift+Tab, or Backspace in the leading spaces, outdents; Cmd/Ctrl+Z undoes it) unless a
@@ -321,7 +321,7 @@ What runs today:
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
-  (starting or working: a spinner, the word in the accent and a light going round the row; *needs you*: it asks a question or
+  (starting or working: a small, slow spinner and the word in the accent; *needs you*: it asks a question or
   an approval, a warm dot; *done*: it finished and nobody has read it, an indigo dot; idle: nothing).
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
   the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
@@ -714,10 +714,10 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc, a click outside it or × closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
 - `src/ui/login.js` — Signing omp in to a model provider, or another account, without a conversation: `omp login`, run by the daemon (daemon/setup.js) and shown as it goes, its questions answered from a line here.
-- `src/ui/orbit.js` — A light going round an element's outline while something it stands for is at work (a running shell or subagent, a working session, the message box of a working agent): an SVG outline the size of its element whose dash moves along it, at an even pace whatever the element's shape, since the outline's length is set to 100 and the dash moves by its offset.
+- `src/ui/orbit.js` — A light going round an element's outline while something it stands for is at work (a running shell or subagent): an SVG outline the size of its element whose dash moves along it, at an even pace whatever the element's shape, since the outline's length is set to 100 and the dash moves by its offset.
 - `src/ui/palette.js` — "Add widget" palette.
 - `src/ui/prefs.js` — Per-browser preferences in localStorage.
-- `src/ui/save-notice.js` — The "Not saved" notice in the top bar: shown while this window's layout is not being saved (the page is signed out, its workspace name is not one, or the daemon refused a save), with why on hover; otherwise nothing.
+- `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it, or to open a copy of this one in a new tab.
 - `src/ui/settings.js` — App-wide settings, picked in the top bar's Config menu and kept per browser.
 - `src/ui/spotlight.js` — Spotlight: a floating search over every conversation, as macOS's.
 - `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: a Reload button among the top bar's own, shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
@@ -732,7 +732,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/sessions.js` — omp conversations, one list, sortable and narrowed to a directory.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
 - `src/widgets/timeline.js` — A timeline of the agents: on its left, idle conversations by how recently they were active (in order, not to scale), the latest beside now; at now, those whose agents are busy (starting, working, asking their user something, or running work in the background); on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js) that reaches as far as the furthest one: the next hour spread out, the next month squeezed in.
-- `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, and which screen a new window claims.
+- `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
 - `daemon/ask.js` — Asking an agent where something was said: Spotlight's Ask (src/ui/spotlight.js) hands a question in plain words to a one-shot omp that reads the user's conversations and answers it, naming the conversations that do.

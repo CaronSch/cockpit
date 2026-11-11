@@ -79,10 +79,9 @@
   display: flex;
   gap: var(--space-2);
   align-items: center;
-  padding: 6px var(--space-2);
-  --orbit-radius: var(--radius-m);
+  /* Room on the left for the bar marking where the conversation is shown, apart from its dot. */
+  padding: 6px var(--space-2) 6px 14px;
   border-radius: var(--radius-m);
-  corner-shape: round;
   cursor: grab;
   user-select: none;
 }
@@ -120,16 +119,16 @@
 .sessions-dot {
   flex: none;
   box-sizing: border-box;
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   background: transparent;
 }
 
 .sessions-item:is(.is-starting, .is-working) .sessions-dot {
-  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
-  border-top-color: var(--color-accent);
-  animation: sessions-spin 0.9s linear infinite;
+  border: 1.25px solid color-mix(in oklch, var(--color-accent) 18%, transparent);
+  border-top-color: color-mix(in oklch, var(--color-accent) 75%, transparent);
+  animation: sessions-spin 1.4s linear infinite;
 }
 
 .sessions-item.is-starting .sessions-dot {

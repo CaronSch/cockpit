@@ -1,10 +1,13 @@
 /**
  * Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names
- * and ids, and which screen a new window claims.
+ * and ids, which screen a new window claims, and how a screen is described.
  *
  * A workspace is everything one user lays out across their browser windows; each window is
  * one of its screens, like an extra monitor, with a layout tree of its own.
  */
+import { listLeaves } from '../layout/grid-model.js';
+/** @import { Tree } from '../layout/grid-model.js' */
+
 export const DEFAULT_WORKSPACE = 'main';
 /** A workspace name becomes a file name: lowercase only, since macOS disks ignore case. */
 export const WORKSPACE_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
@@ -34,3 +37,31 @@ export const lockName = (workspace, id) => `cockpit:${workspace}:${id}`;
  */
 export const claimOrder = (remembered, saved) =>
   remembered ? [remembered, ...saved.filter((id) => id !== remembered)] : [...saved];
+
+/**
+ * A copy of a layout for a new screen: the same windows with the same settings, each with an
+ * id of its own (as the registry gives a new window).
+ * @param {Tree} tree @param {() => string} [newId] @returns {Tree}
+ */
+export function copyLayout(tree, newId = () => `w_${crypto.randomUUID().slice(0, 8)}`) {
+  /** @param {import('../layout/grid-model.js').GridNode} node @returns {import('../layout/grid-model.js').GridNode} */
+  const copy = (node) =>
+    node.kind === 'leaf'
+      ? { ...node, id: newId(), ...(node.params ? { params: { ...node.params } } : {}) }
+      : { ...node, children: node.children.map(copy), sizes: [...node.sizes] };
+  return tree && copy(tree);
+}
+
+/**
+ * What a screen holds, e.g. "2 Agent, 1 Notes", kinds in the order they first appear.
+ * @param {Tree} tree @param {(widget: string) => string} titleOf @returns {string}
+ */
+export function describeWindows(tree, titleOf) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const leaf of listLeaves(tree)) {
+    const title = titleOf(leaf.widget);
+    counts.set(title, (counts.get(title) ?? 0) + 1);
+  }
+  return counts.size ? [...counts].map(([title, n]) => `${n} ${title}`).join(', ') : 'no windows';
+}

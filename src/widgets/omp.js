@@ -26,7 +26,7 @@
  * suggests them too (omp/pr-suggest.js).
  */
 import { button, el, setText, svg } from '../ui/dom.js';
-import { orbit, setOrbit } from '../ui/orbit.js';
+import { orbit } from '../ui/orbit.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
@@ -1648,9 +1648,6 @@ function createPane(body, ctx, daemon) {
       sendBtn.title = forkable() ? `${sendBtn.getAttribute('aria-label')} · ${SEND_TITLE}` : sendBtn.getAttribute('aria-label') ?? '';
       // The message waits in the box while the conversation wakes; it goes once omp is up.
       composer.root.classList.toggle('is-waking', waking !== null);
-      // While the agent works, a light goes round the message box.
-      const box = composer.root.querySelector('.omp-compose-row');
-      if (box) setOrbit(box, state.streaming);
       draft.placeholder = state.streaming ? 'Steer the agent… (Esc stops)' : 'Message the agent… (@ files, # pull requests, / commands, ! shell)';
       if (state.editorText && state.editorText.seq > editorSeen) {
         editorSeen = state.editorText.seq;

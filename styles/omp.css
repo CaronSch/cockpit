@@ -256,14 +256,14 @@
   color: var(--color-accent);
 }
 
-/* Working: the same spinner as a working row in Sessions. */
+/* Working: the same spinner as a working row in Sessions: small, faint and unhurried. */
 .omp-activity.is-streaming::before,
 .omp-working::before {
   box-sizing: border-box;
-  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
-  border-top-color: var(--color-accent);
+  border: 1.25px solid color-mix(in oklch, var(--color-accent) 18%, transparent);
+  border-top-color: color-mix(in oklch, var(--color-accent) 75%, transparent);
   background: transparent;
-  animation: omp-spin 0.9s linear infinite;
+  animation: omp-spin 1.4s linear infinite;
 }
 
 @keyframes omp-spin {
@@ -518,9 +518,9 @@
 }
 
 .omp-jump.is-working .omp-jump-ring {
-  stroke: var(--color-accent);
+  stroke: color-mix(in oklch, var(--color-accent) 75%, transparent);
   stroke-dasharray: 20 62;
-  animation: omp-jump-spin 0.9s linear infinite;
+  animation: omp-jump-spin 1.4s linear infinite;
 }
 
 @keyframes omp-jump-spin {
@@ -1010,17 +1010,17 @@
   color: var(--color-danger);
 }
 
-/* A step still running: the toolbar's spinner, small, before it. */
+/* A step still running: the toolbar's spinner before it. */
 .omp-spin {
   flex: none;
   box-sizing: border-box;
-  width: 9px;
-  height: 9px;
-  border: 1.5px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
-  border-top-color: var(--color-accent);
+  width: 8px;
+  height: 8px;
+  border: 1.25px solid color-mix(in oklch, var(--color-accent) 18%, transparent);
+  border-top-color: color-mix(in oklch, var(--color-accent) 75%, transparent);
   border-radius: 50%;
   corner-shape: round;
-  animation: omp-spin 0.9s linear infinite;
+  animation: omp-spin 1.4s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1409,13 +1409,8 @@
 }
 
 /* The message box: a card lifted off the window by a soft shadow, its edge a faint hairline that
-   turns indigo, with a soft glow, while it is typed in. While the agent works, a light goes
-   round it (ui/orbit.js). */
+   turns indigo, with a soft glow, while it is typed in. */
 .omp-compose-row {
-  --orbit-radius: var(--radius-l);
-  --orbit-dash: 6;
-  --orbit-turn: 5s;
-  position: relative;
   display: flex;
   align-items: flex-end;
   gap: var(--space-2);
