@@ -33,7 +33,6 @@ export function renderItem(item, ctx) {
       // The pane acts on it (omp/rewind.js); the user's own prompts can be reworded, not an agent's.
       if (!item.byAgent) {
         const rewind = button('omp-rewind-btn', 'Rewind');
-        rewind.title = 'Rewind to here: reword this prompt and send it again (the later turns are set aside)';
         node.append(rewind);
       }
       return node;
@@ -105,9 +104,7 @@ export function renderPending(text, which, continues, cancel) {
   const node = el('div', 'omp-msg omp-user is-pending');
   const side = el('div', 'omp-pending-side');
   const label = el('span', 'omp-pending-label', which === 'steering' ? 'Pending · next step' : 'Pending · after this turn');
-  label.title = which === 'steering' ? 'Reaches the agent at its next step, in this turn' : 'Sent once this turn ends';
   const remove = button('omp-pending-cancel', 'Cancel', cancel);
-  remove.title = 'Take this message back';
   side.append(label, remove);
   node.append(continues ? el('div', 'omp-md', '. (continue)') : promptBody(text), side);
   return node;

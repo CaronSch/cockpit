@@ -183,7 +183,6 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
     const main = el(card.kind === 'file' ? 'div' : 'button', 'omp-card-main');
     const removeBtn = button('omp-card-remove', '×', () => remove(card));
     if (card.kind === 'comment') {
-      main.title = 'Edit this comment';
       main.append(el('span', 'omp-card-quote', `“${excerpt(card.quote)}”`), el('span', 'omp-card-text', excerpt(card.comment)));
       main.addEventListener('click', () =>
         openEditor({
@@ -196,7 +195,6 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
       removeBtn.setAttribute('aria-label', 'Remove comment');
     } else {
       view.classList.toggle('is-uploading', card.path === null);
-      main.title = card.path ?? 'Uploading…';
       if (card.preview) {
         const thumb = el('img', 'omp-card-thumb');
         thumb.src = card.preview;
@@ -231,7 +229,6 @@ export function createComposer({ pane, upload, onError, shellDir, onChange = () 
     if (shell) {
       const dir = shellDir();
       markDir.textContent = `· ${dir.label}`;
-      mark.title = dir.path;
       draft.setAttribute('aria-describedby', mark.id);
     } else {
       draft.removeAttribute('aria-describedby');

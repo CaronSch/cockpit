@@ -77,14 +77,11 @@ function createFileWindow(body, ctx, daemon) {
   body.append(root);
   tabIndent(root);
   const saveBtn = button('omp-tool-btn', 'Save', () => void save());
-  saveBtn.title = 'Save your edits to the file (Cmd/Ctrl+S)';
   const revertBtn = button('omp-tool-btn', 'Revert', () => {
     if (file) drafts.delete(file.path);
     draw();
   });
-  revertBtn.title = 'Drop your unsaved edits and show the file as saved';
   const reloadBtn = button('omp-tool-btn', 'Reload', () => void load());
-  reloadBtn.title = 'Read the file again (your unsaved edits are kept)';
   const viewBtn = button('omp-tool-btn', '', () => ctx.setParams({ rendered: !rendered() }));
   ctx.headActions.append(saveBtn, revertBtn, viewBtn, reloadBtn);
 
@@ -227,14 +224,12 @@ function createFileWindow(body, ctx, daemon) {
     ctx.setLabel(name && edit ? `${name} •` : name);
     viewBtn.hidden = !p.path || !renders(p.path);
     setText(viewBtn, rendered() ? 'Source' : 'Rendered');
-    viewBtn.title = rendered() ? 'Show the file as written, with line numbers, to edit it' : 'Show the file rendered';
     reloadBtn.hidden = !p.path;
     saveBtn.hidden = revertBtn.hidden = !edit || !file?.editable;
     saveBtn.disabled = revertBtn.disabled = saving || conflicted();
     const head = root.querySelector('.fv-head');
     if (!file || !head) return;
     const where = el('span', 'fv-path', file.path);
-    where.title = file.path;
     const facts = [file.truncated ? `${sizeText(file.size)}, shown cut short` : sizeText(file.size)];
     if (!file.editable && !file.truncated) facts.push('read only: not plain UTF-8');
     const state = saving ? 'Saving…' : saveError ? `Not saved: ${saveError}` : edit ? 'Unsaved edits' : '';
@@ -248,9 +243,7 @@ function createFileWindow(body, ctx, daemon) {
     const bar = el('div', 'fv-conflict');
     bar.setAttribute('role', 'alert');
     const mine = button('btn btn-accent', 'Keep mine', keepMine);
-    mine.title = 'Save your text over the file as it now is';
     const theirs = button('btn', 'Use the file', useTheirs);
-    theirs.title = 'Drop your edits and show the file as it now is';
     const row = el('div', 'omp-row');
     row.append(mine, theirs);
     bar.append(el('p', '', 'The file changed since you began editing it (an agent, or another editor). Your edits are not saved.'), row);

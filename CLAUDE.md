@@ -212,14 +212,14 @@ What runs today:
   the turn's end) ends the transcript as the prompt it will be, dimmed, saying when it goes,
   with Cancel (`renderPending` in `src/omp/items-view.js`). While a
   turn runs, the toolbar shows how far the agent is through its todo list (tasks
-  done of tasks, the current one on hover), read from omp's `todo` results; work
+  done of tasks), read from omp's `todo` results; work
   without a list shows none. A line of chips above the message box lists the shells
   and subagents running now with how long each has run, a light circling each chip's outline (`omp/running-work.js`): the
   calls the turn waits on, and the background jobs omp handed them off to (a
   result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Scheduled
   line under it lists the prompts scheduled for the conversation (its agent's `schedule` tool,
-  below), each with when it runs, the whole prompt on hover; a missed one says so. A Markdown table in a reply has a Copy button (on
+  below), each with when it runs; a missed one says so. A Markdown table in a reply has a Copy button (on
   hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
   (not its language label), pinned to its corner while long lines scroll. Selected
   reply text shows Comment and Ask (following the selection as new output scrolls it); either opens a box in the transcript under the block the
@@ -263,7 +263,7 @@ What runs today:
   focused tab: never for events replayed on (re)connecting (the `hello` carries the seq
   they run to), one per session (tagged with its id, so tabs replace each other's), closed
   once the session is read; a click shows it in the agent window used last. The top
-  bar's Config menu (open while pointed at, or pinned by a click) holds the app's
+  bar's Config menu (opened by a click) holds the app's
   switches, kept per browser (`src/ui/settings.js`). Agent windows fold each stretch of
   thinking and tool calls between two things the agent said into one line ("Working · 3 steps
   · read, edit ×2" with a spinner while it runs, "Worked · …" once done, a red "1 failed" if a
@@ -355,12 +355,13 @@ What runs today:
   nothing was sent to has no journal yet: Archive ends it (`DELETE /api/sessions/:id`)
   and it is gone, not archived. Nothing is ever deleted: there is no delete. An unread conversation (archived too, which
   keeps its mark) has an indigo bar at its left edge and a bold title, and the window's top bar counts the
-  unread ones it lists; showing a session from here reads it. Right-click on a row, its
-  **⋯** button, or Shift+F10 / the ContextMenu key on a focused row opens its menu
+  unread ones it lists; showing a session from here reads it. A row's dot button (with its other
+  actions, shown while the row is pointed at or focused) marks it unread, or an unread one read.
+  Right-click on a row, or Shift+F10 / the ContextMenu key on a focused row, opens its menu
   (`src/ui/context-menu.js`, a popover the arrow keys move through): **Mark as
   unread** or **Mark as read**, **Pin to top** or **Unpin**, with Show and Archive /
   Restore. Pinned conversations come first, in the window's order, with a ★ (a row's ☆,
-  shown on hover, pins it too).
+  shown with its actions, pins it too).
 - Scheduled prompts and the Timeline window (the `timeline` widget). Every agent has a
   `schedule` tool (`daemon/schedule.js`, given to omp as an RPC host tool): it sends its own
   conversation a prompt later, at a time (`at`, this machine's time zone unless it carries an
@@ -385,14 +386,15 @@ What runs today:
   as much as its label needs to start at its time. Each label there says the conversation and,
   under it, when; they stack in as many lanes as the window is tall enough for, a stem down to
   their time, and past that one goes on beside the one before it, its stem bent back along the
-  axis; a missed one is marked so. A label is the start of its conversation's name, and pointing
-  at one shows the whole (a popover over it); a conversation with news its user has not read (a
+  axis; a missed one is marked so. A label is the start of its conversation's name; a conversation with news its user has not read (a
   scheduled prompt that ran, say) is ringed in blue, as an unread window is, until it is read
   anywhere. Dragged onto the grid, a label opens its conversation as a Sessions row does; while
   one is dragged a bin shows over the axis (the drag controller's `target`), which archives the
   conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a
   conversation shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
   /api/schedule/:id`; saved, it is no longer missed). Only a failure is written under the axis.
+- Nothing pops up on hover: no tooltips (no `title` attributes) and no menus opened by pointing.
+  Controls named only by a symbol say what they are to screen readers (`aria-label`).
 - Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
   deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
@@ -708,7 +710,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/timeline/scale.js` — The timeline window's arithmetic, kept free of the DOM so it can be tested: where a moment in the future sits on its log scale (the next hour spread out, next month squeezed in), how far ahead the scale reaches, the times its axis marks, how labels share lanes without covering one another, and how long until a scheduled prompt runs, and when, said briefly (the daemon's schedule tool says it the same way).
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
 - `src/ui/click-focus.js` — Click-to-focus, as in a terminal: a plain click on a window's own surface puts the caret at the end of its main text box, while clicks on controls, in boxes of their own, and those that end a text selection do what they did before.
-- `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key, Shift+F10 or a ⋯ button opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
+- `src/ui/context-menu.js` — A small menu of actions on one thing, as a right-click, the ContextMenu key or Shift+F10 opens it: a native popover at the pointer or beside the control, whose items the arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
 - `src/ui/dom.js` — Element construction helpers: elements, SVG icons, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc, a click outside it or × closes it.

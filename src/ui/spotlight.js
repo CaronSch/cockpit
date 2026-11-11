@@ -35,7 +35,6 @@ export function createSpotlight({ daemon, show }) {
   open.append(el('span', '', 'Search'), el('kbd', 'spotlight-key', mac ? '⌘K' : 'Ctrl+K'));
   open.setAttribute('aria-label', 'Search');
   open.setAttribute('aria-keyshortcuts', mac ? 'Meta+K' : 'Control+K');
-  open.title = 'Find a conversation: type words, or ask where something was said';
 
   const dialog = el('dialog', 'spotlight');
   dialog.setAttribute('aria-label', 'Search conversations');
@@ -50,7 +49,6 @@ export function createSpotlight({ daemon, show }) {
   input.setAttribute('aria-expanded', 'true');
   input.setAttribute('aria-controls', 'spotlight-results');
   const askBtn = button('btn spotlight-ask', 'Ask', () => void ask());
-  askBtn.title = `Ask an agent: it reads your conversations and answers (${mac ? '⌘↵' : 'Ctrl+Enter'})`;
   const bar = el('div', 'spotlight-bar');
   bar.append(input, askBtn);
   // The agent's answer, above the conversations it names.

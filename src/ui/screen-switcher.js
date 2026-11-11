@@ -31,7 +31,6 @@ export function createScreenSwitcher({ opened, describe }) {
 
   if (!opened.ok) {
     label.textContent = 'Not saved';
-    toggle.title = opened.problem;
     menu.append(el('p', 'screen-note', opened.problem));
     return { root };
   }
@@ -57,7 +56,6 @@ export function createScreenSwitcher({ opened, describe }) {
     const saveError = screen.saveError();
     label.textContent = (at < 0 ? 'Screen' : `Screen ${at + 1} of ${entries.length}`) + (saveError ? ' · not saved' : '');
     toggle.classList.toggle('is-unsaved', Boolean(saveError));
-    toggle.title = saveError ? `Not saved: ${saveError}` : `Workspace “${screen.workspace}”: switch screens`;
     if (menu.matches(':popover-open') && !confirming) fillMenu();
   }
 
@@ -92,7 +90,6 @@ export function createScreenSwitcher({ opened, describe }) {
         })
         .finally(() => void refresh());
     });
-    copy.title = 'Open a copy of this screen in a new tab';
     const actions = el('div', 'screen-actions screen-new');
     actions.append(copy);
     menu.append(actions);

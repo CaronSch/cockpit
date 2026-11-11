@@ -226,6 +226,27 @@
   cursor: default;
 }
 
+/* Mark read or unread: a hollow dot marks a row unread; an unread row's dot is filled, in the
+   accent, and marks it read. */
+.sessions-mark {
+  display: grid;
+  place-items: center;
+  padding-inline: 6px;
+}
+
+.sessions-mark svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+}
+
+.sessions-item.is-unread .sessions-mark svg {
+  fill: var(--color-unread);
+  stroke: var(--color-unread);
+}
+
 /* A pinned row's ★ stays in view; another row's ☆ shows with its actions. */
 .sessions-pin {
   font-size: var(--text-sm);

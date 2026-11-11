@@ -54,11 +54,9 @@ export function copyReport(copy, rest = 'Copy') {
   let reset;
   return (label, title = '') => {
     copy.textContent = label;
-    copy.title = title;
     clearTimeout(reset);
     reset = setTimeout(() => {
       copy.textContent = rest;
-      copy.title = '';
     }, REPORT_MS);
   };
 }

@@ -149,19 +149,13 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     return text && at ? { text, end, at, cite: cite(range) } : null;
   }
 
-  /** @param {string} label @param {string} title @param {() => void} onClick */
-  function actionButton(label, title, onClick) {
+  /** @param {string} label @param {() => void} onClick */
+  function actionButton(label, onClick) {
     const action = button('omp-quote-btn', label, onClick);
-    action.title = title;
     // Keep the selection (and its highlight) while the button is pressed.
     action.addEventListener('pointerdown', (e) => e.preventDefault());
     return action;
   }
-
-  const COMMENT_TITLE = `Comment on the selected text; the comment goes ${queued ? 'to the agent with your review' : 'with your next message'}`;
-  const ASK_TITLE = queued
-    ? 'Ask a question about the selected text; it goes to the agent with your other notes'
-    : 'Ask a quick question about the selected text; the answer is not added to the chat';
 
   function offerButtons() {
     if (mode === 'editing' && drafted()) return;
@@ -178,8 +172,8 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     quote = found.text;
     quoteCite = found.cite;
     pop.replaceChildren(
-      actionButton('Comment', COMMENT_TITLE, () => openBox(found.at, 'comment')),
-      actionButton('Ask', ASK_TITLE, () => openBox(found.at, 'ask')),
+      actionButton('Comment', () => openBox(found.at, 'comment')),
+      actionButton('Ask', () => openBox(found.at, 'ask')),
     );
     mode = 'buttons';
     place(found.end);
@@ -236,7 +230,6 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       submit,
     );
     const go = button('btn btn-accent', action === 'comment' ? (queued ? 'Add comment' : 'Comment') : queued ? 'Add question' : 'Ask', submit);
-    go.title = action === 'comment' ? COMMENT_TITLE : ASK_TITLE;
     const sync = () => {
       go.disabled = !box.value.trim();
     };

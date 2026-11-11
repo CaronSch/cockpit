@@ -22,13 +22,13 @@
 import { button, el } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
-import { displayTitle, relativeTime, sortSessions } from '../sessions/order.js';
-import { STATE_LABELS, listConversations, runningState, showConversation } from '../sessions/running.js';
-import { duration, futureSpan, pack, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
+import { displayTitle, sortSessions } from '../sessions/order.js';
+import { listConversations, runningState, showConversation } from '../sessions/running.js';
+import { futureSpan, pack, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { PastSession, ScheduledTask } from '../../daemon/wire.js' */
-/** @import { Listed, RunningState } from '../sessions/running.js' */
+/** @import { Listed } from '../sessions/running.js' */
 
 /** How often the future side is redrawn as now moves on. */
 const CLOCK_MS = 30_000;
@@ -68,16 +68,12 @@ function createTimeline(body, ctx, daemon) {
   track.append(past, now, future);
   const bin = el('div', 'timeline-bin');
   bin.setAttribute('aria-hidden', 'true');
-  // Only when something went wrong: what a label does says its tooltip.
   const status = el('p', 'timeline-status');
   status.setAttribute('aria-live', 'polite');
-  // The whole name over a label pointed at, and the editor of a scheduled prompt: both in the
-  // top layer (popovers), so neither is cut off by the timeline's edges.
-  const face = el('div', 'timeline-face');
-  face.popover = 'manual';
-  face.setAttribute('aria-hidden', 'true');
+  // The editor of a scheduled prompt: in the top layer (a popover), so it is not cut off by the
+  // timeline's edges.
   const editor = createEditor();
-  root.append(track, status, bin, face, editor.el);
+  root.append(track, status, bin, editor.el);
   body.append(root);
 
   /** @type {PastSession[]} */
@@ -177,20 +173,15 @@ function createTimeline(body, ctx, daemon) {
   };
 
   /**
-   * Shows conversation `c` in label `chip`: its name, how it is doing, `classes` besides, and
-   * `title`, its tooltip.
-   * @param {HTMLElement} chip @param {Listed} c @param {string} classes @param {string} title
+   * Shows conversation `c` in label `chip`: its name, how it is doing, and `classes` besides.
+   * @param {HTMLElement} chip @param {Listed} c @param {string} classes
    */
-  function paint(chip, c, classes, title) {
+  function paint(chip, c, classes) {
     const state = stateOf(c);
     const name = nameOf(c);
     put(chip, 'className', `timeline-chip ${classes}${state ? ` is-${state}` : ''}${isUnread(c) ? ' is-unread' : ''}`);
-    if (chip.dataset.name !== name) {
-      chip.dataset.name = name;
-      chip.setAttribute('aria-label', name);
-    }
+    if (chip.getAttribute('aria-label') !== name) chip.setAttribute('aria-label', name);
     put(/** @type {HTMLElement} */ (chip.querySelector('.timeline-name')), 'textContent', name);
-    put(chip, 'title', title);
   }
 
   /**
@@ -206,23 +197,19 @@ function createTimeline(body, ctx, daemon) {
     /**
      * Puts `cs` in `list`, in order. A label in the other list is moved: the past is drawn first,
      * then now, so one moving either way is where it belongs by the end.
-     * @param {HTMLElement} list @param {Listed[]} cs @param {string} where @param {(c: Listed) => string} doing
+     * @param {HTMLElement} list @param {Listed[]} cs @param {string} where
      */
-    const place = (list, cs, where, doing) =>
+    const place = (list, cs, where) =>
       cs.forEach((c, i) => {
         live.add(c.key);
         let chip = conversationNodes.get(c.key);
         if (!chip) conversationNodes.set(c.key, (chip = newLabel(false)));
-        paint(chip, c, where, `${nameOf(c)}\n${c.cwd ?? ''}\n${doing(c)}\nClick to show it; drag it onto the grid to open it, or onto Archive`);
+        paint(chip, c, where);
         shown.set(chip, { conversation: c, task: null });
         if (list.children[i] !== chip) list.insertBefore(chip, list.children[i] ?? null);
       });
-    place(pastList, idle, 'is-past', (c) => `Last active ${relativeTime(c.modifiedAt, at)}`);
-    place(nowList, busy, 'is-now', (c) => {
-      const state = /** @type {RunningState} */ (stateOf(c));
-      const work = workOf(c);
-      return state === 'idle' || state === 'done' ? `${work} running in the background` : STATE_LABELS[state];
-    });
+    place(pastList, idle, 'is-past');
+    place(nowList, busy, 'is-now');
     for (const [key, chip] of conversationNodes) {
       if (live.has(key)) continue;
       chip.remove();
@@ -252,17 +239,7 @@ function createTimeline(body, ctx, daemon) {
       live.add(task.id);
       let chip = futureNodes.get(task.id);
       if (!chip) futureNodes.set(task.id, (chip = newLabel(true)));
-      const title = [
-        nameOf(conversation),
-        `Runs ${new Date(task.dueAt).toLocaleString()}, in ${duration(task.dueAt - at)}`,
-        ...(task.missedAt === null ? [] : [`Missed: it was due ${new Date(task.missedAt).toLocaleString()}, while Cockpit was off or the computer slept`]),
-        ...(task.error ? [`Last try failed: ${task.error}`] : []),
-        '',
-        task.prompt.length > 400 ? `${task.prompt.slice(0, 399)}…` : task.prompt,
-        '',
-        'Click to edit; drag it onto the grid to open its conversation, or onto Delete',
-      ].join('\n');
-      paint(chip, conversation, `is-future${task.missedAt === null ? '' : ' is-missed'}${task.error ? ' is-failed' : ''}`, title);
+      paint(chip, conversation, `is-future${task.missedAt === null ? '' : ' is-missed'}${task.error ? ' is-failed' : ''}`);
       const when = whenLabel(task.dueAt, at);
       put(/** @type {HTMLElement} */ (chip.querySelector('.timeline-when')), 'textContent', task.missedAt === null ? when : `missed · ${when}`);
       shown.set(chip, { conversation, task });
@@ -325,9 +302,6 @@ function createTimeline(body, ctx, daemon) {
     shown = new Map();
     drawConversations(conversations, at);
     const scheduled = drawFuture(conversations, at);
-    // A label pointed at keeps its name shown, where it is now; one drawn anew loses it.
-    if (faceFor?.isConnected) showFace(faceFor);
-    else hideFace();
     status.textContent = actionError ?? error ?? '';
     ctx.setLabel(scheduled ? `${scheduled} scheduled` : null);
     if (editor.editing && !daemon.schedule().some((t) => t.id === editor.editing)) editor.close();
@@ -337,37 +311,7 @@ function createTimeline(body, ctx, daemon) {
   /** @param {EventTarget | null} target */
   const chipAt = (target) => /** @type {HTMLElement | null} */ (/** @type {Element} */ (target)?.closest?.('.timeline-chip'));
 
-  /** The label whose whole name shows over it. @type {HTMLElement | null} */
-  let faceFor = null;
-  /** Shows the whole name of `chip` over it, and for a scheduled prompt when it runs, under it, as the label has it. @param {HTMLElement} chip */
-  function showFace(chip) {
-    faceFor = chip;
-    const box = chip.getBoundingClientRect();
-    const when = chip.querySelector('.timeline-when')?.textContent ?? '';
-    face.replaceChildren(el('span', 'timeline-face-name', chip.dataset.name ?? ''), ...(when ? [el('span', 'timeline-face-when', when)] : []));
-    face.classList.toggle('is-future', when !== '');
-    face.style.left = `${box.left}px`;
-    face.style.top = `${box.top}px`;
-    face.style.minHeight = `${box.height}px`;
-    if (!face.matches(':popover-open')) face.showPopover();
-  }
-  function hideFace() {
-    faceFor = null;
-    if (face.matches(':popover-open')) face.hidePopover();
-  }
-  root.addEventListener('pointerover', (event) => {
-    const chip = chipAt(event.target);
-    if (chip) showFace(chip);
-    else hideFace();
-  });
-  root.addEventListener('pointerleave', hideFace);
-  root.addEventListener('focusin', (event) => {
-    const chip = chipAt(event.target);
-    if (chip?.matches(':focus-visible')) showFace(chip);
-  });
-  root.addEventListener('focusout', hideFace);
   past.addEventListener('scroll', () => {
-    hideFace();
     followNow = past.scrollLeft + past.clientWidth >= past.scrollWidth - 4;
   });
   // A mouse wheel scrolls back through the past.
@@ -426,10 +370,8 @@ function createTimeline(body, ctx, daemon) {
     const chip = chipAt(event.target);
     const what = chip && shown.get(chip);
     if (event.button !== 0 || !what) return;
-    hideFace();
     const { conversation, task } = what;
     bin.textContent = task ? 'Delete' : 'Archive';
-    bin.title = task ? 'Drop here to delete the scheduled prompt' : 'Drop here to archive the conversation';
     const params = showConversation({ file: conversation.file, meta: conversation.meta, cwd: conversation.cwd, name: nameOf(conversation) });
     ctx.dragWidget('omp', params, event, {
       label: nameOf(conversation),
@@ -579,7 +521,6 @@ function createTimeline(body, ctx, daemon) {
       resized.disconnect();
       cancelAnimationFrame(frame);
       editor.close();
-      hideFace();
       root.remove();
     },
   };

@@ -254,7 +254,6 @@ function createPullPane(body, ctx, daemon) {
     root.append(node);
 
     const refreshBtn = button('omp-tool-btn', 'Refresh', () => load());
-    refreshBtn.title = 'Read the pull request from GitHub again';
     const bugbotBtn = button('omp-tool-btn', 'Bugbot', () => askBugbot());
     ctx.headActions.replaceChildren(refreshBtn, bugbotBtn);
 
@@ -417,11 +416,6 @@ function createPullPane(body, ctx, daemon) {
       const waiting = latest?.status === 'watching';
       const to = target();
       bugbotBtn.disabled = !pull || !to || bugbot.asking || waiting;
-      bugbotBtn.title = !to
-        ? 'No agent to send Bugbot’s review to'
-        : waiting
-          ? 'Waiting for Bugbot’s review'
-          : `Comment “bugbot go” on this pull request, and send Cursor Bugbot’s review to ${targetName(to)} when it comes`;
       const text = bugbot.asking ? 'Asking Bugbot…' : bugbot.error ? `Bugbot not asked: ${bugbot.error}` : latest ? watchText(latest) : '';
       setText(bugbotLine, text);
       bugbotLine.hidden = !text;

@@ -51,7 +51,6 @@ export function createZoomControl() {
   const smaller = button('zoom-btn', '−', () => set(stepZoom(scale, -1)));
   smaller.setAttribute('aria-label', 'Smaller text');
   const reset = button('zoom-btn zoom-level', '', () => set(1));
-  reset.title = 'Reset text size';
   const larger = button('zoom-btn', '+', () => set(stepZoom(scale, 1)));
   larger.setAttribute('aria-label', 'Larger text');
   root.append(smaller, reset, larger);

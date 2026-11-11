@@ -79,10 +79,8 @@ const BOTTOM_SLACK_PX = 24;
 /** ⌘ on Apple's keyboards, Ctrl elsewhere: the modifier of the previous/next response keys. */
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const REFUSED = 'The daemon refused this page.';
-const FORKS_TITLE = 'Forks of this conversation, and the one it was forked from: click one to show it beside this window, or drag it where you want it';
 const NO_FORKS = 'No forks yet. /fork <prompt> starts one in the background; dragging Send onto the grid starts one beside.';
 const NOTHING_TO_FORK = 'Nothing to fork yet: the conversation is saved once the agent has replied';
-const SEND_TITLE = 'Drag onto the grid to send this in a fork of the conversation instead';
 /** The workbench's own command, in the suggestions beside omp's (`/fork` is omp's terminal UI's only). @type {SlashCommand} */
 const FORK_COMMAND = { name: 'fork', aliases: [], hint: '<prompt>', description: 'Fork this conversation in the background and send the fork this prompt (listed under Forks)' };
 
@@ -413,7 +411,6 @@ function createPane(body, ctx, daemon) {
               input.value = dir;
               form.requestSubmit();
             });
-            pick.title = dir;
             pick.setAttribute('aria-label', `Start an agent in ${shown}`);
             return pick;
           }),
@@ -533,9 +530,9 @@ function createPane(body, ctx, daemon) {
     const node = el('div', 'omp-session');
     const toolbar = el('div', 'omp-toolbar');
     const cwdEl = el('span', 'omp-cwd');
-    const modelBtn = toolButton('model…', 'Choose model');
+    const modelBtn = toolButton('model…');
     modelBtn.classList.add('omp-model');
-    const thinkingBtn = toolButton('think…', 'Choose thinking level');
+    const thinkingBtn = toolButton('think…');
     const activity = el('span', 'omp-activity');
     // How far through its todo list the agent is, while a turn runs (omp/todos.js).
     const progressEl = el('span', 'omp-progress');
@@ -545,20 +542,18 @@ function createPane(body, ctx, daemon) {
     progressEl.append(progressBar, progressCount);
     progressEl.hidden = true;
     const contextEl = el('span', 'omp-meter');
-    contextEl.title = 'Context window used';
     const costEl = el('span', 'omp-meter');
-    costEl.title = 'Cost of this session';
     const errorBadge = el('span', 'omp-badge-error', 'error');
     const spacer = el('span', 'omp-spacer');
-    const newBtn = toolButton('New', 'Start a new conversation in this window (Sessions keeps this one)', 'omp-new');
+    const newBtn = toolButton('New', 'omp-new');
     // The conversation's forks and the one it was forked from; forks start from `/fork <prompt>`
     // (in the background) or by dragging Send onto the grid (in a new window).
-    const forksBtn = toolButton('Forks', FORKS_TITLE, 'omp-forks');
-    const prsBtn = toolButton('PRs', 'Pull requests of this repository: click one to review it beside this conversation, or drag it where you want it', 'omp-prs');
+    const forksBtn = toolButton('Forks', 'omp-forks');
+    const prsBtn = toolButton('PRs', 'omp-prs');
     prsBtn.hidden = true; // until GitHub says the directory is in a repository
-    const stopBtn = toolButton('Stop', 'Stop the agent and restore queued messages (Esc)', 'omp-stop');
+    const stopBtn = toolButton('Stop', 'omp-stop');
     // Shown only while the session's model has no account signed in to talk to it with.
-    const signInBtn = toolButton('Sign in', 'Sign in to a model provider: this conversation’s model needs it');
+    const signInBtn = toolButton('Sign in');
     toolbar.append(cwdEl, modelBtn, thinkingBtn, activity, progressEl, contextEl, costEl, errorBadge, spacer, signInBtn);
     // Previous/next response: in a long conversation, steps through the agent's answers.
     const navKey = MAC ? '⌘' : 'Ctrl+';
@@ -593,7 +588,6 @@ function createPane(body, ctx, daemon) {
       jumpWrap.hidden = stickToBottom;
       if (stickToBottom) return;
       jump.classList.toggle('is-working', state.streaming);
-      jump.title = state.streaming ? 'Latest: the agent is working' : 'Latest';
       jump.setAttribute('aria-label', jump.title);
     }
     const pinToBottom = () => {
@@ -1488,7 +1482,6 @@ function createPane(body, ctx, daemon) {
       running.replaceChildren(
         ...work.map((w) => {
           const c = el('span', `omp-chip is-running${w.background ? ' is-background' : ''}`);
-          c.title = `${w.label}\n${w.background ? 'In the background: the agent goes on meanwhile' : 'The agent waits for it'}`;
           const time = el('span', 'omp-chip-time');
           if (w.startedAt !== null) time.dataset.since = String(w.startedAt);
           c.append(el('span', 'omp-chip-kind', w.kind), el('span', 'omp-chip-text', w.label), time, orbit());
@@ -1529,13 +1522,6 @@ function createPane(body, ctx, daemon) {
         ...tasks.map((t, i) => {
           const { when, missed, failed } = shown[i];
           const c = el('span', `omp-chip is-scheduled${missed ? ' is-missed' : ''}${failed ? ' is-failed' : ''}`);
-          c.title = [
-            `Runs ${new Date(t.dueAt).toLocaleString()}`,
-            ...(missed ? [`Missed: it was due ${new Date(/** @type {number} */ (t.missedAt)).toLocaleString()}, while Cockpit was off or the computer slept`] : []),
-            ...(t.error ? [`Last try failed: ${t.error}`] : []),
-            '',
-            t.prompt.length > 400 ? `${t.prompt.slice(0, 399)}…` : t.prompt,
-          ].join('\n');
           c.append(el('span', 'omp-chip-kind', missed ? `missed · ${when}` : when), el('span', 'omp-chip-text', t.prompt));
           return c;
         }),
@@ -1614,10 +1600,8 @@ function createPane(body, ctx, daemon) {
 
     function drawToolbar() {
       setText(cwdEl, shortCwd(cwd()));
-      cwdEl.title = cwd();
       const s = state.session;
       setText(modelBtn, s.model ? s.model.name || s.model.id : 'model…');
-      modelBtn.title = s.model ? `${s.model.provider}/${s.model.id}` : 'Choose model';
       setText(thinkingBtn, s.thinkingLevel ? `think: ${s.thinkingLevel}` : 'think…');
       setText(activity, state.streaming ? 'working' : waking ? 'waking…' : 'idle');
       activity.classList.toggle('is-streaming', state.streaming);
@@ -1627,12 +1611,10 @@ function createPane(body, ctx, daemon) {
         progressBar.max = progress.total;
         progressBar.value = progress.done;
         setText(progressCount, `${progress.done}/${progress.total}`);
-        progressEl.title = `${progress.done} of ${progress.total} tasks done${progress.current ? `\nNow: ${progress.current}` : ''}`;
       }
       setText(contextEl, s.contextPercent !== null ? `ctx ${s.contextPercent.toFixed(1)}%` : '');
       setText(costEl, state.cost > 0 ? `$${state.cost < 1 ? state.cost.toFixed(3) : state.cost.toFixed(2)}` : '');
       errorBadge.hidden = !state.lastError;
-      errorBadge.title = state.lastError ?? '';
       const live = ready();
       // Only an awake session knows whether its model needs an account; the menus wake it.
       signInBtn.hidden = !live || !needsLogin(state);
@@ -1645,7 +1627,6 @@ function createPane(body, ctx, daemon) {
     }
 
     function drawComposer() {
-      sendBtn.title = forkable() ? `${sendBtn.getAttribute('aria-label')} · ${SEND_TITLE}` : sendBtn.getAttribute('aria-label') ?? '';
       // The message waits in the box while the conversation wakes; it goes once omp is up.
       composer.root.classList.toggle('is-waking', waking !== null);
       draft.placeholder = state.streaming ? 'Steer the agent… (Esc stops)' : 'Message the agent… (@ files, # pull requests, / commands, ! shell)';
@@ -1777,17 +1758,15 @@ function createPane(body, ctx, daemon) {
     };
   }
 
-  /** @param {string} label @param {string} title @param {string} [name] a class naming it, for styles */
-  function toolButton(label, title, name) {
+  /** @param {string} label @param {string} [name] a class naming it, for styles */
+  function toolButton(label, name) {
     const b = button(name ? `omp-tool-btn ${name}` : 'omp-tool-btn', label);
-    b.title = title;
     return b;
   }
 
   /** An arrow of the top bar, named by its title. @param {string} arrow @param {string} title @param {() => void} onClick */
   function navButton(arrow, title, onClick) {
     const b = button('omp-tool-btn omp-nav-btn', arrow, onClick);
-    b.title = title;
     b.setAttribute('aria-label', title);
     return b;
   }
