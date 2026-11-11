@@ -1,4 +1,4 @@
-/** Element construction helpers: elements, buttons that never submit a form, text that keeps a selection, and file-drag checks. */
+/** Element construction helpers: elements, SVG icons, buttons that never submit a form, text that keeps a selection, and file-drag checks. */
 /**
  * @template {keyof HTMLElementTagNameMap} K
  * @param {K} tag @param {string} [className] @param {string} [text]
@@ -8,6 +8,13 @@ export function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/** An SVG element, its attributes set. @param {string} tag @param {Record<string, string>} [attrs] @returns {SVGElement} */
+export function svg(tag, attrs = {}) {
+  const node = /** @type {SVGElement} */ (document.createElementNS('http://www.w3.org/2000/svg', tag));
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
   return node;
 }
 
