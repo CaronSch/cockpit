@@ -1,7 +1,7 @@
 /**
  * Opening a file window (widgets/file.js) from text that names a text file (marked by
- * omp/markdown-dom.js): a click opens it in the file window this screen used last, or beside
- * the window clicked in if there is none; a drag places a new one where it is dropped, or shows
+ * omp/markdown-dom.js): a click opens it in the file window this screen used last, or as a tab
+ * of the window clicked in if there is none; a drag places a new one where it is dropped, or shows
  * it in the file window it is dropped on. A drag's release is never a click
  * (interaction/drag-controller.js).
  */
@@ -54,7 +54,7 @@ export function attachFileRefs({ root, ctx, cwd }) {
     if (!file) return;
     const params = fileParams(file.path, file.line);
     if (ctx.screen.get().windows.some((w) => w.widget === 'file')) ctx.showWidget('file', params);
-    else ctx.openBeside('file', params);
+    else ctx.openTab('file', params);
   }
 
   root.addEventListener('pointerdown', onPointerDown);

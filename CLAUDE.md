@@ -200,7 +200,7 @@ What runs today:
   asks omp's small model for a title (`daemon/fork-title.js`; the prompt's first line until
   it answers, or if it does not) and renames the fork with it. **Forks** lists the
   conversation it was forked from and its own forks, with a count of the latter: a click
-  shows one beside the window (or points at the window already showing it) and reads it, as
+  shows one as a new tab of the window (or points at the window already showing it) and reads it, as
   showing one from Sessions does; a drag places it. Windows of related conversations on one screen get the same colour in their top bars
   (`ctx.setFamily`, `src/omp/fork-family.js`). The message box is a card set like the transcript (Inter; code, notes,
   paths and the spend are monospace), lifted by a soft shadow, its faint grey edge a little stronger while it is typed in,
@@ -331,7 +331,7 @@ What runs today:
   events, kept in `hello`) and the window sends what is typed as lines, one login at a time.
   Once omp and a provider check out, the daemon's `setupDone` is set; until then the first
   empty screen a page opens gets a Setup window (`src/app.js` `offerSetup`), and the palette
-  opens one any time. **Start an agent** opens an agent window beside it.
+  opens one any time. **Start an agent** opens an agent window as a tab of it.
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
@@ -417,7 +417,7 @@ What runs today:
   elsewhere (the file itself, another tab) is never overwritten without asking.
 - Pull request windows (the `github` widget): the agent window's **PRs** (in its title bar,
   shown while its directory is in a GitHub repository) lists the repository's pull requests; a
-  click opens one on the agent window's right, dragging one places it where it is dropped. A
+  click opens one as a tab of the agent window, dragging one places it where it is dropped. A
   pull request an agent's reply (or a pull request's own text) links, in any repository, or
   refers to as `owner/name#123` or `#123` (of the conversation's, or that pull request's,
   repository) drags out the same way, and dropped on a pull request window shows there (`src/github/pr-refs.js` finds them,
@@ -447,7 +447,7 @@ What runs today:
   its first 2 MiB; `PUT /api/text` saves). A path to one in an agent window's transcript (absolute, `~/`,
   relative to the conversation's directory, or a bare name; in text or alone in a code span; a
   `:42` after it names a line) is marked: a click shows it in the file window this screen used
-  last, or opens one on the agent window's right, and a drag places one where it is dropped, or
+  last, or opens one as a tab of the agent window, and a drag places one where it is dropped, or
   shows it in the file window it is dropped on (`src/files/file-window.js`). The window shows the
   text with line numbers, the line asked for marked and scrolled to; Markdown, and CSV and TSV
   as a table (`src/files/csv.js`, drawn as a reply's tables are, with their Copy; the first 5000
@@ -663,7 +663,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/daemon/client.js` — Browser side of the daemon connection: one event stream per page, shared by every widget.
 - `src/files/csv.js` — CSV and TSV as the file window (widgets/file.js) renders them: a table, drawn as an agent reply's Markdown tables are (omp/markdown-dom.js `renderTable`), so it looks and copies the same.
 - `src/files/file-refs.js` — Text files named in text the workbench shows (an agent's reply): which files the file window (widgets/file.js) shows, by extension (Markdown, JSON, plain text and common code), and the paths of such files in a run of text or a code span, with the line a `:42` after one names, kept free of the DOM so they can be tested.
-- `src/files/file-window.js` — Opening a file window (widgets/file.js) from text that names a text file (marked by omp/markdown-dom.js): a click opens it in the file window this screen used last, or beside the window clicked in if there is none; a drag places a new one where it is dropped, or shows it in the file window it is dropped on.
+- `src/files/file-window.js` — Opening a file window (widgets/file.js) from text that names a text file (marked by omp/markdown-dom.js): a click opens it in the file window this screen used last, or as a tab of the window clicked in if there is none; a drag places a new one where it is dropped, or shows it in the file window it is dropped on.
 - `src/github/bugbot.js` — Cursor Bugbot's reviews, read from GitHub as the daemon's watcher (daemon/bugbot.js) finds them, and told to the agent: which review answers a `bugbot go` comment, and its findings as one message, kept free of I/O so they can be tested.
 - `src/github/diff.js` — A pull request's changes as the pull request window shows them: `gh pr diff`'s unified diff parsed into files, their hunks and each line with its numbers in the old and the new file, kept free of the DOM so it can be tested.
 - `src/github/pr-mention.js` — `#` pull request mentions typed in the agent pane's message box: the one the caret ends, the pull requests and repositories that match what is typed, and the text that completes it, kept free of the DOM so they can be tested.

@@ -100,7 +100,7 @@ export default {
     prefs.append(prefsList);
 
     const recheck = button('btn', 'Check again', () => void check());
-    const start = button('btn btn-accent', 'Start an agent', () => ctx.openBeside('omp', {}));
+    const start = button('btn btn-accent', 'Start an agent', () => ctx.openTab('omp', {}));
     const actions = el('div', 'setup-actions');
     actions.append(recheck, start);
     root.append(omp.root, models.root, browser, gh.root, phoneStep.root, prefs, actions);
