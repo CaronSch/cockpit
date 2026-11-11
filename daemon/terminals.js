@@ -147,7 +147,7 @@ export function createTerminals({ shell = process.env.SHELL || '/bin/sh', env = 
         changed();
       },
     });
-    t = { info: { id, cwd, shell, startedAt: Date.now() }, proc, pty, scrollback: [{ cols, rows, data: '' }], kept: 0, pending: '', flush: undefined, watchers: new Set() };
+    t = { info: { id, cwd }, proc, pty, scrollback: [{ cols, rows, data: '' }], kept: 0, pending: '', flush: undefined, watchers: new Set() };
     running.set(id, t);
     changed();
     return t.info;

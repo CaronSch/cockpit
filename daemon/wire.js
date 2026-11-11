@@ -283,9 +283,9 @@
 /** Sent to every page as the Setup window's `omp login` starts, prints, is answered or ends. @typedef {{ kind: 'login', login: LoginState | null }} LoginEvent */
 
 /**
- * A terminal the daemon runs (`terminals.js`): the login shell `shell`, started in `cwd` at
- * `startedAt` (epoch ms).
- * @typedef {{ id: string, cwd: string, shell: string, startedAt: number }} TerminalInfo
+ * A terminal the daemon runs (`terminals.js`): the login shell started in `cwd`, which its window
+ * names it by.
+ * @typedef {{ id: string, cwd: string }} TerminalInfo
  */
 /** Sent to every page after a terminal started or ended, with those running. @typedef {{ kind: 'terminals', terminals: TerminalInfo[] }} TerminalsEvent */
 /** Output a terminal printed while it was `cols` × `rows`. @typedef {{ cols: number, rows: number, data: string }} ScrollbackPart */
