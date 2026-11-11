@@ -32,16 +32,16 @@ export const conversationKey = ({ sessionFile, session }) => sessionFile ?? sess
 /**
  * The conversations to list: every journal the daemon listed (`past`), each with the awake
  * session holding it, and the awake sessions whose journal is not listed (a new one omp has
- * not written yet, or one kept elsewhere), unless searching (their journals did not match);
- * only those in `directory` when one is given. Unordered.
+ * not written yet, or one kept elsewhere); only those in `directory` when one is given.
+ * Unordered.
  * @param {readonly PastSession[]} past @param {readonly SessionMeta[]} metas
- * @param {{ searching: boolean, directory: string | null }} options @returns {Listed[]}
+ * @param {{ directory: string | null }} options @returns {Listed[]}
  */
-export function listConversations(past, metas, { searching, directory }) {
+export function listConversations(past, metas, { directory }) {
   const awake = metas.filter(isRunning);
   const holding = new Map(awake.flatMap((m) => (m.sessionFile ? [[m.sessionFile, m]] : [])));
   const files = new Set(past.map((s) => s.file));
-  const unlisted = searching ? [] : awake.filter((m) => !m.sessionFile || !files.has(m.sessionFile));
+  const unlisted = awake.filter((m) => !m.sessionFile || !files.has(m.sessionFile));
   return [
     ...past.map((s) => ({ ...s, key: s.file, meta: holding.get(s.file) ?? null })),
     ...unlisted.map((m) => ({

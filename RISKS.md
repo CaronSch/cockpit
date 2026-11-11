@@ -72,6 +72,15 @@ is newer. The daemon prints its version at start.
   (`rename`) and `modes/rpc/rpc-session-settle.ts`, then update `daemon/omp-session.js`
   and the fake.
 
+- **Plain titles lean on omp's `--config` overlay and `title.icons`.** Every session is launched
+  with `--config daemon/omp-overlay.yml`, whose `title.icons: boring` keeps generated titles
+  free of title cards (an emoji and an ALL-CAPS code before the title). Checked live against
+  18.12.3: `/rename` gave "Explain Bloom filter purpose" with the overlay and "🌸 BLOOM: Explain
+  Bloom filter purpose" without. A change shows up as new sessions titled with an emoji and a
+  code again, or omp refusing to start ("Config overlay not found" / "must be a YAML mapping").
+  *Response:* check `omp --help` (`--config`) and `omp config list` (`title.icons`), and update
+  the overlay's keys.
+
 - **Idle compaction leans on omp's usage and `compact`.** `daemon/idle-compaction.js`
   (checked against 18.12.6's source) reads the cache entry from an assistant
   `message_end`'s `usage.cttl.ephemeral1h`, times it from that message's `message_start`,

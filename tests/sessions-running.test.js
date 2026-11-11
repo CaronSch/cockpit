@@ -24,7 +24,7 @@ describe('conversations', () => {
       meta({ id: 'new', status: 'starting', sessionFile: '/new.jsonl', cwd: '/q', startedAt: 9 }),
       meta({ id: 'failed', status: 'failed' }),
     ];
-    const listed = listConversations([journal('/a.jsonl'), journal('/b.jsonl')], metas, { searching: false, directory: null });
+    const listed = listConversations([journal('/a.jsonl'), journal('/b.jsonl')], metas, { directory: null });
     assert.deepEqual(
       listed.map((c) => [c.key, c.meta?.id ?? null]),
       [
@@ -37,11 +37,10 @@ describe('conversations', () => {
     assert.equal(isRunning(meta({ id: 'x', status: 'exited' })), false);
   });
 
-  test('searching lists only the journals that matched; a directory narrows them all', () => {
+  test('a directory narrows them all, awake ones not written yet too', () => {
     const metas = [meta({ id: 'new', sessionFile: null, cwd: '/q' })];
     const past = [journal('/a.jsonl', '/p'), journal('/c.jsonl', '/q')];
-    assert.deepEqual(listConversations(past, metas, { searching: true, directory: null }).map((c) => c.key), ['/a.jsonl', '/c.jsonl']);
-    assert.deepEqual(listConversations(past, metas, { searching: false, directory: '/q' }).map((c) => c.key), ['/c.jsonl', 'new']);
+    assert.deepEqual(listConversations(past, metas, { directory: '/q' }).map((c) => c.key), ['/c.jsonl', 'new']);
   });
 
   test('are named by their journal, else a new one by its session', () => {

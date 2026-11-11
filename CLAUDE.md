@@ -46,7 +46,8 @@ Planned capabilities:
   `bun start` runs it; it serves the UI on `127.0.0.1:4777` (`Bun.serve`), opened as
   `http://cockpit.localhost:4777/` and
   launches each omp session as `omp --mode rpc-ui` in the chosen directory
-  (`Bun.spawn`), owning those processes, with `--append-system-prompt` asking the
+  (`Bun.spawn`), owning those processes, with omp settings of its own over the user's
+  (`--config daemon/omp-overlay.yml`: plain titles, no title-card icon or code) and `--append-system-prompt` asking the
   agent for progress updates as it works, in Claude Code's wording, and telling it
   what the window renders, inviting visuals, and to schedule a check rather than ask its user to
   come back for it (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has),
@@ -147,8 +148,8 @@ What runs today:
   idle, before the prompt cache expired"), with the summary. Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
-  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New**, **Forks**,
-  **Accounts** and **Stop** sit in the window's title bar (`ctx.headActions`).
+  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **New**, **Forks**
+  and **Accounts** sit in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Before them, **↑** and **↓** (⌘↑ / ⌘↓, Ctrl elsewhere, anywhere in the window, the message box
   too) put the agent's previous or next response (as *Only prompts and responses* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again
@@ -182,8 +183,8 @@ What runs today:
   conversation it was forked from and its own forks, with a count of the latter: a click
   shows one beside the window (or points at the window already showing it) and reads it, as
   showing one from Sessions does; a drag places it. Windows of related conversations on one screen get the same colour in their top bars
-  (`ctx.setFamily`, `src/omp/fork-family.js`). The message box starts one line high, set like
-  Notes text, and grows with the prompt; a plain click anywhere else in the pane
+  (`ctx.setFamily`, `src/omp/fork-family.js`). The message box is a card set like the transcript (Inter; code, notes,
+  paths and the spend are monospace), starts one line high and grows with the prompt; a plain click anywhere else in the pane
   (not on a control, in a dialog omp asked for, or ending a text selection) puts the caret
   at its end without scrolling, as in a terminal (`src/ui/click-focus.js`); Tab indents by two spaces as in a code
   editor (every selected line; Shift+Tab, or Backspace in the leading spaces, outdents; Cmd/Ctrl+Z undoes it) unless a
@@ -239,7 +240,7 @@ What runs today:
   `get_messages` replaces every window's transcript. A pane whose
   agent finished its turn (or asks something) while its user was not in it (the last
   window they clicked, typed or put the cursor in, with the pointer over it, in a focused
-  page) gets an electric-blue border until they click in it, type in it or move the cursor
+  page) gets a cyan border until they click in it, type in it or move the cursor
   into it; hovering over it or scrolling it reads nothing (it keeps the session awake), nor
   does a modifier or shortcut (⌘K, ⌘-Tab) nor the focus the browser gives back as the page
   regains it: its session is unread, for every window and page, across reloads and daemon
@@ -304,36 +305,37 @@ What runs today:
 - The Sessions window: every omp conversation in one list (read from omp's
   session files, with the awake session holding each, and awake ones omp has not
   written yet; `src/sessions/running.js`), with how an awake one is doing
-  (starting, working, idle, *done*: it finished and nobody has read it, or *needs
-  you*: it asks a question or an approval), searchable across titles, directories,
-  prompts and the agents' replies (`daemon/search.js`: ranked, so a question in plain
-  words finds the conversation that answers it, best first, with the passage that
-  matched and its words marked; the list is by relevance while searching), and sortable. The same
-  search floats over the workbench as Spotlight (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
-  the top bar's Search; a modal dialog; Enter shows the conversation as a Sessions click
-  does). A click on a conversation (or Enter) shows it in the
+  (starting or working: a spinner and the word in the accent; *needs you*: it asks a question or
+  an approval, a warm dot; *done*: it finished and nobody has read it, a cyan dot; idle: nothing).
+  Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
+  the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
+  prompts and the agents' replies, so a question in plain words finds the conversation that
+  answers it, best first, with the passage that matched and its words marked; Enter shows the
+  conversation as a Sessions click does). The window's title bar holds its controls: a directory
+  menu and **View** (sort order, Reverse order, Archived sessions); the list follows the
+  daemon, so nothing refreshes it. A click on a conversation (or Enter) shows it in the
   agent window this screen used last (pressed or focused last), or a new one if
   there is none; dragging it onto the middle of an agent window shows it there, and
   onto the grid elsewhere opens a new agent window where it is dropped. Showing one
-  starts no omp. A conversation shown in an agent window of this screen has a bar at
-  its row's left edge (brighter for the agent window used last); pointing at a row
+  starts no omp. The conversation in the agent window this screen used last has its row filled,
+  and one shown in another agent window here is ringed; pointing at a row
   outlines its windows, and pointing at an agent window lights its row (`ctx.screen`,
   `ctx.outline`; `src/sessions/links.js`). Waking a journal a session already
   holds gets that session: the daemon never starts a second omp on one. A
   directory menu (every directory with sessions, A→Z, with counts) narrows a
-  window to one directory, together with its search, sort and Archived toggle; like
+  window to one directory, together with View's choices; like
   those, the choice is the window's own. An untitled session is listed by its first
   prompt. Row actions show on hover or focus. A fork is listed as a
   session of its own, under the title its first prompt gave it (until then, the one it copied from its source). **Archive** moves a
   session's journal and its folder out of omp's sessions into
   `~/.cockpit/archive/sessions/` at the same relative path, so neither the list nor omp's
-  own resume offers it; the **Archived** toggle lists archived sessions (searchable and
-  sortable the same way), each with **Restore**, which moves it back and never replaces a
+  own resume offers it; View's **Archived sessions** lists archived sessions (the label says
+  *Archived*), each with **Restore**, which moves it back and never replaces a
   file that is there now. An idle conversation's session goes to sleep before it
   moves; one whose agent works is not archived until it is done. A new session
   nothing was sent to has no journal yet: Archive ends it (`DELETE /api/sessions/:id`)
   and it is gone, not archived. Nothing is ever deleted: there is no delete. An unread conversation (archived too, which
-  keeps its mark) has a blue dot and a bold title, and the window's top bar counts the
+  keeps its mark) has a cyan dot and a bold title, and the window's top bar counts the
   unread ones it lists; showing a session from here reads it. Right-click on a row, its
   **⋯** button, or Shift+F10 / the ContextMenu key on a focused row opens its menu
   (`src/ui/context-menu.js`, a popover the arrow keys move through): **Mark as
@@ -544,8 +546,8 @@ telemetry views, cmux-parity features beyond the above.
   `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's (Setup checks the same
   `tailscale`). Tests, the e2e daemons included, drive `tests/fixtures/fake-tailscale.js`, never
   the real `tailscale`.
-- Before committing, all of these must pass (CI in `.github/workflows/ci.yml`
-  runs the same on every push to `main` and every PR):
+- Before committing, all of these must pass. CI (`.github/workflows/ci.yml`, on every push to
+  `main` and every PR) runs all but the browser tests, which run only here:
   - `bun run typecheck`
   - `bun run test`: `bun test` suites in `tests/`: the pure modules, plus the
     daemon end to end against `tests/fixtures/fake-omp.js`, a scripted stand-in
@@ -702,7 +704,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/pane.js` — An empty window: the frame every real widget is mounted into, with nothing inside.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it.
-- `src/widgets/sessions.js` — omp conversations, one list, searchable and sortable.
+- `src/widgets/sessions.js` — omp conversations, one list, sortable and narrowed to a directory.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
 - `src/widgets/timeline.js` — A timeline of the agents: on its left, idle conversations by how recently they were active (in order, not to scale), the latest beside now; at now, those whose agents are busy (starting, working, asking their user something, or running work in the background); on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js) that reaches as far as the furthest one: the next hour spread out, the next month squeezed in.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.

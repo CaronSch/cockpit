@@ -41,10 +41,10 @@ function load(src) {
 /** Drawings by their language and source, as SVG markup. @type {Map<string, Promise<string>>} */
 const drawings = new Map();
 
-/** Graphite, as the app's tokens (tokens.css) in sRGB, which every SVG renderer takes. */
-const INK = { text: '#e6e6e6', dim: '#a5a8b0', faint: '#7d8089', line: '#3d4048' };
-/** The app's typeface (read when first drawing, not on import). */
-const font = () => getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'monospace';
+/** The app's neutral greys (tokens.css) in sRGB, which every SVG renderer takes. */
+const INK = { text: '#ebebed', dim: '#9e9ea3', faint: '#68686f', line: '#2e2e31' };
+/** The transcript's typeface (read when first drawing, not on import). */
+const font = () => getComputedStyle(document.documentElement).getPropertyValue('--font-ui').trim() || 'monospace';
 /** The transcript's reading size, in pixels (`--text-sm`, which follows the text size the top bar sets). */
 function textSize() {
   const probe = el('span');

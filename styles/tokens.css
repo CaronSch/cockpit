@@ -1,63 +1,76 @@
-/* Design tokens — "instrument panel": graphite surfaces, amber phosphor for
-   interaction, red reserved for errors. */
+/* Design tokens: near-black neutral surfaces with hairline edges, one indigo accent for
+   interaction, cyan for unread news, red reserved for errors. */
 :root {
   color-scheme: dark;
 
-  /* Surfaces */
-  --color-bg: oklch(16.5% 0.006 270);
-  --color-deck: oklch(14% 0.006 270);
-  --color-surface: oklch(20.5% 0.008 270);
-  --color-surface-raised: oklch(24.5% 0.01 270);
-  --color-line: oklch(30% 0.01 270);
-  --color-line-strong: oklch(38% 0.012 270);
+  /* Surfaces: the page behind the windows, the windows, and what floats over them. Text
+     fields and code wells sit a step off the surface they are on. */
+  --color-bg: oklch(15% 0.004 286);
+  --color-deck: oklch(15% 0.004 286);
+  --color-surface: oklch(19.5% 0.004 286);
+  --color-surface-raised: oklch(24% 0.005 286);
+  --color-inset: oklch(16.5% 0.004 286);
+  --color-field: oklch(100% 0 0 / 0.035);
+  /* Pointed at: a light wash that reads the same on any surface. */
+  --color-hover: oklch(100% 0 0 / 0.06);
+  /* Edges are translucent white, so a hairline stays a hairline on any surface. */
+  --color-line: oklch(100% 0 0 / 0.08);
+  --color-line-strong: oklch(100% 0 0 / 0.14);
   /* A text field being typed in: its border lifts, quieter than the accent outline. */
-  --color-line-focus: oklch(60% 0.012 270);
+  --color-line-focus: oklch(100% 0 0 / 0.3);
 
   /* Text */
-  --color-text: oklch(100% 0 0);
-  --color-text-dim: oklch(70% 0.012 270);
-  --color-text-faint: oklch(54% 0.012 270);
+  --color-text: oklch(94% 0.003 286);
+  --color-text-dim: oklch(70% 0.008 286);
+  --color-text-faint: oklch(52% 0.01 286);
 
-  /* Semantic */
-  --color-accent: oklch(81% 0.155 72);
-  --color-accent-ink: oklch(22% 0.04 72);
-  --color-accent-glow: color-mix(in oklch, var(--color-accent) 18%, transparent);
-  --color-danger: oklch(69% 0.19 27);
-  /* A window with news its user has not seen: electric blue, unlike anything else here. */
-  --color-unread: oklch(80% 0.16 225);
-  /* Inline code in agent replies: soft periwinkle, about 8:1 on --color-bg. */
-  --color-code: oklch(76% 0.11 265);
-  --color-selection: color-mix(in oklch, var(--color-code) 30%, transparent);
+  /* Semantic. The accent is light enough to be text; filled controls take its deeper tone. */
+  --color-accent: oklch(68% 0.17 277);
+  --color-accent-fill: oklch(57% 0.2 277);
+  --color-accent-ink: oklch(99% 0 0);
+  --color-accent-glow: color-mix(in oklch, var(--color-accent) 16%, transparent);
+  --color-ok: oklch(75% 0.13 155);
+  --color-danger: oklch(68% 0.19 22);
+  --color-warn: oklch(80% 0.14 75);
+  /* A window with news its user has not seen: cyan, unlike anything else here. */
+  --color-unread: oklch(80% 0.13 210);
+  /* Code in agent replies: soft periwinkle on a faint chip, apart from the accent's links. */
+  --color-code: oklch(80% 0.1 268);
+  --color-code-bg: oklch(100% 0 0 / 0.06);
+  --color-selection: color-mix(in oklch, var(--color-accent) 32%, transparent);
   /* Related windows (an agent conversation and its forks, app.js): one colour per family on
      screen, in hues clear of the accent, unread, danger and code colours. */
   --color-family-1: oklch(76% 0.14 145);
   --color-family-2: oklch(76% 0.12 185);
-  --color-family-3: oklch(72% 0.15 300);
+  --color-family-3: oklch(72% 0.15 315);
   --color-family-4: oklch(74% 0.16 335);
   --color-family-5: oklch(82% 0.15 110);
   --color-family-6: oklch(72% 0.13 355);
 
-  /* Type: one monospace face for everything, chrome and conversation alike; hierarchy
-     comes from size, weight and colour. `--text-sm` is reading text: the omp transcript,
-     its message box and scratchpads. Every size follows `--font-scale`, the text size the
-     top bar sets (ui/zoom.js). */
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  /* Type: `--font-ui` (Inter) sets chrome and conversation; `--font-code` (IBM Plex Mono) sets
+     code, diffs, files, paths, notes and numbers that tick (spend). Hierarchy comes from size,
+     weight and colour. `--text-sm` is reading text: the omp transcript, its message box and
+     scratchpads. Sizes are small by design (sleeker); every one follows `--font-scale`, the
+     text size the top bar sets (ui/zoom.js). */
+  --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-code: 'IBM Plex Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
   --font-scale: 1;
-  --text-2xs: calc(0.6875rem * var(--font-scale));
-  --text-xs: calc(0.75rem * var(--font-scale));
-  --text-sm: calc(0.8125rem * var(--font-scale));
-  --text-base: calc(0.9375rem * var(--font-scale));
-  --text-lg: calc(1.25rem * var(--font-scale));
+  --text-2xs: calc(0.62rem * var(--font-scale));
+  --text-xs: calc(0.675rem * var(--font-scale));
+  --text-sm: calc(0.73125rem * var(--font-scale));
+  --text-base: calc(0.84375rem * var(--font-scale));
+  --text-lg: calc(1.125rem * var(--font-scale));
   --leading-read: 1.5;
-  --tracking-caps: 0.08em;
 
   /* Space & shape */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --radius-s: 3px;
-  --radius-m: 6px;
+  --radius-s: 6px;
+  --radius-m: 8px;
+  /* Windows, the message box and other panels (render/drop-indicator.js draws the same). */
+  --radius-l: 10px;
   --topbar-h: 40px;
 
   /* Motion */
@@ -66,7 +79,7 @@
   --ease-snap: cubic-bezier(0.2, 0.9, 0.25, 1);
 
   /* Depth */
-  --shadow-lift: 0 18px 40px -12px oklch(0% 0 0 / 0.6), 0 2px 6px oklch(0% 0 0 / 0.4);
+  --shadow-lift: 0 16px 40px -12px oklch(0% 0 0 / 0.7), 0 2px 8px oklch(0% 0 0 / 0.35);
 }
 
 @media (prefers-reduced-motion: reduce) {

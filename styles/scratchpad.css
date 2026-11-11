@@ -28,18 +28,17 @@
   min-width: 0;
   max-width: 100%;
   padding: 4px 8px;
-  border: 1px solid var(--color-line);
+  border: 1px solid transparent;
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text);
-  font: 600 var(--text-sm) / 1.4 var(--font-mono);
+  font: 500 var(--text-sm) / 1.4 var(--font-ui);
   cursor: pointer;
 }
 
 .pad-switch:hover,
 .pad-switch:has(+ :popover-open) {
-  border-color: var(--color-line-strong);
-  background: var(--color-surface-raised);
+  background: var(--color-hover);
 }
 
 .pad-title {
@@ -64,7 +63,7 @@
   padding: var(--space-1);
   overflow: auto;
   border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-l);
   background: var(--color-surface-raised);
   box-shadow: var(--shadow-lift);
 }
@@ -78,14 +77,14 @@
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--color-text);
-  font: var(--text-sm) / 1.35 var(--font-mono);
+  font: var(--text-sm) / 1.35 var(--font-ui);
   text-align: left;
   cursor: pointer;
 }
 
 .pad-menu-item:hover,
 .pad-menu-item:focus-visible {
-  background: var(--color-surface);
+  background: var(--color-hover);
   outline: none;
 }
 
@@ -107,7 +106,7 @@
 
 .pad-menu-detail {
   color: var(--color-text-faint);
-  font: var(--text-2xs) / 1.4 var(--font-mono);
+  font: var(--text-2xs) / 1.4 var(--font-ui);
 }
 
 .pad-menu-sep {
@@ -161,8 +160,8 @@
   padding: var(--space-2);
   overflow: auto;
   border-radius: var(--radius-s);
-  background: var(--color-deck);
-  font: var(--text-xs) / 1.5 var(--font-mono);
+  background: var(--color-inset);
+  font: var(--text-xs) / 1.5 var(--font-code);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -177,9 +176,9 @@
   min-height: 0;
   padding: var(--space-2);
   overflow: auto;
-  border: 1px solid var(--color-line-strong);
-  border-radius: var(--radius-s);
-  background: var(--color-deck);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-m);
+  background: var(--color-field);
   cursor: text;
 }
 
@@ -193,7 +192,7 @@
   border: 0;
   background: transparent;
   color: var(--color-text);
-  font: var(--text-sm) / var(--leading-read) var(--font-mono);
+  font: var(--text-sm) / var(--leading-read) var(--font-code);
   tab-size: 4;
 }
 
@@ -235,7 +234,7 @@
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-s);
   color: var(--color-text);
-  font: var(--text-xs) / 1.4 var(--font-mono);
+  font: var(--text-xs) / 1.4 var(--font-ui);
   text-decoration: none;
   overflow-wrap: anywhere;
 }
@@ -271,7 +270,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   color: var(--color-text-faint);
-  font: var(--text-2xs) / 1.4 var(--font-mono);
+  font: var(--text-2xs) / 1.4 var(--font-ui);
 }
 
 .scratchpad-status.is-error {

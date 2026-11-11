@@ -2,11 +2,12 @@
  * A small menu of actions on one thing, as a right-click, the ContextMenu key, Shift+F10 or a
  * ⋯ button opens it: a native popover at the pointer or beside the control, whose items the
  * arrow keys move between; Enter or a click runs one, and Esc or a click elsewhere closes it.
- * Focus starts on the first item and goes back where it was when the menu closes.
+ * Focus starts on the first item and goes back where it was when the menu closes. An item with
+ * `checked` is a switch, ticked while on; `'separator'` draws a line between groups.
  */
 import { button, el } from './dom.js';
 
-/** @typedef {{ label: string, run: () => void }} MenuItem */
+/** @typedef {{ label: string, run: () => void, checked?: boolean } | 'separator'} MenuItem */
 
 /** Shift+F10 and the ContextMenu key: the keyboard's right-click. @param {KeyboardEvent} event */
 export const opensContextMenu = (event) => event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10');
@@ -20,16 +21,26 @@ export function openContextMenu(anchor, items, at) {
   menu.popover = 'auto';
   menu.setAttribute('role', 'menu');
   const returnTo = /** @type {HTMLElement | null} */ (document.activeElement);
-  const entries = items.map(({ label, run }) => {
+  /** @type {HTMLButtonElement[]} */
+  const entries = [];
+  for (const entry of items) {
+    if (entry === 'separator') {
+      const line = el('div', 'context-menu-sep');
+      line.setAttribute('role', 'separator');
+      menu.append(line);
+      continue;
+    }
+    const { label, run, checked } = entry;
     const item = button('context-menu-item', label, () => {
       menu.hidePopover();
       run();
     });
-    item.setAttribute('role', 'menuitem');
+    item.setAttribute('role', checked === undefined ? 'menuitem' : 'menuitemcheckbox');
+    if (checked !== undefined) item.setAttribute('aria-checked', String(checked));
     item.tabIndex = -1;
-    return item;
-  });
-  menu.append(...entries);
+    entries.push(item);
+    menu.append(item);
+  }
   menu.addEventListener('keydown', (event) => {
     const at = entries.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
     const next = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: entries.length - 1 }[event.key];
