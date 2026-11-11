@@ -260,8 +260,8 @@
 .omp-activity.is-streaming::before,
 .omp-working::before {
   box-sizing: border-box;
-  border: 1.25px solid color-mix(in oklch, var(--color-accent) 18%, transparent);
-  border-top-color: color-mix(in oklch, var(--color-accent) 75%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
+  border-top-color: color-mix(in oklch, var(--color-accent) 90%, transparent);
   background: transparent;
   animation: omp-spin 1.4s linear infinite;
 }
@@ -518,7 +518,7 @@
 }
 
 .omp-jump.is-working .omp-jump-ring {
-  stroke: color-mix(in oklch, var(--color-accent) 75%, transparent);
+  stroke: color-mix(in oklch, var(--color-accent) 90%, transparent);
   stroke-dasharray: 20 62;
   animation: omp-jump-spin 1.4s linear infinite;
 }
@@ -1016,8 +1016,8 @@
   box-sizing: border-box;
   width: 8px;
   height: 8px;
-  border: 1.25px solid color-mix(in oklch, var(--color-accent) 18%, transparent);
-  border-top-color: color-mix(in oklch, var(--color-accent) 75%, transparent);
+  border: 1.5px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
+  border-top-color: color-mix(in oklch, var(--color-accent) 90%, transparent);
   border-radius: 50%;
   corner-shape: round;
   animation: omp-spin 1.4s linear infinite;
