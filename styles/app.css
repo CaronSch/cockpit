@@ -368,11 +368,24 @@ button {
   font: var(--weight-regular) var(--text-sm) / 1.4 var(--font-ui);
 }
 
+/* Whose settings follow: this browser's, or the daemon's (every browser's). */
+.config-heading {
+  margin: var(--space-2) 8px 2px;
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.config-heading:first-child {
+  margin-top: 4px;
+}
+
+/* A switch or choice: its control centred on the label's line, the detail under the label. */
 .config-setting {
   display: grid;
   grid-template-columns: auto 1fr;
-  align-items: baseline;
-  gap: 2px var(--space-2);
+  align-items: start;
+  gap: 1px var(--space-3);
   padding: 6px 8px;
   border-radius: var(--radius-m);
   cursor: pointer;
@@ -383,8 +396,60 @@ button {
 }
 
 .config-setting input {
+  align-self: center;
   margin: 0;
-  accent-color: var(--color-accent-fill);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color var(--duration-fast), border-color var(--duration-fast);
+}
+
+.config-setting input:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* A toggle: a pill whose knob slides across, filled in the accent while on. */
+.config-setting input[type='checkbox'] {
+  position: relative;
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--color-line-strong);
+}
+
+.config-setting input[type='checkbox']::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+  transition: transform var(--duration-fast) var(--ease-snap), background-color var(--duration-fast);
+}
+
+.config-setting input[type='checkbox']:checked {
+  background: var(--color-accent-fill);
+}
+
+.config-setting input[type='checkbox']:checked::before {
+  transform: translateX(11px);
+  background: white;
+}
+
+/* One of a choice: a ring, filled with a dot while picked, in the toggle's column. */
+.config-setting input[type='radio'] {
+  justify-self: center;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--color-line-focus);
+  border-radius: 50%;
+}
+
+.config-setting input[type='radio']:checked {
+  border-color: var(--color-accent-fill);
+  background: radial-gradient(var(--color-accent-fill) 0 3.5px, transparent 4px);
 }
 
 .config-detail {
@@ -405,12 +470,12 @@ button {
 }
 
 .config-legend {
-  padding: 4px 6px 0;
+  padding: 4px 8px 0;
 }
 
 .config-group > .config-detail {
   margin: 0;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 /* Phone access, while on: how it is doing, then the QR code a phone signs in with and its address. */
@@ -452,17 +517,31 @@ button {
   user-select: all;
 }
 
-/* Accounts: a Sign in button, and the login it runs while it shows (ui/login.js). */
-.config-accounts-body {
-  display: flex;
-  flex-direction: column;
-  align-items: start;
-  gap: var(--space-1);
-  padding: 0 6px 4px;
+/* Accounts: one row, Sign in at its end, and the login it runs under it while it shows (ui/login.js). */
+.config-accounts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 1px var(--space-3);
+  margin-top: var(--space-1);
+  padding: var(--space-2) 8px 6px;
+  border-top: 1px solid var(--color-line);
 }
 
-.config-accounts-body .login {
-  align-self: stretch;
+.config-accounts > .config-detail {
+  grid-column: 1;
+}
+
+.config-accounts > .btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  padding: 3px 10px;
+  font-size: var(--text-xs);
+}
+
+.config-accounts > .login {
+  grid-column: 1 / -1;
+  margin-top: var(--space-1);
 }
 
 /* ── omp login (ui/login.js), in Setup and Config ────── */

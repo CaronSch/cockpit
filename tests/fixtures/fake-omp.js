@@ -150,6 +150,21 @@ if (args.includes('-p')) {
     console.log(`"Forked: ${prompt.split('\n')[0]}".`);
     process.exit(0);
   }
+  // Spotlight's Ask (daemon/ask.js): the conversation in index.tsv sharing the most words with
+  // the question, named as the real agent names one; none, if none shares a word.
+  if (args[args.indexOf('--system-prompt') + 1]?.startsWith("You find things in the user's past conversations")) {
+    const words = (/** @type {string} */ text) => new Set(text.toLowerCase().match(/[a-z]{4,}/g) ?? []);
+    const asked = words(turn);
+    const scored = readFileSync('index.tsv', 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => line.split('\t'))
+      .map((cols) => ({ cols, score: [...words(`${cols[1]} ${cols[4]}`)].filter((w) => asked.has(w)).length }))
+      .sort((a, b) => b.score - a.score);
+    const best = scored[0]?.score ? scored[0].cols : null;
+    console.log(best ? `It was in **${best[1] || best[4]}**, last active ${best[3]}.\n\nCONVERSATION: ${best[0]}` : 'Nothing in your conversations answers that.');
+    process.exit(0);
+  }
   if (turn.includes('reviewer fails')) {
     process.stderr.write('Warning: MCP server "x" failed to connect\nError: 529 overloaded\n');
     process.exit(1);

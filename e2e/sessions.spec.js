@@ -260,6 +260,33 @@ test('⌘K floats a search over the workbench: a question finds the conversation
   await expect(page.locator('.widget[data-widget="omp"]')).toHaveCount(1);
 });
 
+test('Ask in Spotlight hands the question to an agent, shows its answer, and lists the conversations it names', async ({ page }) => {
+  const spotlight = page.getByRole('dialog', { name: 'Search conversations' });
+  const input = spotlight.getByRole('combobox', { name: 'Search conversations' });
+  await page.keyboard.press('ControlOrMeta+k');
+  await input.fill('which conversation fixed the login flow?');
+  await spotlight.getByRole('button', { name: 'Ask', exact: true }).click();
+  const answer = spotlight.locator('.spotlight-answer');
+  await expect(answer).toContainText('It was in Fix the login flow');
+  await expect(answer.locator('strong')).toHaveText('Fix the login flow');
+  await expect(answer, 'its CONVERSATION lines are the list below, not text').not.toContainText('CONVERSATION');
+  await expect(spotlight.locator('.spotlight-title')).toHaveText(['Fix the login flow']);
+
+  // Typing again searches again; ⌘↵ asks again, from the field, and a question nothing answers says so.
+  await input.fill('zzzz qqqq');
+  await expect(answer).toBeHidden();
+  await input.press('ControlOrMeta+Enter');
+  await expect(answer).toHaveText('Nothing in your conversations answers that.');
+  await expect(spotlight.getByRole('option')).toHaveCount(0);
+
+  await input.fill('which conversation fixed the login flow?');
+  await input.press('ControlOrMeta+Enter');
+  await expect(spotlight.locator('.spotlight-title')).toHaveText(['Fix the login flow']);
+  await input.press('Enter');
+  await expect(spotlight).toBeHidden();
+  await expect(page.locator('.widget[data-widget="omp"] .omp-user').first()).toContainText('fix the login bug');
+});
+
 test('a session omp writes while the window is open shows up by itself', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await expect(titles(window)).toHaveText(['Zebra cleanup', 'deploy staging', 'Fix the login flow']);

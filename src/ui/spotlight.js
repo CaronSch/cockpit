@@ -2,9 +2,11 @@
  * Spotlight: a floating search over every conversation, as macOS's. ⌘K (Ctrl+K) or the top
  * bar's Search opens it over whatever is on screen; typing ranks conversations by what was
  * asked and answered in them (the daemon's search, daemon/search.js), each with the passage
- * that matched; with nothing typed it lists the latest. ↑/↓ pick one, Enter (or a click)
- * shows it in the agent window this screen used last, as a click in Sessions does, and Esc
- * (or a click outside) closes it.
+ * that matched; with nothing typed it lists the latest. Ask (or ⌘Enter, Ctrl+Enter elsewhere)
+ * hands what is typed to an agent instead (daemon/ask.js), which reads the conversations and
+ * answers in a few sentences, shown above the conversations it names. ↑/↓ pick one, Enter (or a
+ * click) shows it in the agent window this screen used last, as a click in Sessions does, and
+ * Esc (or a click outside) closes it.
  *
  * It is a modal <dialog>: the browser keeps the focus in it and gives it Esc.
  */
@@ -13,6 +15,7 @@ import { errorMessage, tildeHome } from './format.js';
 import { displayTitle, relativeTime } from '../sessions/order.js';
 import { isRunning, showConversation } from '../sessions/running.js';
 import { snippetLine } from '../sessions/snippet.js';
+import { renderMarkdown } from '../omp/markdown-dom.js';
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { PastSession } from '../../daemon/wire.js' */
 /** @import { LeafParams } from '../layout/grid-model.js' */
@@ -38,17 +41,25 @@ export function createSpotlight({ daemon, show }) {
   input.type = 'text';
   input.autocomplete = 'off';
   input.spellcheck = false;
-  input.placeholder = 'Search conversations, or ask: where did we find…';
+  input.placeholder = `Search conversations, or ask an agent (${mac ? '⌘↵' : 'Ctrl+Enter'})`;
   input.setAttribute('aria-label', 'Search conversations');
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-expanded', 'true');
   input.setAttribute('aria-controls', 'spotlight-results');
+  const askBtn = button('btn spotlight-ask', 'Ask', () => void ask());
+  askBtn.title = `Ask an agent: it reads your conversations and answers (${mac ? '⌘↵' : 'Ctrl+Enter'})`;
+  const bar = el('div', 'spotlight-bar');
+  bar.append(input, askBtn);
+  // The agent's answer, above the conversations it names.
+  const answer = el('div', 'spotlight-answer omp-md');
+  answer.setAttribute('aria-live', 'polite');
+  answer.hidden = true;
   const list = el('ul', 'spotlight-results');
   list.id = 'spotlight-results';
   list.setAttribute('role', 'listbox');
   list.setAttribute('aria-label', 'Conversations');
   const status = el('p', 'spotlight-status');
-  dialog.append(input, list, status);
+  dialog.append(bar, answer, list, status);
   document.body.append(dialog);
 
   /** @type {PastSession[]} */
@@ -71,6 +82,7 @@ export function createSpotlight({ daemon, show }) {
   async function search() {
     const query = input.value.trim();
     const mine = ++seq;
+    answer.hidden = true;
     try {
       const sessions = await daemon.history(query);
       if (mine !== seq) return;
@@ -82,6 +94,34 @@ export function createSpotlight({ daemon, show }) {
       if (mine !== seq) return;
       found = [];
       status.textContent = `Could not search: ${errorMessage(err)}`;
+    }
+    draw();
+  }
+
+  /** Hands what is typed to an agent, and shows its answer above the conversations it names. */
+  async function ask() {
+    const question = input.value.trim();
+    if (!question) {
+      status.textContent = 'Type a question first.';
+      return input.focus();
+    }
+    clearTimeout(timer);
+    const mine = ++seq;
+    answer.hidden = true;
+    found = [];
+    draw();
+    status.textContent = 'Asking an agent: it reads your conversations, which can take a minute…';
+    try {
+      const result = await daemon.ask(question);
+      if (mine !== seq) return;
+      answer.replaceChildren(renderMarkdown(result.answer || 'The agent gave no answer.'));
+      answer.hidden = false;
+      found = result.sessions;
+      picked = 0;
+      status.textContent = '';
+    } catch (err) {
+      if (mine !== seq) return;
+      status.textContent = `Could not ask: ${errorMessage(err)}`;
     }
     draw();
   }
@@ -133,6 +173,9 @@ export function createSpotlight({ daemon, show }) {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       pick(picked + (event.key === 'ArrowDown' ? 1 : -1));
+    } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void ask();
     } else if (event.key === 'Enter' && found[picked]) {
       event.preventDefault();
       choose(found[picked]);

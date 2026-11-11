@@ -31,13 +31,13 @@ const SETTINGS = [
   {
     key: 'onlyResponses',
     label: 'Only prompts and responses',
-    detail: 'Hide thinking, tool calls and the messages in between, in every agent window',
+    detail: 'Hide thinking and tool calls in agent windows',
     initial: false,
   },
   {
     key: 'animatedSelection',
     label: 'Animated selection',
-    detail: 'Highlight whole words while dragging over a reply, gliding between them',
+    detail: 'Highlight whole words as you drag over a reply',
     initial: true,
   },
 ];
@@ -50,17 +50,17 @@ export const DAEMON_SETTINGS = [
   {
     key: 'idleCompaction',
     label: 'Compact idle conversations',
-    detail: 'Compact a conversation of 200K tokens or more left idle, just before its one-hour prompt cache expires, as Claude Code does; for every browser',
+    detail: 'Compact long idle conversations before their prompt cache expires',
   },
   {
     key: 'decisionReview',
     label: 'Review decisions',
-    detail: 'After every turn, a small model lists up to five decisions the agent took without you, under its reply (a cheap model call per turn); for every browser',
+    detail: 'List the decisions an agent took without you, under each reply',
   },
   {
     key: 'adhd',
     label: 'I have ADHD',
-    detail: 'Agents answer for a reader with ADHD (github.com/ayghri/i-have-adhd): the next action first, numbered steps, short lists, no preamble or closers. A running conversation takes it up from its next message; for every browser',
+    detail: 'Replies lead with the next step: numbered, short, no preamble',
   },
 ];
 
@@ -71,24 +71,24 @@ export const BROWSER_OPTIONS = [
   {
     value: 'isolated',
     label: 'A separate browser',
-    detail: 'omp’s own Chrome for Testing, with a profile of its own: never your tabs or logins',
+    detail: 'omp’s own Chrome: never your tabs or logins',
   },
   {
     value: 'relay',
     label: 'Your Chrome',
-    detail: 'Signed in as you, through omp’s browser relay (omp browser-relay install, then load its extension); agents use the tab you are looking at',
+    detail: 'Your tabs, through omp’s browser relay extension',
   },
   {
     value: 'omp',
     label: 'As omp is set up',
-    detail: 'Whatever ~/.omp/agent/config.yml says (browser.relay, cmux, Tern)',
+    detail: 'Whatever omp’s own config says',
   },
 ];
 
 /** The heading of the browser choice, and what it is about. */
 export const BROWSER_SETTING = Object.freeze({
   label: 'Agents’ browser',
-  detail: 'Where agents open web pages; a running conversation takes it up from its next message; for every browser',
+  detail: 'Where agents open web pages',
 });
 
 /** @typedef {Record<SettingKey, boolean>} Settings */
@@ -151,7 +151,7 @@ export function switchRow(label, detail, checked, onChange) {
 /** Phone access (the daemon's `remote`, daemon/remote.js), as Config offers it. */
 const PHONE_SETTING = Object.freeze({
   label: 'Phone access',
-  detail: 'Read and answer your agents from your phone, over Tailscale: only your own devices get in, signed in once with the QR code; for every browser',
+  detail: 'Use your agents from your phone, over Tailscale',
 });
 
 /** How Phone access is doing: on, coming on, or why it is not. @param {RemoteState | null} remote */
@@ -251,7 +251,7 @@ export function browserChoice(daemon, choice) {
  */
 function notificationsRow(notifier) {
   const blocked = notifier.blocked();
-  const detail = blocked ?? 'When an agent finishes or needs you while you are elsewhere; in this browser';
+  const detail = blocked ?? 'When an agent finishes or needs you';
   const { row, box } = switchRow('Desktop notifications', detail, notifier.active(), (on) => {
     void notifier.set(on).then((now) => (box.checked = now));
   });
@@ -259,15 +259,17 @@ function notificationsRow(notifier) {
   return row;
 }
 
-/** Accounts: sign omp in to a model provider, or with another account. @param {DaemonClient} daemon */
+/** Accounts: sign omp in to a model provider, or with another account; one row, its login below it while one runs. @param {DaemonClient} daemon */
 function accountsGroup(daemon) {
   const login = createLogin(daemon);
-  const root = el('div', 'config-group config-accounts');
-  const body = el('div', 'config-accounts-body');
-  body.append(login.signIn, login.panel);
-  root.append(el('span', 'config-legend', 'Accounts'), el('p', 'config-detail', 'Sign in to a model provider, or with another account (omp login)'), body);
+  login.signIn.classList.remove('btn-accent');
+  const root = el('div', 'config-accounts');
+  root.append(el('span', 'config-accounts-label', 'Accounts'), el('span', 'config-detail', 'Sign in to a model provider (omp login)'), login.signIn, login.panel);
   return { root, destroy: login.destroy };
 }
+
+/** A heading over a group of settings: whose they are. @param {string} text */
+const heading = (text) => el('p', 'config-heading', text);
 
 /** The top bar's Config button and its menu. @param {{ daemon: DaemonClient, notifier: Notifier }} options */
 export function createConfigMenu({ daemon, notifier }) {
@@ -332,8 +334,10 @@ export function createConfigMenu({ daemon, notifier }) {
     accounts?.destroy();
     accounts = atDaemon ? accountsGroup(daemon) : null;
     menu.replaceChildren(
+      heading('This browser'),
       ...SETTINGS.map((setting) => switchRow(setting.label, setting.detail, now[setting.key], (on) => setSetting(setting.key, on)).row),
       notificationsRow(notifier),
+      ...(atDaemon ? [heading('Every browser')] : []),
       ...(atDaemon
         ? DAEMON_SETTINGS.map((setting) => {
             const { row, box } = switchRow(setting.label, setting.detail, atDaemon[setting.key], (on, box) => {

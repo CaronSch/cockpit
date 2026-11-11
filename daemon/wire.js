@@ -11,6 +11,9 @@
  *   GET    /api/history?q=words&archived=1 → { sessions: PastSession[] } (unordered; with `q`, the
  *                                      ones it finds, best first, each with its `match`: see
  *                                      `search.js`; `archived=1` lists the archived sessions instead)
+ *   POST   /api/ask                    { question } → { answer, sessions: PastSession[] }: an agent
+ *                                      reads the conversations and answers, naming those that do
+ *                                      (`ask.js`)
  *   POST   /api/history/archive        { file } → { file }: the journal (with its folder) moved from omp's
  *                                      sessions into the archive; a session writing it goes to sleep
  *                                      first, 409 while its agent works

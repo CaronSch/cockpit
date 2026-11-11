@@ -31,6 +31,7 @@ import { JournalRefused, createHistory } from './history.js';
 import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
 import { loadSchedule, scheduleTools } from './schedule.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
+import { askAgent } from './ask.js';
 import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
 import { createHub } from './hub.js';
@@ -161,6 +162,7 @@ const daemon = createDaemon({
   schedule,
   setup,
   remote,
+  ask: (question) => askAgent(question, { ompPath, history }),
   token,
   root: ROOT,
   config: {

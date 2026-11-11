@@ -22,6 +22,7 @@ import { createDelivery } from '../daemon/deliver.js';
 import { loadBugbot } from '../daemon/bugbot.js';
 import { loadSchedule, scheduleTools } from '../daemon/schedule.js';
 import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
+import { askAgent } from '../daemon/ask.js';
 import { APPEND_SYSTEM_PROMPT, HISTORY_COMMAND, SETUP_COMMANDS } from '../daemon/omp-session.js';
 import { withAdhdRules } from '../daemon/adhd.js';
 import { browserEnv } from '../daemon/browser.js';
@@ -237,6 +238,7 @@ beforeAll(async () => {
     schedule,
     setup,
     remote,
+    ask: (question) => askAgent(question, { ompPath: FAKE_OMP, history }),
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
@@ -880,6 +882,7 @@ describe('unread conversations', () => {
       schedule,
       setup,
       remote,
+      ask: daemonOptions.ask,
       token: TOKEN,
       root: ROOT,
       config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000 },
