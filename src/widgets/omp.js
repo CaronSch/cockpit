@@ -657,25 +657,38 @@ function createPane(body, ctx, daemon) {
     // ── awake or asleep ──
     /**
      * Shows session `id`'s events from the start: its history is the first thing in them (the
-     * daemon fetched it), so whatever the window showed before is replaced.
+     * daemon fetched it), so whatever the window showed before is replaced. A conversation shown
+     * from its journal stays on screen while omp wakes it: the session's events build a
+     * transcript of their own until it is ready (its history replayed by then), and only then
+     * take the window's place, so waking it never blanks the window.
      * @param {string} id
      */
     function follow(id) {
       unsubscribe();
       session = id;
+      const keep = asleep !== null && state.items.length > 0;
       asleep = null;
-      Object.assign(state, createTranscript());
-      clearDrawn();
+      /** What the session's events build: the window's transcript, or one of their own until it is ready. */
+      let target = keep ? createTranscript() : state;
+      if (!keep) {
+        Object.assign(state, createTranscript());
+        clearDrawn();
+      }
       let live = false;
       editorSeen = 0;
       unsubscribe = daemon.subscribe(id, (event) => {
-        applyEvent(state, event);
+        applyEvent(target, event);
+        if (target !== state && event.kind === 'session' && event.meta.status !== 'starting') {
+          Object.assign(state, target);
+          target = state;
+          clearDrawn();
+        }
         // History, replayed now or (from a stream reopened for it) a moment later: requests to
         // fill the box in it were carried out already, and it is no news to read live. News is
         // read as it lands under its reader's eyes. News that landed while they were elsewhere,
         // the history included, waits for them to come into the window, even once they are
         // looking at it again.
-        if (!live || daemon.replayed(event)) editorSeen = Math.max(editorSeen, state.editorText?.seq ?? 0);
+        if (!live || daemon.replayed(event)) editorSeen = Math.max(editorSeen, target.editorText?.seq ?? 0);
         else if (reading()) readLive = awaitedAfter(readLive, event);
         schedule();
       });

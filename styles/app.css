@@ -822,7 +822,7 @@ button {
 }
 
 .widget-glyph {
-  color: var(--color-text-faint);
+  color: var(--color-accent);
   font-size: 12px;
 }
 
