@@ -6,12 +6,17 @@
  * of the drop (applyDrop + computeLayout), recomputed only when the hovered
  * target/zone changes.
  *
+ * Dropped on a window's head (its title, or its stack's tab strip), a window joins that slot as a
+ * tab where the pointer is between its tabs; dropped on its middle, as its last tab, unless the
+ * window takes what is dropped there itself (`canDropInto`). A tab of a stack dragged along its
+ * own strip moves within it, and dragged to an edge of its own slot, leaves it.
+ *
  * A drag may also end on an element of the window it started from (`target`: the timeline's
  * bin): armed (`is-drop-armed`) while the drag runs, lit (`is-drop-over`) while the pointer is
  * over it, when the grid previews nothing; released there, the grid stays as it was and `onEnd`
  * says so (`onTarget`).
  */
-import { applyDrop, canDropInto } from '../layout/grid-model.js';
+import { applyDrop, canDropInto, findSlot } from '../layout/grid-model.js';
 import { computeLayout } from '../layout/compute-layout.js';
 import { computeDropZone, detectEdgeZone } from '../layout/drop-zone.js';
 
@@ -35,7 +40,12 @@ import { computeDropZone, detectEdgeZone } from '../layout/drop-zone.js';
  */
 /** @typedef {{ activated: boolean, dropped: boolean, onTarget: boolean }} DragEndResult */
 /** @typedef {{ label?: string, onEnd?: (result: DragEndResult) => void, target?: HTMLElement | null }} DragStartOptions */
-/** @typedef {{ target: DropTarget, dir: Direction }} DropHit */
+/**
+ * Where a drop would land; `tab`, for a drop into a slot's tabs: the head's bottom edge and a
+ * caret where the tab goes, in grid coordinates.
+ * @typedef {{ target: DropTarget, dir: Direction, tab?: TabPlace }} DropHit
+ */
+/** @typedef {{ index: number, headBottom: number, caret: Rect }} TabPlace */
 /**
  * @typedef {object} DragSession
  * @property {DropSource} source
@@ -60,11 +70,20 @@ import { computeDropZone, detectEdgeZone } from '../layout/drop-zone.js';
 
 const DRAG_THRESHOLD = 4;
 const EDGE_PX = 18;
+/** How far into the grid's top edge a drop still goes to the edge over a window's head. */
+const TOP_EDGE_PX = 6;
 /** @type {Readonly<Record<Direction, string>>} */
-const ZONE_LABEL = { left: 'Left', right: 'Right', up: 'Top', down: 'Bottom', center: 'Swap' };
+const ZONE_LABEL = { left: 'Left', right: 'Right', up: 'Top', down: 'Bottom', center: 'Tab' };
 
 /** @param {Rect} rect @param {number} x @param {number} y */
 const contains = (rect, x, y) => x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+
+/** The box around an element's text (a window's title), not the element. @param {Element | null} node */
+function textBox(node) {
+  const range = document.createRange();
+  if (node) range.selectNodeContents(node);
+  return range.getBoundingClientRect();
+}
 
 /** @param {Event} event */
 const swallow = (event) => {
@@ -101,15 +120,48 @@ export function createDragController(app) {
     if (!app.getTree()) return { target: { kind: 'empty' }, dir: 'center' };
 
     const edge = detectEdgeZone(x, y, bounds, EDGE_PX);
-    if (edge) return { target: { kind: 'edge' }, dir: edge };
+    /** @type {DropHit | null} */
+    const edgeHit = edge && { target: { kind: 'edge' }, dir: edge };
+    // Along the grid's top, the windows' heads (where their tabs go) win but for its outermost pixels.
+    if (edgeHit && (edge !== 'up' || y - bounds.y <= TOP_EDGE_PX)) return edgeHit;
 
-    for (const [id, rect] of app.getLayout().leaves) {
-      if (!contains(rect, x, y)) continue;
-      if (s.source.kind === 'move' && id === s.source.id) return null;
-      const allowCenter = s.source.kind === 'move' || canDropInto(app.getTree(), s.source, id);
-      return { target: { kind: 'leaf', id }, dir: computeDropZone(x, y, rect, { allowCenter }) };
+    const layout = app.getLayout();
+    const tree = app.getTree();
+    for (const [id, rect] of layout.leaves) {
+      if (layout.hidden.has(id) || !contains(rect, x, y)) continue;
+      const slot = findSlot(tree, id);
+      // Its own slot: a window alone there has nowhere to go; a tab may move along or out.
+      const own = slot !== null && slot === findSlot(tree, s.movingId);
+      if (own && slot.kind !== 'stack') return edgeHit;
+      const tab = tabPlace(s, id, clientX, clientY);
+      if (tab) return { target: { kind: 'tab', id, index: tab.index }, dir: 'center', tab };
+      return edgeHit ?? { target: { kind: 'leaf', id }, dir: computeDropZone(x, y, rect, { allowCenter: !own }) };
     }
-    return undefined;
+    return edgeHit ?? undefined;
+  }
+
+  /**
+   * Where a window dropped on window `id`'s head would go among the tabs there (the dragged one
+   * aside), with the pointer at `clientX`; null when the pointer is not on the head. Without a
+   * pointer, after the last tab. A window alone has its title for its one tab.
+   * @param {DragSession} s @param {string} id @param {number | null} clientX @param {number | null} [clientY]
+   * @returns {TabPlace | null}
+   */
+  function tabPlace(s, id, clientX, clientY = null) {
+    const head = app.frameElement(id)?.querySelector('.widget-head');
+    const { gridRect } = s;
+    if (!head || !gridRect) return null;
+    const bar = head.getBoundingClientRect();
+    if (clientY !== null && (clientY < bar.top || clientY > bar.bottom)) return null;
+    const tabs = [...head.querySelectorAll('.widget-tab')].filter((t) => /** @type {HTMLElement} */ (t).dataset.id !== s.movingId);
+    const boxes = tabs.length > 0 ? tabs.map((t) => t.getBoundingClientRect()) : [textBox(head.querySelector('.widget-title'))];
+    const index = clientX === null ? boxes.length : boxes.filter((b) => b.left + b.width / 2 < clientX).length;
+    const at = index < boxes.length ? boxes[index].left : boxes[boxes.length - 1].right;
+    return {
+      index,
+      headBottom: bar.bottom - gridRect.top,
+      caret: { x: Math.round(at - gridRect.left) - 1, y: Math.round(bar.top - gridRect.top) + 7, w: 2, h: Math.round(bar.height) - 14 },
+    };
   }
 
   /** @param {DragSession} s */
@@ -140,25 +192,30 @@ export function createDragController(app) {
     }
     const hit = hitTest(s, gridRect, clientX, clientY);
     if (hit === undefined) return;
-    const key = hit ? `${hit.target.kind}:${hit.target.kind === 'leaf' ? hit.target.id : ''}:${hit.dir}` : '';
+    const where = hit?.target.kind === 'tab' ? `${hit.target.id}:${hit.target.index}` : hit?.target.kind === 'leaf' ? hit.target.id : '';
+    const key = hit ? `${hit.target.kind}:${where}:${hit.dir}` : '';
     if (key === s.key) return;
     s.key = key;
     if (!hit) return clearTarget(s);
 
     const tree = app.getTree();
     /** @type {DropOp} */
-    const op = { source: s.source, ...hit };
+    const op = { source: s.source, target: hit.target, dir: hit.dir };
     const next = applyDrop(tree, op);
-    // A new window dropped into another shows there: that window is where it lands.
-    const landing = s.source.kind === 'new' && hit.dir === 'center' && hit.target.kind === 'leaf' ? hit.target.id : s.movingId;
-    const into = landing !== s.movingId;
+    // A new window dropped into one that takes it shows there: that window is where it lands.
+    const into = hit.target.kind === 'leaf' && hit.dir === 'center' && canDropInto(tree, s.source, hit.target.id);
+    const landing = into && hit.target.kind === 'leaf' ? hit.target.id : s.movingId;
     const rect = next === tree ? null : computeLayout(next, app.getBounds(), app.layoutOptions).leaves.get(landing);
     if (!rect) return clearTarget(s);
 
     s.op = op;
     s.nextTree = next;
-    const zone = into ? 'Show here' : (ZONE_LABEL[hit.dir] ?? 'Place');
-    indicator.show(rect, app.getBounds(), `${zone} · ${rect.w}×${rect.h}`);
+    if (into) return indicator.show(rect, app.getBounds(), `Show here · ${rect.w}×${rect.h}`);
+    // Into a slot's tabs: the window's body is lit, and a caret in its head marks the tab's place.
+    const tab = hit.tab ?? (hit.dir === 'center' && hit.target.kind === 'leaf' ? tabPlace(s, hit.target.id, null) : null);
+    if (!tab) return indicator.show(rect, app.getBounds(), `${ZONE_LABEL[hit.dir]} · ${rect.w}×${rect.h}`);
+    const top = Math.min(Math.max(tab.headBottom, rect.y), rect.y + rect.h);
+    indicator.show({ ...rect, y: top, h: rect.y + rect.h - top }, app.getBounds(), `Tab · ${rect.w}×${rect.h}`, tab.caret);
   }
 
   /** Whether the pointer is over the drag's own target now. @param {DragSession} s */

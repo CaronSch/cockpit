@@ -4,12 +4,13 @@
  * The layout is this window's screen of its workspace (workspace/screen.js), which the daemon
  * keeps; the app starts once the screen is claimed and loaded.
  */
-import { applyDrop, branch, findLeaf, insertBeside, listLeaves, moveLeaf, removeLeaf, setLeafParams } from './layout/grid-model.js';
+import { activateTab, applyDrop, branch, findLeaf, insertBeside, listLeaves, moveLeaf, removeLeaf, setLeafParams } from './layout/grid-model.js';
 import { computeLayout } from './layout/compute-layout.js';
 import { findNeighbor, DIRECTION_KEYS } from './layout/neighbors.js';
 import { createAtom } from './state/atom.js';
 import { createGridRenderer } from './render/grid-renderer.js';
 import { createDropIndicator } from './render/drop-indicator.js';
+import { createTabStrips, panelId, tabId } from './render/tab-strip.js';
 import { attachSashController } from './interaction/sash-controller.js';
 import { createDragController } from './interaction/drag-controller.js';
 import { createPalette } from './ui/palette.js';
@@ -27,9 +28,10 @@ import { describeWindows } from './workspace/model.js';
 import { WIDGETS, newWidgetLeaf } from './widgets/registry.js';
 /** @import { Leaf, LeafParams, Tree } from './layout/grid-model.js' */
 /** @import { ScreenWindows, WidgetContext } from './widgets/registry.js' */
-/** @import { Rect } from './layout/compute-layout.js' */
+/** @import { Layout, Rect } from './layout/compute-layout.js' */
 /** @import { Palette } from './ui/palette.js' */
 /** @import { GridApi } from './interaction/drag-controller.js' */
+/** @import { TabFace } from './render/tab-strip.js' */
 
 const LAYOUT_OPTIONS = Object.freeze({ gap: 6, minWidth: 180, minHeight: 120 });
 const STACK_BREAKPOINT = 640;
@@ -55,6 +57,9 @@ function query(root, selector) {
   return node;
 }
 
+/** The windows on show: a stack's tabs behind the one it shows aside. @param {Layout} layout */
+const shownRects = (layout) => new Map([...layout.leaves].filter(([id]) => !layout.hidden.has(id)));
+
 /** @param {Map<string, Rect>} leaves @returns {[string, Rect] | null} */
 const largestLeaf = (leaves) =>
   [...leaves].reduce(
@@ -64,7 +69,8 @@ const largestLeaf = (leaves) =>
   );
 
 /**
- * Narrow screens show the same widgets as a scrolling column; the saved tree is untouched.
+ * Narrow screens show the same widgets as a scrolling column, every tab of a stack a window of
+ * its own; the saved tree is untouched.
  * @param {Tree} tree @returns {Tree}
  */
 function stackProjection(tree) {
@@ -145,14 +151,22 @@ export async function createApp(root) {
     const label = el('span', 'widget-label');
     label.hidden = true;
     heading.append(' ', label); // a space, so the heading reads "Agent <name>", not "Agent<name>"
+    // In a stack, the tabs of its windows take the glyph's and title's place (render/tab-strip.js).
+    const tabs = el('div', 'widget-tabs');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Windows here');
     // The widget's own controls for the window, before its close button.
     const actions = el('div', 'widget-actions');
     const close = button('widget-close', '×');
     close.setAttribute('aria-label', `Close ${title}`);
-    head.append(grip, glyph, heading, actions, close);
+    head.append(grip, glyph, heading, tabs, actions, close);
 
     const body = el('div', 'widget-body');
+    body.id = panelId(leaf.id);
     frameEl.append(head, body);
+    /** What the window's tab shows. @type {TabFace} */
+    const face = { glyph: def?.glyph ?? '?', name: title, unread: false };
+    faces.set(leaf.id, face);
 
     /** @type {WidgetContext} */
     const ctx = {
@@ -178,11 +192,17 @@ export async function createApp(root) {
       setUnread(/** @type {boolean} */ unread) {
         frameEl.classList.toggle('is-unread', unread);
         frameEl.dataset.unread = String(unread);
+        if (face.unread !== unread) {
+          face.unread = unread;
+          redrawTabs();
+        }
       },
       setLabel(/** @type {string | null} */ text) {
         if (label.textContent === (text ?? '')) return;
         label.textContent = text ?? '';
         label.hidden = !text;
+        face.name = text || title;
+        redrawTabs();
       },
       headActions: actions,
       screen: screenAtom,
@@ -223,6 +243,7 @@ export async function createApp(root) {
       destroy() {
         offParams();
         instance.destroy?.();
+        faces.delete(leaf.id);
         outlines.delete(leaf.id);
         drawOutlines();
         families.delete(leaf.id);
@@ -231,12 +252,16 @@ export async function createApp(root) {
     };
   }
 
+  /** What each window's tab shows, should it be in a stack, by window id. @type {Map<string, TabFace>} */
+  const faces = new Map();
+
   /** The windows each window has asked to outline (`ctx.outline`), by the asking window's id. @type {Map<string, readonly string[]>} */
   const outlines = new Map();
+  /** Outlines those windows, and the tabs of those stacked behind another. */
   function drawOutlines() {
     const ids = new Set([...outlines.values()].flat());
-    for (const frameEl of gridEl.querySelectorAll('.widget')) {
-      frameEl.classList.toggle('is-outlined', ids.has(/** @type {HTMLElement} */ (frameEl).dataset.id ?? ''));
+    for (const node of gridEl.querySelectorAll('.widget, .widget-tab')) {
+      node.classList.toggle('is-outlined', ids.has(/** @type {HTMLElement} */ (node).dataset.id ?? ''));
     }
   }
 
@@ -267,6 +292,31 @@ export async function createApp(root) {
   }
 
   const renderer = createGridRenderer(gridEl, { mountWidget, prefersReducedMotion: () => reducedMotion.matches });
+  const strips = createTabStrips({
+    gridEl,
+    frameElement: (id) => renderer.frameElement(id),
+    describe: (id) => faces.get(id) ?? { glyph: '?', name: id, unread: false },
+  });
+  /** The tree on screen (the narrow column's, when narrow), whose stacks' strips are drawn. @type {Tree} */
+  let shownTree = null;
+  /** A tab to focus once the strips are drawn: one the keyboard moved to. @type {string | null} */
+  let focusTab = null;
+  function drawTabs() {
+    strips.draw(shownTree);
+    drawOutlines();
+    if (!focusTab) return;
+    // A stack closed down to one window has no tabs left: its grip keeps the focus.
+    (document.getElementById(tabId(focusTab)) ?? renderer.frameElement(focusTab)?.querySelector('.widget-grip'))?.focus();
+    focusTab = null;
+  }
+  let tabsFrame = 0;
+  /** A window's title or unread mark changed: its tab follows, once per frame. */
+  function redrawTabs() {
+    tabsFrame ||= requestAnimationFrame(() => {
+      tabsFrame = 0;
+      drawTabs();
+    });
+  }
   // A window mounted after an outline was asked for (the layout redrawn) gets it too.
   layoutAtom.subscribe(() =>
     requestAnimationFrame(() => {
@@ -291,6 +341,8 @@ export async function createApp(root) {
 
     layout = computeLayout(shown, frameBounds, LAYOUT_OPTIONS);
     renderer.render(shown, layout, { animate });
+    shownTree = shown;
+    drawTabs();
     emptyEl.hidden = Boolean(tree);
   }
 
@@ -335,22 +387,38 @@ export async function createApp(root) {
   function addWidget(type, params) {
     const leaf = newWidgetLeaf(type, params);
     const tree = layoutAtom.get();
-    const target = largestLeaf(layout.leaves);
+    const target = largestLeaf(shownRects(layout));
     const next =
       tree && target ? insertBeside(tree, target[0], target[1].w >= target[1].h ? 'right' : 'down', leaf) : leaf;
     api.commitTree(next, { animate: true });
   }
 
   /**
-   * Shows `params` in the window of `type` used last in this screen (`screenAtom`'s `used`);
-   * opens a new window when there is none.
+   * Shows `params` in the window of `type` used last in this screen (`screenAtom`'s `used`),
+   * bringing it to the front of its stack; opens a new window when there is none.
    * @param {string} type @param {LeafParams} params
    */
   function showWidget(type, params) {
     const target = screenAtom.get().used[type];
     if (!target) return addWidget(type, params);
-    api.commitTree(setLeafParams(layoutAtom.get(), target, params));
+    api.commitTree(activateTab(setLeafParams(layoutAtom.get(), target, params), target));
   }
+
+  /** Shows a tab of a stack, as used now; false when it was already shown. @param {string} id */
+  function showTab(id) {
+    usedAt.set(id, ++uses);
+    const tree = layoutAtom.get();
+    const next = activateTab(tree, id);
+    if (next === tree) {
+      refreshScreen();
+      return false;
+    }
+    api.commitTree(next);
+    return true;
+  }
+
+  /** @param {string} id */
+  const closeWindow = (id) => api.commitTree(removeLeaf(layoutAtom.get(), id), { animate: true });
 
   /** @param {Event} event */
   const windowAt = (event) => /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest?.('.widget'))?.dataset.id ?? null;
@@ -384,21 +452,56 @@ export async function createApp(root) {
   attachSashController(api);
   const drag = createDragController(api);
 
+  /** @param {EventTarget | null} target */
+  const tabAt = (target) => /** @type {HTMLElement | null} */ (/** @type {Element} */ (target).closest?.('.widget-tab'));
+
+  // A window's head drags it; a tab drags its window, shown as it is pressed.
   gridEl.addEventListener('pointerdown', (event) => {
     const target = /** @type {Element} */ (event.target);
     const head = target.closest('.widget-head');
-    if (!head || isStacked() || target.closest('.widget-close, .widget-actions')) return;
+    if (!head || isStacked() || target.closest('.widget-close, .widget-actions, .widget-tab-close')) return;
+    const tab = tabAt(target);
+    if (tab && event.button === 1) event.preventDefault(); // a middle click closes it, never scrolls
+    if (event.button !== 0) return;
     const frameEl = /** @type {HTMLElement} */ (head.closest('.widget'));
-    drag.start({ kind: 'move', id: /** @type {string} */ (frameEl.dataset.id) }, event, {
-      label: /** @type {Element} */ (head.querySelector('.widget-title')).textContent,
+    const id = /** @type {string} */ (tab?.dataset.id ?? frameEl.dataset.id);
+    if (tab) showTab(id);
+    drag.start({ kind: 'move', id }, event, {
+      label: /** @type {Element} */ (tab?.querySelector('.widget-tab-name') ?? head.querySelector('.widget-title')).textContent,
     });
   });
 
   gridEl.addEventListener('click', (event) => {
-    const close = /** @type {Element} */ (event.target).closest('.widget-close');
-    if (!close) return;
-    const id = /** @type {string} */ (/** @type {HTMLElement} */ (close.closest('.widget')).dataset.id);
-    api.commitTree(removeLeaf(layoutAtom.get(), id), { animate: true });
+    const target = /** @type {Element} */ (event.target);
+    const tab = tabAt(target);
+    if (tab && target.closest('.widget-tab-close')) return closeWindow(/** @type {string} */ (tab.dataset.id));
+    if (tab) return showTab(/** @type {string} */ (tab.dataset.id));
+    const close = target.closest('.widget-close');
+    if (close) closeWindow(/** @type {string} */ (/** @type {HTMLElement} */ (close.closest('.widget')).dataset.id));
+  });
+
+  gridEl.addEventListener('auxclick', (event) => {
+    const tab = tabAt(event.target);
+    if (tab && event.button === 1) closeWindow(/** @type {string} */ (tab.dataset.id));
+  });
+
+  // A strip's tabs, as a tablist: arrows (and Home, End) show the next one, Delete closes one.
+  gridEl.addEventListener('keydown', (event) => {
+    const tab = tabAt(event.target);
+    if (!tab || event.altKey || event.ctrlKey || event.metaKey) return;
+    const tabs = /** @type {HTMLElement[]} */ ([.../** @type {HTMLElement} */ (tab.parentElement).children]);
+    const at = tabs.indexOf(tab);
+    const to = { ArrowLeft: at - 1, ArrowRight: at + 1, Home: 0, End: tabs.length - 1 }[event.key];
+    if (to !== undefined) {
+      event.preventDefault();
+      focusTab = /** @type {string} */ (tabs[(to + tabs.length) % tabs.length].dataset.id);
+      if (!showTab(focusTab)) drawTabs(); // already shown: no redraw to move focus
+    } else if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault();
+      // Focus stays in the strip: on the tab shown next, as the stack (if any is left) shows it.
+      focusTab = /** @type {string | undefined} */ ((tabs[at + 1] ?? tabs[at - 1])?.dataset.id) ?? null;
+      closeWindow(/** @type {string} */ (tab.dataset.id));
+    }
   });
 
   gridEl.addEventListener('keydown', (event) => {
@@ -414,7 +517,7 @@ export async function createApp(root) {
     const dir = DIRECTION_KEYS[event.key];
     if (!dir || !event.altKey || !event.shiftKey) return;
     event.preventDefault();
-    const neighbor = findNeighbor(layout.leaves, id, dir);
+    const neighbor = findNeighbor(shownRects(layout), id, dir);
     const next = neighbor
       ? moveLeaf(tree, id, neighbor, dir)
       : applyDrop(tree, { source: { kind: 'move', id }, target: { kind: 'edge' }, dir });
@@ -433,10 +536,14 @@ export async function createApp(root) {
   );
   query(root, '.topbar-actions').prepend(createZoomControl().root);
   query(root, '.topbar-actions').prepend(createSpotlight({ daemon, show: (params) => showWidget('omp', params) }).root);
-  // Desktop notifications follow every awake session; Config turns them on or off.
+  // Desktop notifications follow every awake session; Config turns them on or off. A window
+  // stacked behind another shows its conversation to nobody.
   const notifier = createNotifier({
     daemon,
-    shown: () => new Set(sessionLinks(screenAtom.get()).windows.keys()),
+    shown: () => {
+      const screen = screenAtom.get();
+      return new Set(sessionLinks({ ...screen, windows: screen.windows.filter((w) => !layout.hidden.has(w.id)) }).windows.keys());
+    },
     show: (params) => showWidget('omp', params),
   });
   query(root, '.topbar-actions').prepend(createConfigMenu({ daemon, notifier }).root);

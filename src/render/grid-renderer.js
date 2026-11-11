@@ -5,6 +5,8 @@
  * - Every style write is skipped when the cached value is unchanged
  *   (the same trick as VS Code's FastDomNode).
  * - Structural changes animate with FLIP on `transform` only.
+ * - A stack's tabs share their slot's rect; those behind the one it shows stay mounted (their
+ *   state, scroll and all, is kept) but hidden and inert (`is-tab-hidden`).
  */
 import { listLeaves } from '../layout/grid-model.js';
 
@@ -99,6 +101,11 @@ export function createGridRenderer(gridEl, { mountWidget, prefersReducedMotion }
         writeRect(frame.el, frame.rect, next);
       }
       frame.rect = next;
+      const hidden = layout.hidden.has(leaf.id);
+      if (frame.el.inert !== hidden) {
+        frame.el.inert = hidden;
+        frame.el.classList.toggle('is-tab-hidden', hidden);
+      }
     }
 
     for (const id of [...frames.keys()]) {

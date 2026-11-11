@@ -22,17 +22,20 @@ import timeline from './timeline.js';
  * `ctx.addWidget(type, params)` opens another window beside the largest one;
  * `ctx.openBeside(type, params)` opens one on this window's right, splitting it;
  * `ctx.showWidget(type, params)` shows `params` in the window of `type` this screen used last
- * (merging them into its settings), or opens one if there is none;
+ * (merging them into its settings, and bringing it to the front of its stack), or opens one if
+ * there is none;
  * `ctx.dragWidget(type, params, pointerdown)` lets the user drop it where they want, exactly
- * like dragging from the palette (a plain click does nothing); with `into`, it may also be
- * dropped onto the middle of a window of `type`, which then shows it; with `target`, onto that
- * element of the window's own instead (a bin), which then gets `is-drop-armed` while the drag
- * runs and `is-drop-over` while the pointer is over it, and `onEnd` hears `onTarget`.
- * `ctx.setUnread(true)` lights the window's border: it has news its user has not seen.
+ * like dragging from the palette (a plain click does nothing): onto a window's middle or head,
+ * it stacks there as a tab; with `into`, the middle of a window of `type` shows it instead;
+ * with `target`, onto that element of the window's own instead (a bin), which then gets
+ * `is-drop-armed` while the drag runs and `is-drop-over` while the pointer is over it, and
+ * `onEnd` hears `onTarget`.
+ * `ctx.setUnread(true)` lights the window's border (and its tab's dot, in a stack): it has
+ * news its user has not seen.
  * `ctx.setLabel(text)` names what the window shows (e.g. the agent window's conversation) in
- * its top bar, beside its type's title; null removes the name. `ctx.headActions` is where the
- * window puts controls of its own in that bar, before its close button (pressing them never
- * drags the window).
+ * its top bar, beside its type's title (alone, on its tab); null removes the name.
+ * `ctx.headActions` is where the window puts controls of its own in that bar, before its close
+ * button (pressing them never drags the window); in a stack, those of the window shown.
  * `ctx.screen` tells which windows this screen has (with their settings), which one of each
  * type `showWidget` would use, and which one the pointer is over (else the focused one);
  * `ctx.outline(ids)` outlines those windows, until it is called again (with `[]` to stop).
