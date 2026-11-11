@@ -102,7 +102,7 @@
 
 /* How an awake conversation is doing, or that it is unread: a mark before its title (rows with
    nothing to say keep its space, empty). Working spins in the accent; needing its user is a
-   warm dot; unread news is cyan. */
+   warm dot; unread news is green. */
 .sessions-dot {
   flex: none;
   box-sizing: border-box;
@@ -129,6 +129,7 @@
 
 .sessions-item.is-unread:not(.is-asking, .is-working, .is-starting) .sessions-dot {
   background: var(--color-unread);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-unread) 20%, transparent);
 }
 
 @keyframes sessions-spin {

@@ -553,7 +553,26 @@ function createPane(body, ctx, daemon) {
     let stickToBottom = true;
     transcript.addEventListener('scroll', () => {
       stickToBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < BOTTOM_SLACK_PX;
+      drawJump();
     });
+    // Scrolled up, a small arrow at the transcript's foot goes back to the latest, its ring
+    // saying how the agent is doing: spinning while it works, warm while it asks, green once
+    // it is done and waiting.
+    const jump = button('omp-jump', '↓', () => {
+      stickToBottom = true;
+      transcript.scrollTo({ top: transcript.scrollHeight, behavior: 'smooth' });
+    });
+    const jumpWrap = el('div', 'omp-jump-wrap');
+    jumpWrap.hidden = true;
+    jumpWrap.append(jump);
+    function drawJump() {
+      jumpWrap.hidden = stickToBottom;
+      if (stickToBottom) return;
+      const how = state.dialogs.length ? 'asking' : state.streaming ? 'working' : 'done';
+      jump.className = `omp-jump is-${how}`;
+      jump.title = { asking: 'Latest: the agent is asking you something', working: 'Latest: the agent is working', done: 'Latest: the agent is done, waiting for you' }[how];
+      jump.setAttribute('aria-label', jump.title);
+    }
     const pinToBottom = () => {
       if (stickToBottom) transcript.scrollTop = transcript.scrollHeight;
     };
@@ -635,7 +654,7 @@ function createPane(body, ctx, daemon) {
         cancel: (id) => void (session && daemon.rpc(session, { type: 'btw_cancel', recordId: id }).catch(() => {})),
       },
     });
-    node.append(toolbar, strip, loginStrip, banner, transcript, dialogs, running, scheduled, suggestions.root, composer.root);
+    node.append(toolbar, strip, loginStrip, banner, transcript, jumpWrap, dialogs, running, scheduled, suggestions.root, composer.root);
     const highlight = attachDragHighlight({ host: node, transcript, enabled: () => settings.get().animatedSelection });
     const offHighlight = settings.subscribe(() => highlight.refresh());
     // A click on the pane that is not on a control, in a dialog omp asked for or in the
@@ -1664,6 +1683,7 @@ function createPane(body, ctx, daemon) {
       drawStrips();
       drawBanner();
       drawTranscript();
+      drawJump();
       drawDialogs();
       drawRunning();
       drawScheduled();

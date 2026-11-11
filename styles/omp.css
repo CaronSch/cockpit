@@ -453,6 +453,68 @@
   padding: var(--space-3) var(--space-4);
 }
 
+/* Back to the latest (omp.js `drawJump`): a small round arrow over the transcript's foot, shown
+   once scrolled up; its ring says how the agent is doing. */
+.omp-jump-wrap {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  height: 0;
+}
+
+.omp-jump {
+  position: absolute;
+  bottom: var(--space-2);
+  left: 50%;
+  translate: -50% 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  corner-shape: round;
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lift);
+  color: var(--color-text);
+  font: 600 14px / 1 var(--font-ui);
+  cursor: pointer;
+}
+
+.omp-jump::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--color-line-strong);
+  border-radius: 50%;
+  corner-shape: round;
+}
+
+.omp-jump:hover {
+  background: var(--color-hover-solid, var(--color-surface-raised));
+}
+
+.omp-jump.is-done::before {
+  border-color: var(--color-unread);
+}
+
+.omp-jump.is-asking::before {
+  border-color: var(--color-warn);
+}
+
+.omp-jump.is-working::before {
+  border-color: color-mix(in oklch, var(--color-accent) 25%, transparent);
+  border-top-color: var(--color-accent);
+  animation: omp-jump-spin 0.9s linear infinite;
+}
+
+@keyframes omp-jump-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
 /* The selection, drawn over the transcript (omp/drag-highlight.js): one box per line, gliding
    as the selection grows by whole words. The browser's own highlight is hidden under it. */
 .omp-transcript.has-highlight ::selection {

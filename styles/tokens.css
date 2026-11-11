@@ -1,5 +1,5 @@
 /* Design tokens: near-black neutral surfaces with hairline edges, one indigo accent for
-   interaction, cyan for unread news, red reserved for errors. */
+   interaction, green for a finished agent's unread news, red reserved for errors. */
 :root {
   color-scheme: dark;
 
@@ -32,15 +32,15 @@
   --color-ok: oklch(75% 0.13 155);
   --color-danger: oklch(68% 0.19 22);
   --color-warn: oklch(80% 0.14 75);
-  /* A window with news its user has not seen: cyan, unlike anything else here. */
-  --color-unread: oklch(80% 0.13 210);
+  /* A window with news its user has not seen (an agent done, a prompt it ran): a clear green. */
+  --color-unread: oklch(80% 0.17 152);
   /* Code in agent replies: soft periwinkle on a faint chip, apart from the accent's links. */
   --color-code: oklch(80% 0.1 268);
   --color-code-bg: oklch(100% 0 0 / 0.06);
   --color-selection: color-mix(in oklch, var(--color-accent) 32%, transparent);
   /* Related windows (an agent conversation and its forks, app.js): one colour per family on
      screen, in hues clear of the accent, unread, danger and code colours. */
-  --color-family-1: oklch(76% 0.14 145);
+  --color-family-1: oklch(78% 0.12 220);
   --color-family-2: oklch(76% 0.12 185);
   --color-family-3: oklch(72% 0.15 315);
   --color-family-4: oklch(74% 0.16 335);
