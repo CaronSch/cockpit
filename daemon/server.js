@@ -16,6 +16,7 @@ import { DeliveryRefused } from './deliver.js';
 import { ScheduleRefused } from './schedule.js';
 import { GithubError } from './github.js';
 import { LoginRefused } from './setup.js';
+import { TerminalRefused } from './terminals.js';
 import { REPO } from '../src/github/pr-refs.js';
 import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
@@ -23,7 +24,7 @@ import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
 import { isValidTree } from '../src/layout/grid-model.js';
 import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion } from './ui-files.js';
 /** @import { BunRequest, Server } from 'bun' */
-/** @import { BugbotWatch, ConversationTarget, DaemonConfig, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent } from './wire.js' */
+/** @import { BugbotWatch, ConversationTarget, DaemonConfig, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent, TerminalEvent, TerminalInfo } from './wire.js' */
 /** @import { Hub } from './hub.js' */
 /** @import { RemoteAccess } from './remote.js' */
 /** @typedef {ReturnType<typeof import('./history.js').createHistory>} History */
@@ -41,6 +42,7 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Schedule } from './schedule.js' */
 /** @import { DecisionReviews } from './decisions.js' */
 /** @import { LoginState, Setup } from './setup.js' */
+/** @import { Terminals } from './terminals.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
 /** @typedef {(req: BunRequest, server: Server<undefined>) => Response | Promise<Response>} Handler */
 /**
@@ -237,7 +239,7 @@ async function compressed(req, res) {
 /** @param {unknown} err */
 function errorResponse(err) {
   const status =
-    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused
+    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused || err instanceof TerminalRefused
       ? err.status
       : err instanceof SessionNotRunning
         ? 409
@@ -252,24 +254,32 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, ask: Ask, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, schedule, setup, remote, ask, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, schedule, setup, remote, terminals, ask, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
   const uiVersion = createUiVersion(rootDir);
+
+  /**
+   * The event streams open now, by the id their `hello` gave them, each with the terminals it
+   * watches (and what stops each), so a page's windows can have a terminal's output sent on it.
+   * @type {Map<string, { write: (chunk: string) => void, watches: Map<string, () => void> }>}
+   */
+  const streams = new Map();
 
   /** @type {Handler} */
   async function stream(req, srv) {
     const cursors = followed(new URL(req.url).searchParams);
     srv.timeout(req, 0); // an event stream is idle between events; Bun would close it after 10 s
     const ui = await uiVersion.current();
+    const streamId = crypto.randomUUID();
     /** Whether a scoped stream sends this session event live: every `session` event, the rest only for followed sessions. @param {SessionEvent} event */
     const wanted = (event) => !cursors || event.kind === 'session' || cursors.has(event.session);
     /** @type {() => void} */
@@ -287,13 +297,13 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           for (const [id, seq] of cursors) cursors.set(id, Math.max(seq, lastSeen));
           replay = [...hub.since(Math.min(...cursors.values()))].filter((event) => event.seq > (cursors.get(event.session) ?? Infinity));
         }
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state() })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), terminals: terminals.list(), stream: streamId })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of replay) send(event);
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
-        // No id: scratchpad, history, unread, pins, forks, decisions, settings, bugbot, schedule, login, activity and remote events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, forks, decisions, settings, bugbot, schedule, login, activity, remote and terminal events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
@@ -312,6 +322,10 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           write(`data: ${JSON.stringify({ kind: 'activity', session, activity })}\n\n`),
         );
         const offRemote = remote.subscribe((/** @type {RemoteState} */ state) => write(`data: ${JSON.stringify({ kind: 'remote', ...state })}\n\n`));
+        const offTerminals = terminals.subscribe((/** @type {TerminalInfo[]} */ all) => write(`data: ${JSON.stringify({ kind: 'terminals', terminals: all })}\n\n`));
+        /** @type {Map<string, () => void>} */
+        const watches = new Map();
+        streams.set(streamId, { write, watches });
         const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
         stop = () => {
           clearInterval(heartbeat);
@@ -328,6 +342,9 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           offLogin();
           offActivity();
           offRemote();
+          offTerminals();
+          streams.delete(streamId);
+          for (const stopWatching of watches.values()) stopWatching();
         };
       },
       cancel: () => stop(),
@@ -697,6 +714,57 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
             const response = asCommand({ type: 'extension_ui_response', ...(await readJson(req)) });
             if (typeof response.id !== 'string') throw new HttpError(400, 'a dialog answer needs the request `id`');
             session.respondUi(response);
+            return noContent();
+          },
+        }),
+        '/api/terminals': api({
+          POST: async (req) => {
+            const body = await readJson(req);
+            const cwd = body?.cwd == null ? homedir() : await existingPath(body.cwd, 'directory', 'cwd');
+            return json({ terminal: terminals.start({ cwd, cols: body?.cols, rows: body?.rows }) }, 201);
+          },
+        }),
+        '/api/terminals/:id': api({
+          DELETE: async (req) => {
+            await terminals.end(req.params.id);
+            return noContent();
+          },
+        }),
+        '/api/terminals/:id/input': api({
+          POST: async (req) => {
+            const body = await readJson(req);
+            if (typeof body?.data !== 'string' || (body.binary != null && typeof body.binary !== 'boolean')) {
+              throw new HttpError(400, 'expected { data: string, binary?: boolean }');
+            }
+            terminals.input(req.params.id, body.data, body.binary ?? false);
+            return noContent();
+          },
+        }),
+        '/api/terminals/:id/size': api({
+          POST: async (req) => {
+            const body = await readJson(req);
+            terminals.resize(req.params.id, body?.cols, body?.rows);
+            return noContent();
+          },
+        }),
+        '/api/terminals/:id/watchers/:stream': api({
+          PUT: (req) => {
+            const { id } = req.params;
+            const page = streams.get(req.params.stream);
+            if (!page) throw new HttpError(404, 'no such stream: it has closed');
+            /** @param {TerminalEvent} event */
+            const send = (event) => page.write(`data: ${JSON.stringify(event)}\n\n`);
+            // Its scrollback first, then what it prints from then on: nothing is missed or sent twice.
+            const { scrollback, stop } = terminals.watch(id, (data) => send({ kind: 'terminal', id, data }));
+            page.watches.get(id)?.();
+            page.watches.set(id, stop);
+            send({ kind: 'terminal', id, replay: scrollback });
+            return noContent();
+          },
+          DELETE: (req) => {
+            const watches = streams.get(req.params.stream)?.watches;
+            watches?.get(req.params.id)?.();
+            watches?.delete(req.params.id);
             return noContent();
           },
         }),

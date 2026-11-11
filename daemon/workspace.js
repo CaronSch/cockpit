@@ -15,16 +15,28 @@
  *
  * A file that cannot be read as a workspace is never overwritten or dropped: reading and
  * writing that workspace fail, naming the file, until it is fixed or moved away.
+ *
+ * Windows of widgets that no longer exist and held nothing (`RETIRED_WIDGETS`) are left out of
+ * every layout read, and a screen left with no windows is no longer listed; the next save of
+ * the workspace stores it so.
  */
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 // Pure and shared with the browser, so both agree on what a valid name, id and layout are.
 import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
-import { isValidTree } from '../src/layout/grid-model.js';
+import { isValidTree, listLeaves, removeLeaf } from '../src/layout/grid-model.js';
 /** @import { Screen, Workspace } from './wire.js' */
 /** @import { Tree } from '../src/layout/grid-model.js' */
 
 const VERSION = 1;
+/** Widgets there are no more, whose windows held nothing: the empty Pane. */
+const RETIRED_WIDGETS = new Set(['pane']);
+
+/** @param {Tree} tree */
+const withoutRetired = (tree) =>
+  listLeaves(tree)
+    .filter((leaf) => RETIRED_WIDGETS.has(leaf.widget))
+    .reduce((rest, leaf) => removeLeaf(rest, leaf.id), tree);
 
 /** @param {any} screen parsed untrusted JSON @returns {boolean} */
 const isScreen = (screen) =>
@@ -66,7 +78,11 @@ export function createWorkspaces({ dir }) {
       data = JSON.parse(await file.text());
     } catch {}
     if (!isWorkspaceFile(data)) throw new Error(`${path} is not a workspace file this daemon can read; fix it or move it away`);
-    return { screens: data.screens };
+    const screens = data.screens.flatMap((screen) => {
+      const tree = withoutRetired(screen.tree);
+      return tree ? [{ ...screen, tree }] : [];
+    });
+    return { screens };
   }
 
   /** @param {string} name @param {Screen[]} screens */

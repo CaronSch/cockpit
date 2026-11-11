@@ -39,7 +39,7 @@ import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
 import { createFileSuggest } from '../omp/file-suggest.js';
-import { MENTIONS, PLAIN_PATH } from '../omp/file-mention.js';
+import { MENTIONS } from '../omp/file-mention.js';
 import { createPullSuggest } from '../omp/pr-suggest.js';
 import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
@@ -54,8 +54,8 @@ import { elapsed, runningWork } from '../omp/running-work.js';
 import { whenLabel } from '../timeline/scale.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
 import { branchEntry, pointKey, rewindPoint } from '../omp/rewind.js';
-import { conversationKey, isRunning, listConversations, showConversation } from '../sessions/running.js';
-import { recentDirs } from '../omp/recent-dirs.js';
+import { conversationKey, isRunning, showConversation } from '../sessions/running.js';
+import { directoryForm } from '../ui/directory-form.js';
 import { familyOf, relatives } from '../omp/fork-family.js';
 import { readDraft, writeDraft } from '../omp/drafts.js';
 import { focusOnClick } from '../ui/click-focus.js';
@@ -315,121 +315,22 @@ function createPane(body, ctx, daemon) {
   }
 
   function setupScreen() {
-    const form = el('form', 'omp-setup');
-    const label = el('label', 'omp-label', 'Directory');
-    const input = el('input', 'omp-field');
-    input.type = 'text';
-    input.spellcheck = false;
-    input.autocomplete = 'off';
-    input.placeholder = '~/code/project';
-    input.id = `omp-cwd-${Math.random().toString(36).slice(2)}`;
-    label.htmlFor = input.id;
-    // Folders are suggested as the path is typed, read as the daemon reads a new session's
-    // directory (relative to home); an empty field lists home's own folders.
-    const suggestions = createSuggestions();
-    const folders = createFileSuggest({
-      draft: input,
-      syntax: PLAIN_PATH,
-      foldersOnly: true,
-      // Enter starts omp in the folder typed; it takes a suggestion only once the arrows picked one.
-      enter: 'moved',
-      list: suggestions,
-      listDir: (dir) => daemon.listFiles(dir),
-      replace: (start, end, text) => input.setRangeText(text, start, end, 'end'),
-    });
-    input.addEventListener('focus', () => folders.update());
-    input.addEventListener('input', () => folders.update());
-    input.addEventListener('blur', () => folders.close());
-    input.addEventListener('keydown', (e) => {
-      if (e.isComposing) return;
-      if (suggestions.key(e)) {
-        // Enter takes the folder and closes the list, so the next Enter starts omp; Tab and a
-        // click go on into the folder's own folders.
-        if (e.key === 'Enter') folders.close();
-      } else if (e.key === 'Escape' && suggestions.open) {
-        e.preventDefault();
-        folders.close();
-      }
-    });
-    const cwd = params().cwd;
-    if (cwd) input.value = cwd;
-    else {
-      // The default can arrive while the user is typing: never write over what they typed,
-      // and select the default so that typing replaces it instead of appending to it.
-      let typed = false;
-      input.addEventListener('input', () => (typed = true), { once: true });
-      daemon
-        .config()
-        .then((c) => {
-          if (typed || input.value) return;
-          input.value = c.defaultCwd;
-          input.select(); // kept when the field is focused later
-          folders.update();
-        })
-        .catch(() => {});
-    }
-    const start = el('button', 'btn btn-accent', 'Start agent');
-    start.type = 'submit';
-    const error = el('p', 'omp-error');
-    error.hidden = true;
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const dir = input.value.trim();
-      // One agent at a time: a second Enter, or a recent directory clicked, while one starts does nothing.
-      if (!dir || start.disabled) return;
-      folders.close();
-      start.disabled = true;
-      error.hidden = true;
-      daemon
-        .createSession({ cwd: dir })
-        .then((meta) => {
+    return [
+      directoryForm({
+        daemon,
+        title: 'Start an agent',
+        startLabel: 'Start agent',
+        recentLabel: (dir) => `Start an agent in ${dir}`,
+        cwd: params().cwd,
+        start: async (dir) => {
+          const meta = await daemon.createSession({ cwd: dir });
           ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: null });
           // The folder picked, the prompt comes next: its box takes the focus from the form.
           focusNext = true;
           schedule();
-        })
-        .catch((err) => {
-          error.textContent = errorMessage(err);
-          error.hidden = false;
-        })
-        .finally(() => {
-          start.disabled = false;
-        });
-    });
-    // The directories of the latest conversations, each a click from starting there, as the form
-    // would with it typed. They arrive after the form is drawn, into a strip whose height is kept
-    // from the start, so nothing moves and the field keeps the focus; without any, it stays empty.
-    const recent = el('div', 'omp-recent');
-    Promise.all([daemon.config(), daemon.history()])
-      .then(([c, past]) => {
-        const dirs = recentDirs(listConversations(past, daemon.sessions(), { directory: null }));
-        if (!dirs.length) return;
-        recent.setAttribute('role', 'group');
-        recent.setAttribute('aria-label', 'Recent directories');
-        const title = el('span', 'omp-label', 'Recent');
-        title.setAttribute('aria-hidden', 'true');
-        recent.append(
-          title,
-          ...dirs.map((dir) => {
-            const shown = tildeHome(dir, c.home);
-            const pick = button('omp-tool-btn omp-recent-dir', shown, () => {
-              input.value = dir;
-              form.requestSubmit();
-            });
-            pick.setAttribute('aria-label', `Start an agent in ${shown}`);
-            return pick;
-          }),
-        );
-      })
-      .catch(() => {});
-    // The list drops down over what is below the field, so nothing moves as it opens and closes.
-    const field = el('div', 'omp-setup-field');
-    field.append(input, suggestions.root);
-    const row = el('div', 'omp-row');
-    row.append(field, start);
-    form.append(el('p', 'omp-setup-title', 'Start an agent'), label, row, recent, error);
-    queueMicrotask(() => input.focus());
-    return [form];
+        },
+      }),
+    ];
   }
 
   /**

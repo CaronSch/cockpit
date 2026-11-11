@@ -110,6 +110,19 @@
  *                                      once Bugbot posts it, sent to the conversation (see `bugbot.js`)
  *   GET    /api/remote                 → RemoteInfo: Phone access, with the phone's URL and sign-in QR
  *                                      code (loopback only: 404 on the remote listener)
+ *   POST   /api/terminals              { cwd?, cols, rows } → 201 { terminal: TerminalInfo }: the user's login
+ *                                      shell started in a pseudo-terminal of that size, in `cwd` (as
+ *                                      above; home when not given); see `terminals.js`
+ *   DELETE /api/terminals/:id          → 204 once its shell has exited: hung up on, killed if it lingers
+ *   POST   /api/terminals/:id/input    { data, binary? } → 204: typed into it (`binary`: each character
+ *                                      is a byte); a page sends one at a time, so they arrive in order
+ *   POST   /api/terminals/:id/size     { cols, rows } → 204: its size now
+ *   PUT    /api/terminals/:id/watchers/:stream → 204: the event stream whose `hello` named it `stream`
+ *                                      gets the terminal's scrollback (`replay`), then its output as it
+ *                                      comes, until the stream closes or
+ *   DELETE /api/terminals/:id/watchers/:stream → 204 stops it. The others are 404 for a terminal not
+ *                                      running (its shell exited, or the daemon restarted), PUT also
+ *                                      for a stream not open; a size is 1 to 1000 columns and rows (400)
  *   GET    /api/stream                 Server-Sent Events, one StreamEvent per message
  *   GET    /api/stream?follow=<id>:<seq>,…  the same, scoped to the sessions named (none for an empty
  *                                      `follow`): only their events with a seq above their cursor (or
@@ -125,9 +138,11 @@
  * on every connection is a `hello` carrying the current boot id, the newest event's seq (the
  * events up to it that follow are a replay), how many events that replay holds (`replay`, so a
  * page can draw once it has them all), session list, unread conversations, forks, settings, Bugbot watches,
- * scheduled prompts, the Setup window's login, UI version, awake sessions' activity and Phone access. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
- * `bugbot`, `schedule`, `login`, `activity` and `remote` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
- * GET /api/history and GET /api/decisions/:ompId instead, and its `hello` carries the rest.
+ * scheduled prompts, the Setup window's login, UI version, awake sessions' activity, Phone access, the
+ * terminals running and the connection's own `stream` id. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
+ * `bugbot`, `schedule`, `login`, `activity`, `remote`, `terminals` and `terminal` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
+ * GET /api/history and GET /api/decisions/:ompId instead, its `hello` carries the rest, and it
+ * watches its terminals again (their scrollback is their replay).
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
 /** @import { Unread } from './unread.js' */
@@ -219,7 +234,9 @@
  * scheduled (see `schedule.js`); `login` the Setup window's
  * `omp login`, null if none ran since the daemon started (see `setup.js`). `activity` holds
  * how every awake session is doing, by session id; `remote` how Phone access is (`remote.js`).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState }} HelloEvent
+ * `terminals` are the terminals running (`terminals.js`); `stream` names this connection, for
+ * watching a terminal on it (PUT /api/terminals/:id/watchers/:stream).
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState, terminals: TerminalInfo[], stream: string }} HelloEvent
  */
 
 /**
@@ -265,7 +282,21 @@
 
 /** Sent to every page as the Setup window's `omp login` starts, prints, is answered or ends. @typedef {{ kind: 'login', login: LoginState | null }} LoginEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | SessionEvent} StreamEvent */
+/**
+ * A terminal the daemon runs (`terminals.js`): the login shell `shell`, started in `cwd` at
+ * `startedAt` (epoch ms).
+ * @typedef {{ id: string, cwd: string, shell: string, startedAt: number }} TerminalInfo
+ */
+/** Sent to every page after a terminal started or ended, with those running. @typedef {{ kind: 'terminals', terminals: TerminalInfo[] }} TerminalsEvent */
+/** Output a terminal printed while it was `cols` × `rows`. @typedef {{ cols: number, rows: number, data: string }} ScrollbackPart */
+/**
+ * Output of terminal `id`, sent only to the streams watching it: first its scrollback
+ * (`replay`, oldest first: what the window shows starts over from it), then what it prints as
+ * it comes (`data`).
+ * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
+ */
+
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

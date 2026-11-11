@@ -23,6 +23,7 @@ import { loadSchedule, scheduleTools } from '../daemon/schedule.js';
 import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
 import { askAgent } from '../daemon/ask.js';
 import { createSetup } from '../daemon/setup.js';
+import { createTerminals } from '../daemon/terminals.js';
 /** @import { RemoteState, RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 /** @import { DaemonOptions } from '../daemon/server.js' */
 /** @import { RemoteAccess } from '../daemon/remote.js' */
@@ -67,6 +68,8 @@ let decisions;
 let setup;
 /** Phone access of the suite's daemon, on the fake Tailscale. @type {RemoteAccess} */
 let remote;
+/** The suite's terminals: plain `sh`, whatever the user's shell. @type {import('../daemon/terminals.js').Terminals} */
+let terminals;
 /** What the suite's daemon is made of, for other daemons on the same sessions. @type {DaemonOptions} */
 let daemonOptions;
 /** The file the fake Tailscale's `status --json` prints. */
@@ -186,7 +189,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.kind !== 'terminals' && e.kind !== 'terminal' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -219,6 +222,7 @@ beforeAll(async () => {
     env: { ...process.env, FAKE_TAILSCALE_STATUS_FILE: tailscaleStatus },
     checkEveryMs: 100,
   });
+  terminals = createTerminals({ shell: '/bin/sh' });
   daemonOptions = {
     hub,
     unread,
@@ -234,6 +238,7 @@ beforeAll(async () => {
     schedule,
     setup,
     remote,
+    terminals,
     ask: (question) => askAgent(question, { ompPath: FAKE_OMP, history }),
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
@@ -249,6 +254,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await remote.stop();
+  await terminals.closeAll();
   bugbot.stop();
   schedule.stop();
   await hub.closeAll();
@@ -301,6 +307,21 @@ describe('loopback guard', () => {
       assert.equal(res.status, 403, `Origin ${name}`);
     }
     assert.equal(hub.list().length, sessionsBefore);
+  });
+
+  test('a shell starts, and is typed into, only with the token cookie and the page’s own Origin', async () => {
+    const body = { cwd, cols: 80, rows: 24 };
+    assert.equal((await call({ method: 'POST', path: '/api/terminals', body, auth: false })).status, 401);
+    assert.equal((await call({ method: 'POST', path: '/api/terminals', body, headers: { origin: 'http://evil.example' } })).status, 403);
+    assert.equal((await call({ method: 'POST', path: '/api/terminals', body, origin: false })).status, 403);
+    assert.equal(terminals.list().length, 0);
+    const started = await call({ method: 'POST', path: '/api/terminals', body });
+    assert.equal(started.status, 201);
+    const input = `/api/terminals/${started.json.terminal.id}/input`;
+    assert.equal((await call({ method: 'POST', path: input, body: { data: 'id\r' }, headers: { origin: 'http://evil.example' } })).status, 403);
+    assert.equal((await call({ method: 'POST', path: input, body: { data: 'id\r' }, auth: false })).status, 401);
+    assert.equal((await call({ method: 'DELETE', path: `/api/terminals/${started.json.terminal.id}` })).status, 204);
+    assert.equal(terminals.list().length, 0);
   });
 
   test('the token link sets an HttpOnly, SameSite=Strict cookie and drops only the token from the URL', async () => {
