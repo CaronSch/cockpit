@@ -333,8 +333,8 @@ What runs today:
   agent window this screen used last (pressed or focused last), or a new one if
   there is none; dragging it onto the middle of an agent window shows it there, and
   onto the grid elsewhere opens a new agent window where it is dropped. Showing one
-  starts no omp. The conversation in the agent window this screen used last has its row filled,
-  and one shown in another agent window here is ringed; pointing at a row
+  starts no omp. The conversation in the agent window this screen used last has its row filled
+  with an indigo bar at its left edge, and one shown in another agent window here a grey bar; pointing at a row
   outlines its windows, and pointing at an agent window lights its row (`ctx.screen`,
   `ctx.outline`; `src/sessions/links.js`). Waking a journal a session already
   holds gets that session: the daemon never starts a second omp on one. A

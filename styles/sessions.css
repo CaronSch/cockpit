@@ -89,15 +89,27 @@
   background: var(--color-surface-raised);
 }
 
-/* Where the conversation is on this screen: the one in the agent window used last (where a
-   click shows sessions) is filled; one shown in another agent window is ringed. */
-.sessions-item.is-shown {
-  box-shadow: inset 0 0 0 1px var(--color-line-strong);
+/* Where the conversation is on this screen: a short bar at the row's left edge, in the accent
+   on the one in the agent window used last (where a click shows sessions, also filled), grey on
+   one shown in another agent window. */
+.sessions-item:is(.is-shown, .is-current)::before {
+  content: '';
+  position: absolute;
+  top: 28%;
+  bottom: 28%;
+  left: 0;
+  width: 3px;
+  border-radius: 2px;
+  corner-shape: round;
+  background: var(--color-text-faint);
 }
 
 .sessions-item.is-current {
   background: var(--color-surface-raised);
-  box-shadow: none;
+}
+
+.sessions-item.is-current::before {
+  background: var(--color-accent);
 }
 
 /* How an awake conversation is doing, or that it is unread: a mark before its title (rows with

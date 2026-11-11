@@ -28,7 +28,7 @@
  *
  * Rows show how their conversations are doing (working, needs you, done) and where they are on
  * this screen (sessions/links.js): the one in the agent window used last (where a click shows
- * conversations) is highlighted, and one shown in another agent window is ringed. Pointing at
+ * conversations) is filled with an accent bar at its left edge, and one shown in another agent window has a grey bar. Pointing at
  * a row (hover, or keyboard focus: a click also focuses a row, but that is not pointing at it
  * once the pointer moves on) outlines its windows, and pointing at an agent window lights its
  * conversation's row.
