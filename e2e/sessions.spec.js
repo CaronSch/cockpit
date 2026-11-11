@@ -452,6 +452,30 @@ test('Archive does not drag the session out: pressed and moved onto the grid, it
   await expect(page.locator('.widget[data-widget="omp"]')).toHaveCount(0);
 });
 
+test('waking a conversation shown from its journal never blanks its window', async ({ page }) => {
+  const window = await addSessionsWindow(page);
+  await row(window, 'Fix the login flow').click();
+  const pane = page.locator('.widget[data-widget="omp"]');
+  await expect(pane.locator('.omp-user').first()).toContainText('fix the login bug');
+  // From here on, note whether a frame is ever painted without the conversation's prompts (as
+  // the user would see it: checked just after each paint, not between changes made within one).
+  await pane.locator('.omp-transcript').evaluate((transcript) => {
+    const w = /** @type {any} */ (window);
+    w.__blanked = false;
+    const look = () => {
+      setTimeout(() => {
+        if (!transcript.isConnected || !transcript.querySelector('.omp-user')) w.__blanked = true;
+      });
+      requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  });
+  await pane.locator('textarea').focus(); // reaching for the box wakes it
+  await expect.poll(async () => (await awake(page, fileOf('login'))).some((/** @type {any} */ s) => s.status === 'ready')).toBe(true);
+  await expect(pane.locator('.omp-user').first()).toContainText('fix the login bug');
+  expect(await page.evaluate(() => /** @type {any} */ (window).__blanked)).toBe(false);
+});
+
 test('a conversation is listed once, awake or not, even with its window closed; archived while idle, its session goes to sleep', async ({ page }) => {
   const window = await addSessionsWindow(page);
   await row(window, 'deploy staging').click();

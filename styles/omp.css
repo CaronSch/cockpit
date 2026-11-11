@@ -164,7 +164,8 @@
 .omp-toolbar {
   flex: none;
   display: flex;
-  align-items: center;
+  /* On one baseline: the toolbar mixes Inter and Plex Mono, which centre at different heights. */
+  align-items: baseline;
   gap: var(--space-1) var(--space-2);
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--color-line);
