@@ -1282,12 +1282,44 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2) 0;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) 0;
 }
 
-.omp-chip.is-running {
-  padding-right: 6px;
+/* A shell or subagent running now: roomier, with a light going round its outline. The border is
+   a conic gradient turned by a registered angle, under a fill the colour of the window. */
+@property --omp-orbit {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.omp-running .omp-chip.is-running {
+  gap: var(--space-2);
+  padding: 4px 12px;
+  border-color: transparent;
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    conic-gradient(
+        from var(--omp-orbit),
+        var(--color-line-strong) 0 62%,
+        var(--color-accent) 80%,
+        var(--color-line-strong) 98%
+      )
+      border-box;
+  animation: omp-orbit 2.4s linear infinite;
+}
+
+@keyframes omp-orbit {
+  to {
+    --omp-orbit: 1turn;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omp-running .omp-chip.is-running {
+    animation: none;
+  }
 }
 
 /* A prompt scheduled for this conversation: when it runs, then the prompt. */

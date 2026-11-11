@@ -210,8 +210,8 @@ What runs today:
   with Cancel (`renderPending` in `src/omp/items-view.js`). While a
   turn runs, the toolbar shows how far the agent is through its todo list (tasks
   done of tasks, the current one on hover), read from omp's `todo` results; work
-  without a list shows none. A Running line above the message box lists the shells
-  and subagents running now with how long each has run (`omp/running-work.js`): the
+  without a list shows none. A line of chips above the message box lists the shells
+  and subagents running now with how long each has run, a light circling each chip's outline (`omp/running-work.js`): the
   calls the turn waits on, and the background jobs omp handed them off to (a
   result's `details.async` and `progress`, or a subagent a message revived, ended by an `async-result` message, a `wait` or `proc://`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Scheduled
