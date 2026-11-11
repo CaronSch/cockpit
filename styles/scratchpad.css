@@ -144,6 +144,8 @@
 
 /* ── document ── */
 
+/* Where the notes are written: the whole window but the status line, in the colour of a field,
+   so it reads as a place to type. */
 .pad-doc {
   display: flex;
   flex: 1;
@@ -152,6 +154,8 @@
   min-height: 0;
   padding: var(--space-3) var(--space-4);
   overflow: auto;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-field);
   cursor: text;
 }
 
@@ -242,7 +246,7 @@
   display: flex;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-1) var(--space-4) var(--space-2);
+  padding: var(--space-2) var(--space-4);
   color: var(--color-text-faint);
   font: var(--weight-regular) var(--text-2xs) / 1.4 var(--font-ui);
 }
