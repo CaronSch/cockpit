@@ -504,7 +504,7 @@ telemetry views, cmux-parity features beyond the above.
 
 - The daemon, tests and scripts run on Bun (1.3.14+, omp's own minimum); the
   browser UI is plain ES modules with no build step (`bun start`). Dev-only
-  tooling is TypeScript (type checking, never compiling), Playwright and
+  tooling is TypeScript (type checking, never compiling) and
   `@types/bun`. Runtime dependencies are allowed only to avoid rebuilding a
   mature subsystem (terminal emulation, PTY handling), and each one is named in
   this file. Adding any other runtime dependency, dev tool, or bundler is a
@@ -550,19 +550,22 @@ telemetry views, cmux-parity features beyond the above.
   threshold (at least 100K), `COCKPIT_BUGBOT_POLL_MS` how often a Bugbot review is looked for;
   `--tailscale <path>` (or `COCKPIT_TAILSCALE`) and `--remote-port <n>` (or
   `COCKPIT_REMOTE_PORT`, the `--port` by default) are Phone access's (Setup checks the same
-  `tailscale`). Tests, the e2e daemons included, drive `tests/fixtures/fake-tailscale.js`, never
-  the real `tailscale`.
-- Before committing, all of these must pass. CI (`.github/workflows/ci.yml`, on every push to
-  `main` and every PR) runs all but the browser tests, which run only here:
+  `tailscale`). Tests drive `tests/fixtures/fake-tailscale.js`, never the real `tailscale`.
+- Before committing, all of these must pass (CI runs them on every push to `main` and every PR,
+  `.github/workflows/ci.yml`):
   - `bun run typecheck`
-  - `bun run test`: `bun test` suites in `tests/`: the pure modules, plus the
-    daemon end to end against `tests/fixtures/fake-omp.js`, a scripted stand-in
-    for omp (plain `bun test` would also pick up `e2e/*.spec.js`)
-  - `bun run test:e2e`: Playwright suites in `e2e/`, driving the real app and
-    daemon (with the fake omp) in Chromium. First run on a machine needs
-    `bunx playwright install chromium`.
+  - `bun run test`: the `bun test` suites in `tests/`: the daemon's security checks (the
+    loopback guard and Phone access's gate, against `tests/fixtures/fake-omp.js`, a scripted
+    stand-in for omp), and a few pure modules (the layout, Markdown, the transcript reducer,
+    omp's frame decoder)
   - `bun run claude-md:check`
-- A UI behaviour change comes with an e2e test that fails without it.
+- Tests are kept few on purpose. Write one only when it has a clear purpose worth its upkeep: it
+  guards something that would be dangerous or costly to break without noticing (the security
+  checks, data on disk), or pins down tricky pure logic that is easy to get subtly wrong. Never
+  write a test for its own sake, to pin a design detail (a size, a label, a colour, which
+  control sits where), or to restate what the code says. A test that blocks a deliberate
+  change is wrong, not the change: update it or delete it. Check a UI change by running it
+  and looking, not with a browser test.
 - When omp changes its protocol, re-record frames from the real omp (never
   commit them: they contain local tool and MCP names) and update the fake to
   match.
@@ -768,7 +771,6 @@ particular, move a capability into "Current state" when it ships.
 - `bun run start` — `bun daemon/main.js`
 - `bun run test` — `bun test`
 - `bun run test:coverage` — `bun test --coverage`
-- `bun run test:e2e` — `playwright test`
 - `bun run typecheck` — `tsc -p .`
 - `bun run claude-md` — `bun scripts/update-claude-md.js`
 - `bun run claude-md:check` — `bun scripts/update-claude-md.js --check`
@@ -776,6 +778,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/atom.test.js`, `tests/clock.test.js`, `tests/compute-layout.test.js`, `tests/conversation.test.js`, `tests/csv.test.js`, `tests/daemon-client.test.js`, `tests/daemon.test.js`, `tests/drafts.test.js`, `tests/drag-highlight.test.js`, `tests/drop-zone.test.js`, `tests/file-mention.test.js`, `tests/file-refs.test.js`, `tests/forks.test.js`, `tests/frame-decoder.test.js`, `tests/github.test.js`, `tests/grid-model.test.js`, `tests/history.test.js`, `tests/idle-compaction.test.js`, `tests/indent.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-activity.test.js`, `tests/omp-cold.test.js`, `tests/omp-decisions.test.js`, `tests/omp-event-log.test.js`, `tests/omp-message.test.js`, `tests/omp-recent-dirs.test.js`, `tests/omp-response-nav.test.js`, `tests/omp-rewind.test.js`, `tests/omp-running-work.test.js`, `tests/omp-transcript.test.js`, `tests/omp-visibility.test.js`, `tests/prompt-history.test.js`, `tests/pull-filter.test.js`, `tests/remote.test.js`, `tests/schedule.test.js`, `tests/scratchpad-blocks.test.js`, `tests/scratchpad-store.test.js`, `tests/scratchpad.test.js`, `tests/search.test.js`, `tests/sessions-links.test.js`, `tests/sessions-notify.test.js`, `tests/sessions-order.test.js`, `tests/sessions-running.test.js`, `tests/sleep.test.js`, `tests/snap.test.js`, `tests/table-text.test.js`, `tests/timeline-scale.test.js`, `tests/todos.test.js`, `tests/ui-files.test.js`, `tests/unread.test.js`, `tests/visuals.test.js`, `tests/word-snap.test.js`, `tests/workspace-model.test.js`, `tests/workspace.test.js`, `tests/zoom.test.js`, `e2e/adhd.spec.js`, `e2e/decisions.spec.js`, `e2e/file.spec.js`, `e2e/github.spec.js`, `e2e/grid.spec.js`, `e2e/idle-compaction.spec.js`, `e2e/notify.spec.js`, `e2e/omp.spec.js`, `e2e/phone-access.spec.js`, `e2e/phone.spec.js`, `e2e/scratchpad.spec.js`, `e2e/screens.spec.js`, `e2e/sessions.spec.js`, `e2e/setup.spec.js`, `e2e/sleep.spec.js`, `e2e/timeline.spec.js`, `e2e/unread.spec.js`, `e2e/update-notice.spec.js`
+`tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/remote.test.js`, `tests/snap.test.js`
 
 <!-- END GENERATED -->

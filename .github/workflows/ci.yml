@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # The fast checks only: the browser tests (`bun run test:e2e`) run locally before committing
-  # (CLAUDE.md). The job's name is the check the main branch's ruleset requires.
+  # Typecheck, the unit and daemon suites, and the CLAUDE.md check. The job's name is the check
+  # the main branch's ruleset requires.
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
