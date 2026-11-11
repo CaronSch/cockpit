@@ -81,10 +81,10 @@ const JUMP_MS = 150;
 /** ⌘ on Apple's keyboards, Ctrl elsewhere: the modifier of the previous/next response keys. */
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const REFUSED = 'The daemon refused this page.';
-const NO_FORKS = 'No forks yet. /fork <prompt> starts one in the background; dragging Send onto the grid starts one beside.';
+const NO_FORKS = 'No forks yet. /fork <prompt> opens one as a new tab; dragging Send onto the grid places one where it is dropped.';
 const NOTHING_TO_FORK = 'Nothing to fork yet: the conversation is saved once the agent has replied';
 /** The workbench's own command, in the suggestions beside omp's (`/fork` is omp's terminal UI's only). @type {SlashCommand} */
-const FORK_COMMAND = { name: 'fork', aliases: [], hint: '<prompt>', description: 'Fork this conversation in the background and send the fork this prompt (listed under Forks)' };
+const FORK_COMMAND = { name: 'fork', aliases: [], hint: '<prompt>', description: 'Fork this conversation into a new tab and send the fork this prompt' };
 
 /**
  * Whether the page is going away: its requests are cut off then, which says nothing of whether
@@ -550,7 +550,7 @@ function createPane(body, ctx, daemon) {
     const errorBadge = el('span', 'omp-badge-error', 'error');
     const spacer = el('span', 'omp-spacer');
     // The conversation's forks and the one it was forked from; forks start from `/fork <prompt>`
-    // (in the background) or by dragging Send onto the grid (in a new window).
+    // (a new tab) or by dragging Send onto the grid (where it is dropped).
     const forksBtn = toolButton('Forks', 'omp-forks');
     const prsBtn = toolButton('PRs', 'omp-prs');
     prsBtn.hidden = true; // until GitHub says the directory is in a repository
@@ -937,9 +937,9 @@ function createPane(body, ctx, daemon) {
     }
 
     async function send() {
-      // `/fork <prompt>` is the workbench's: a fork of this conversation, in the background.
+      // `/fork <prompt>` is the workbench's: a fork of this conversation, in a new tab.
       const forking = forkPrompt(draft.value);
-      if (forking !== null) return forkInBackground(forking);
+      if (forking !== null) return forkInTab(forking);
       // `/command` and `!shell` go as typed; comments and attachments wait for the next prompt.
       const command = isCommand(draft.value);
       // A bare `!` names no command: leave it in the box rather than run nothing.
@@ -985,13 +985,12 @@ function createPane(body, ctx, daemon) {
     }
 
     /**
-     * `/fork <prompt>`: starts a fork of this conversation that gets `prompt` (with the comment
-     * and file cards) once it is up, without a window of its own; Forks lists it, and a desktop
-     * notification (if on) tells when it is done. The daemon forks a working conversation as of
-     * its last completed response.
+     * `/fork <prompt>`: opens a fork of this conversation as a new tab beside it, which gets
+     * `prompt` (with the comment and file cards) once it is up, as dragging Send does where it is
+     * dropped. The daemon forks a working conversation as of its last completed response.
      * @param {string} prompt
      */
-    async function forkInBackground(prompt) {
+    async function forkInTab(prompt) {
       hideSuggestions();
       if (!forkable()) {
         addNote(state, 'error', 'fork', `Not forked. ${NOTHING_TO_FORK}.`);
@@ -1003,15 +1002,8 @@ function createPane(body, ctx, daemon) {
         addNote(state, 'error', 'fork', 'Not forked: say what the fork should do, as in /fork try the other approach.');
         return schedule();
       }
-      const taken = outgoing.take();
-      try {
-        await daemon.createSession({ cwd: cwd() || '~', fork: /** @type {string} */ (file), prompt: outgoing.message });
-        addNote(state, 'info', 'fork', 'Forked in the background with that prompt: Forks lists it.');
-      } catch (err) {
-        if (!leaving) taken.restore();
-        addNote(state, 'error', 'fork', `Not forked: ${errorMessage(err)}`);
-      }
-      schedule();
+      outgoing.take();
+      ctx.openTab('omp', { fork: file, cwd: cwd() || null, session: null, sessionFile: null, name: null, prompt: outgoing.message });
     }
 
     async function stop() {

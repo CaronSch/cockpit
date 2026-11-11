@@ -160,9 +160,11 @@ What runs today:
   tool calls with output), pick model and thinking level, log in to
   providers, use slash commands, answer approval and `ask` dialogs, steer or stop
   a running turn, and carry on a conversation whatever became of its omp (asleep,
-  a daemon restart). A long conversation compacted while idle says so in its
-  transcript while it runs ("Compacting while idle…") and once done ("Compacted while
-  idle, before the prompt cache expired"), with the summary. Past that cutoff (54 minutes after
+  a daemon restart). Compaction draws a line across the transcript, in every view (*Only
+  prompts and responses* too), with what happened in its middle and the summary a click away:
+  omp's own near its context's limit ("Compacting context…", "Context compacted") and the
+  daemon's while idle ("Compacting while idle…", "Compacted while idle, before the prompt cache
+  expired"). Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
   works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **Forks**
@@ -192,7 +194,7 @@ What runs today:
   session of its own (omp's `--fork`: a new journal, the original runs on untouched),
   started by the daemon (`daemon/forks.js`) once omp has saved the conversation (a new
   session does once the model has replied). `/fork <prompt>` (the workbench's own command,
-  never sent to omp) starts one in the background with that prompt, no window of its own;
+  never sent to omp) opens one as a new tab beside it with that prompt;
   dragging **Send** (the message box's small up-arrow button) onto the grid starts one in a new window placed where it is dropped, with
   the message in the box (the box empties once the fork is placed; a click still sends here).
   Forking while the agent works copies the conversation as of its last completed response.
@@ -277,7 +279,7 @@ What runs today:
   focused tab: never for events replayed on (re)connecting (the `hello` carries the seq
   they run to), one per session (tagged with its id, so tabs replace each other's), closed
   once the session is read; a click shows it in the agent window used last. The top
-  bar's Config menu (opened by a click) holds the app's
+  bar's Config menu (open while pointed at, or pinned by a click) holds the app's
   switches, kept per browser (`src/ui/settings.js`). Agent windows fold each stretch of
   thinking and tool calls between two things the agent said into one line ("Working · 3 steps
   · read, edit ×2" with a spinner while it runs, "Worked · …" once done, a red "1 failed" if a
@@ -407,8 +409,8 @@ What runs today:
   conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a
   conversation shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
   /api/schedule/:id`; saved, it is no longer missed). Only a failure is written under the axis.
-- Nothing pops up on hover: no tooltips (no `title` attributes) and no menus opened by pointing.
-  Controls named only by a symbol say what they are to screen readers (`aria-label`).
+- Nothing pops up on hover but the Config menu: no tooltips (no `title` attributes), and no
+  other menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
 - Notes windows (the `scratchpad` widget): each new window starts its own pad; a switcher reopens or
   deletes any pad, and two windows (or tabs) on one pad stay in sync. Pads are
   Markdown files in `~/.cockpit/scratchpads/`; pasted or dropped
