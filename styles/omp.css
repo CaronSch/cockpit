@@ -864,7 +864,8 @@
 }
 
 /* The files a prompt was sent with (message.js `splitAttachments`): images as thumbnails (a
-   click opens one full size), anything else as its name. */
+   click opens one full size), anything else as its name. A screenshot of a few lines shows at its
+   own pixels: shrunk by an odd factor, its text goes soft. */
 .omp-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -878,8 +879,8 @@
 }
 
 .omp-attachments .md-image img {
-  max-width: 240px;
-  max-height: 96px;
+  max-width: min(100%, 480px);
+  max-height: 200px;
   border: 1px solid var(--color-line-strong);
   background: none;
 }

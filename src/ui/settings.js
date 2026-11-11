@@ -14,14 +14,13 @@
 import { button, el } from './dom.js';
 import { createAtom } from '../state/atom.js';
 import { createLogin } from './login.js';
+import { openOnHover } from './hover-menu.js';
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { Notifier } from '../sessions/notify.js' */
 /** @import { BrowserChoice } from '../../daemon/browser.js' */
 /** @import { RemoteState } from '../../daemon/wire.js' */
 
 const SETTINGS_KEY = 'cockpit.settings';
-/** How long the menu stays open after the pointer leaves it, so crossing the gap to it does not close it. */
-const CLOSE_DELAY_MS = 250;
 /** @typedef {'onlyResponses' | 'animatedSelection'} SettingKey */
 /** @typedef {{ key: SettingKey, label: string, detail: string, initial: boolean }} Setting */
 
@@ -280,36 +279,12 @@ export function createConfigMenu({ daemon, notifier }) {
   toggle.popoverTargetElement = menu;
   root.append(toggle, menu);
 
-  // Opened by the pointer resting on it, the menu follows the pointer; a click pins it open.
-  let hovering = false;
-  let closing = 0;
-  const open = () => menu.matches(':popover-open');
-  root.addEventListener('pointerenter', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    clearTimeout(closing);
-    if (open()) return;
-    hovering = true;
-    menu.showPopover({ source: toggle }); // under its button, as a click would open it
-  });
-  root.addEventListener('pointerleave', (e) => {
-    if (e.pointerType !== 'mouse' || !hovering) return;
-    closing = window.setTimeout(() => open() && hovering && menu.hidePopover(), CLOSE_DELAY_MS);
-  });
-  toggle.addEventListener('click', (e) => {
-    // Open from hovering: the click pins it rather than closing it.
-    if (hovering && open()) e.preventDefault();
-    hovering = false;
-  });
-  // A click in the menu pins it too: a login under way must not close as the pointer leaves.
-  menu.addEventListener('pointerdown', () => {
-    hovering = false;
-    clearTimeout(closing);
-  });
+  // Opened while the pointer rests on it (ui/hover-menu.js); a click pins it open.
+  openOnHover({ toggle, menu, areas: [root] });
   menu.addEventListener('toggle', (event) => {
     const opened = /** @type {ToggleEvent} */ (event).newState === 'open';
     toggle.setAttribute('aria-expanded', String(opened));
     if (!opened) {
-      hovering = false;
       accounts?.destroy();
       accounts = null;
       return;

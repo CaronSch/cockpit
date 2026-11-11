@@ -158,10 +158,12 @@ input[type='radio'],
   }
 }
 
-/* The top bar's controls sit a little tighter than buttons elsewhere, to fit its height. */
+/* The top bar's controls sit a little tighter than buttons elsewhere, to fit its height, and a
+   touch rounder. */
 .topbar-actions .btn {
   margin-left: var(--space-1);
   padding-block: 4px;
+  border-radius: var(--radius-m);
 }
 
 /* + Widget: its full-width ＋ brings room of its own on the left, so the button gives less. */
@@ -178,7 +180,7 @@ input[type='radio'],
   align-items: center;
   padding: 4px 10px;
   border: 1px solid transparent;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
   background: transparent;
   color: var(--color-text);
   font: 500 var(--text-sm) / 1.4 var(--font-ui);
@@ -204,13 +206,13 @@ input[type='radio'],
 .zoom {
   display: flex;
   margin-inline: var(--space-2);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
 }
 
 .zoom-btn {
   padding: 4px 6px;
   border: 0;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-m);
   background: transparent;
   color: var(--color-text);
   font: 500 var(--text-sm) / 1.4 var(--font-ui);
@@ -348,6 +350,9 @@ input[type='radio'],
   position-area: bottom span-left;
   margin-top: 6px;
   width: min(360px, calc(100vw - 32px));
+  /* Under the top bar, scrolling in a short window rather than moving up over its own button. */
+  max-height: calc(100dvh - 3.5rem);
+  overflow-y: auto;
   padding: var(--space-2);
   border: 1px solid var(--color-line-strong);
   border-radius: var(--radius-l);
