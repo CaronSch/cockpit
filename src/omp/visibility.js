@@ -107,7 +107,8 @@ export function responseStarts(items) {
     if (item.kind === 'user') {
       if (!item.byAgent) worked = false;
     } else if (item.kind === 'work') {
-      if (item.parts.some((p) => p.kind === 'tool' || p.blocks.some((b) => b.kind === 'toolCall'))) worked = true;
+      // omp's own notes folded in are not the agent working.
+      if (item.parts.some((p) => p.kind === 'tool' || (p.kind === 'assistant' && p.blocks.some((b) => b.kind === 'toolCall')))) worked = true;
     } else if (item.kind === 'assistant') {
       if (isNarration(item)) worked = true;
       else if (isResponse(item) && item.blocks.some((b) => b.kind === 'text' && b.text.trim() !== '')) {
