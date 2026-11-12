@@ -7,6 +7,7 @@ import { button, el } from '../ui/dom.js';
 import { json } from '../ui/format.js';
 import { renderAttachment, renderMarkdown } from './markdown-dom.js';
 import { splitAttachments } from './message.js';
+import { isNarration } from './visibility.js';
 /** @import { Block, Item, ToolRun } from './transcript.js' */
 /** @import { Review } from './decisions.js' */
 /** @import { WorkItem } from './visibility.js' */
@@ -50,7 +51,8 @@ export function renderItem(item, ctx) {
       return node;
     }
     case 'assistant': {
-      const node = el('div', 'omp-msg omp-assistant');
+      // What the agent said on its way shows softer than its response (visibility.js).
+      const node = el('div', `omp-msg omp-assistant${isNarration(item) ? ' is-narration' : ''}`);
       item.blocks.forEach((block, i) => node.append(renderBlock(block, `${item.key}:${i}`, ctx)));
       if (!item.ended && item.blocks.length === 0) node.append(statusLine('muted', '…'));
       if (item.errorMessage) node.append(statusLine('error', item.errorMessage));
@@ -291,3 +293,10 @@ function argsSummary(args) {
 /** @param {string} text */
 const clip = (text) => (text.length > 120 ? `${text.slice(0, 119)}…` : text).replace(/\s+/g, ' ');
 
+/**
+ * Where a response starts after the agent's work (visibility.js `responseStarts`): a quiet
+ * label and a hairline across the transcript, so the answer stands apart from what led to it.
+ */
+export function renderResponseMark() {
+  return el('div', 'omp-response-mark', 'Response');
+}
