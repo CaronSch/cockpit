@@ -183,9 +183,10 @@ What runs today:
   Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring
   spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`). Its twin,
   pointing up at the transcript's head, goes back to where the latest response starts (its
-  **Response** mark), shown while the conversation is unread, the turn is over and that start is
-  scrolled past; the conversation being read hides it, and a click on it (which reads it) hides it
-  for good for that response (`drawTop`). Pressing it is not coming into the window, so it does not read it first.
+  **Response** mark) while that start is scrolled past and the turn is over. It is offered for a response
+  that ended while the window showed the conversation, watched or not, and for one still unread; a
+  click on it (which reads the conversation), typing in the window or scrolling the transcript takes it
+  away for that response (`drawTop`). Pressing it is not coming into the window, so it does not read it first.
   **⌘↑** and **⌘↓** (Ctrl elsewhere, anywhere in the window, the message box; on the phone, its **↑** and **↓** buttons)
   put the agent's previous or next response (as *Only prompts and responses* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again
