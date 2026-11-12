@@ -559,6 +559,13 @@
   cursor: pointer;
 }
 
+/* Back to the start of the latest response (omp.js `drawTop`): the same arrow, pointing up, over
+   the transcript's head, while the response is unread and its start is scrolled past. */
+.omp-jump-top {
+  top: var(--space-2);
+  bottom: auto;
+}
+
 .omp-jump svg {
   display: block;
   width: 100%;
