@@ -131,14 +131,22 @@ export function renderPending(text, which, continues, cancel) {
 
 /**
  * A stretch of the agent's work as one line: how it went (still going, how many failed), how
- * many tool calls and which (`edit ×2`), opening to the thinking and tool calls themselves.
+ * many tool calls and which (`edit ×2`), opening to the thinking and tool calls themselves, and
+ * the notes omp sent meanwhile but does not display. A stretch of those notes alone (as a
+ * session starts: the tools omp mounted) says where they came from: `From omp · xdev`.
  * `live`: the turn is still running and this is its latest stretch, so the agent is still at it.
  * @param {WorkItem} work @param {ItemContext} ctx @param {boolean} [live] @returns {HTMLElement}
  */
 export function renderWork(work, ctx, live = false) {
   /** @type {Array<{ name: string, status: ToolRun['status'] }>} */
   const calls = [];
+  /** @type {string[]} */
+  const notes = [];
   for (const part of work.parts) {
+    if (part.kind === 'note') {
+      if (!notes.includes(part.source)) notes.push(part.source);
+      continue;
+    }
     if (part.kind === 'tool') {
       const run = ctx.tools.get(part.toolCallId);
       calls.push({ name: run?.name || 'tool', status: run?.status ?? 'running' });
@@ -150,8 +158,9 @@ export function renderWork(work, ctx, live = false) {
       calls.push({ name: run?.name || block.name || 'tool', status: run?.status ?? (block.id ? 'pending' : 'running') });
     }
   }
+  const onlyNotes = notes.length > 0 && work.parts.every((p) => p.kind === 'note');
   const failed = calls.filter((c) => c.status === 'error').length;
-  const going = live || calls.some((c) => c.status === 'running') || work.parts.some((p) => p.kind === 'assistant' && !p.ended);
+  const going = !onlyNotes && (live || calls.some((c) => c.status === 'running') || work.parts.some((p) => p.kind === 'assistant' && !p.ended));
   /** Each run of one tool once, counted: `read, edit ×2, bash`. */
   const names = calls.reduce((/** @type {Array<{ name: string, n: number }>} */ acc, c) => {
     const last = acc.at(-1);
@@ -159,11 +168,13 @@ export function renderWork(work, ctx, live = false) {
     else acc.push({ name: c.name, n: 1 });
     return acc;
   }, []);
-  const label = calls.length
-    ? `${going ? 'Working' : 'Worked'} · ${calls.length} step${calls.length === 1 ? '' : 's'} · ${names.map((n) => (n.n > 1 ? `${n.name} ×${n.n}` : n.name)).join(', ')}`
-    : going
-      ? 'Thinking'
-      : 'Thought';
+  const label = onlyNotes
+    ? `From omp · ${notes.join(', ')}`
+    : calls.length
+      ? `${going ? 'Working' : 'Worked'} · ${calls.length} step${calls.length === 1 ? '' : 's'} · ${names.map((n) => (n.n > 1 ? `${n.name} ×${n.n}` : n.name)).join(', ')}`
+      : going
+        ? 'Thinking'
+        : 'Thought';
   const head = [...spinnerIf(going ? 'running' : ''), el('span', 'omp-work-summary', label)];
   if (failed) head.push(el('span', 'omp-work-failed', `${failed} failed`));
   return collapsible(ctx, work.key, `omp-work${going ? ' is-running' : ''}`, head, () => work.parts.map((part) => renderItem(part, ctx)));

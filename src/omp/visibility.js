@@ -32,7 +32,7 @@
  * off for good (omp exited mid-stream) is neither. While a turn runs, the work since the
  * user's prompt is summarised as `working`.
  */
-/** @import { AssistantItem, Item, ToolItem } from './transcript.js' */
+/** @import { AssistantItem, Item, NoteItem, ToolItem } from './transcript.js' */
 
 /**
  * `working` is set while a turn runs: its work so far, counted in steps (assistant
@@ -105,8 +105,10 @@ function withoutWork(item) {
 /**
  * A stretch of the agent's work between two things it said: its thinking and tool calls, shown
  * as one line that opens to show them (items-view.js `renderWork`). `parts` are assistant
- * messages holding only that work, and tool runs.
- * @typedef {{ kind: 'work', key: string, rev: string, parts: Array<AssistantItem | ToolItem> }} WorkItem
+ * messages holding only that work, tool runs, and the notes omp sends but does not display
+ * (`hidden`: the tools it mounted, reminders to the model), which are omp's business, not the
+ * conversation's.
+ * @typedef {{ kind: 'work', key: string, rev: string, parts: Array<AssistantItem | ToolItem | NoteItem> }} WorkItem
  */
 
 /** Thinking and tool calls: the work, as against what the agent says. @param {AssistantItem['blocks'][number]} block */
@@ -130,13 +132,13 @@ export function compactWork(items) {
     out.push(work);
     work = null;
   };
-  /** @param {AssistantItem | ToolItem} part */
+  /** @param {AssistantItem | ToolItem | NoteItem} part */
   const fold = (part) => {
     work ??= { kind: 'work', key: `work:${part.key}`, rev: '', parts: [] };
     work.parts.push(part);
   };
   for (const item of items) {
-    if (item.kind === 'tool') fold(item);
+    if (item.kind === 'tool' || (item.kind === 'note' && item.hidden)) fold(item);
     else if (item.kind !== 'assistant') {
       flush();
       out.push(item);
