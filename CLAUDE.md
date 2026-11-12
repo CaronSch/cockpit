@@ -212,7 +212,13 @@ What runs today:
   conversation it was forked from and its own forks, with a count of the latter: a click
   shows one as a new tab of the window (or points at the window already showing it) and reads it, as
   showing one from Sessions does; a drag places it. Windows of related conversations on one screen get the same colour in their top bars
-  (`ctx.setFamily`, `src/omp/fork-family.js`). The message box is a card set like the transcript (Inter; code, notes,
+  (`ctx.setFamily`, `src/omp/fork-family.js`). `/new` and `/archive` (the workbench's own too; omp's `/new`
+  is its terminal UI's) start a new conversation in the window's place, in the same directory: `/new` leaves
+  the one it showed in Sessions, to sleep once idle as any does; `/archive` archives it first, as Sessions'
+  Archive does (refused while its agent works); one nothing was sent to has no journal and is ended
+  instead, either way. A new conversation, until something is said in it, opens on a welcome card as omp's
+  TUI does (`src/omp/welcome.js`): Cockpit's mark and wordmark drawn in pixels, its version (`DaemonConfig`
+  `version`, from package.json) and a tip, one picked at random per window. The message box is a card set like the transcript (Inter; code, notes,
   paths and the spend are monospace), lifted by a soft shadow, its faint grey edge a little stronger while it is typed in,
   starts one line high and grows with the prompt; a plain click anywhere else in the pane
   (not on a control, in a dialog omp asked for, or ending a text selection) puts the caret
@@ -777,7 +783,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/items-view.js` — DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes, unrecognised frames), a stretch of folded work (visibility.js `compactWork`), and a turn's decision review, built from text nodes only.
 - `src/omp/markdown-dom.js` — Renders the safe markdown tree from `markdown.js` as DOM nodes (text nodes only, never HTML).
 - `src/omp/markdown.js` — Safe markdown subset for agent text: parses into a small block/inline tree, never HTML.
-- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), and side questions about a quote.
+- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its place), and side questions about a quote.
 - `src/omp/pr-suggest.js` — Pull request suggestions in the agent pane's message box: while the caret ends a `#` mention and the conversation's directory is in a GitHub repository, the suggestion list shows the pull requests it names, each with its title, and Tab, Enter or a click completes it as GitHub writes it (see `github/pr-mention.js`).
 - `src/omp/prompt-history.js` — Up and Down in the agent pane's message box step through what was sent in its conversation, as omp's own editor and a shell do: the user's prompts and `!` commands, newest first.
 - `src/omp/recent-dirs.js` — The directories an agent window's setup screen offers to start in: those of the user's conversations, most recently active first, so the few repositories they work in are a click away instead of typed again; kept free of the DOM so they can be tested.
@@ -792,6 +798,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/transcript.js` — Transcript reducer for one omp session: folds the daemon's SessionEvents into display items plus derived session state, with no DOM.
 - `src/omp/visibility.js` — Which transcript items an agent pane shows: everything, each stretch of work folded into one line (`compactWork`); or only prompts and responses: what the user said and ran, and what the agent finally answered, without the work in between.
 - `src/omp/visuals.js` — Diagrams and charts in agent replies: a closed ```mermaid fence is drawn by Mermaid, a closed ```vega-lite fence (a Vega-Lite spec, JSON) by Vega.
+- `src/omp/welcome.js` — What a new conversation's empty transcript shows, as omp's own TUI does in a new session: the Cockpit mark and wordmark drawn in pixels, the version, and a tip picked at random, one per window, about something the workbench does that is easy to miss.
 - `src/phone.js` — The phone page (`/phone`, phone.html): the Sessions list, then one conversation full screen, then Back, for a phone reaching the daemon over its owner's tailnet (daemon/remote.js).
 - `src/render/drop-indicator.js` — Landing preview for drag & drop, plus the sash snap guide.
 - `src/render/grid-renderer.js` — Imperative, diffed DOM writer for the grid.

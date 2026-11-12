@@ -254,7 +254,7 @@ beforeAll(async () => {
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
     token: TOKEN,
     root: ROOT,
-    config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000 },
+    config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000, version: '0.0.0' },
   };
   const daemon = createDaemon(daemonOptions);
   server = daemon.serve(loopbackListener(0));

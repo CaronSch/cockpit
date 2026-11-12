@@ -54,6 +54,7 @@ import { loadSettings } from './settings.js';
 import { createSetup, ompVersion } from './setup.js';
 import { createTerminals } from './terminals.js';
 import { RESTART_AFTER_MS, noteInterrupted, startSuccessor, wakeInterrupted } from './restart.js';
+import pkg from '../package.json' with { type: 'json' };
 
 const ROOT = resolve(import.meta.dir, '..');
 
@@ -188,6 +189,7 @@ const daemon = createDaemon({
     home: homedir(),
     scratchpadDir,
     idleCompactAfterMs,
+    version: pkg.version,
   },
 });
 /** @type {ReturnType<typeof daemon.serve>} */
