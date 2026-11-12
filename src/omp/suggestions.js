@@ -8,7 +8,7 @@
  */
 import { button, el } from '../ui/dom.js';
 
-/** One row: what it shows, and what choosing it does. @typedef {{ cells: HTMLElement[], pick: () => void }} Suggestion */
+/** One row: what it shows, and what choosing it does. @typedef {{ cells: Element[], pick: () => void }} Suggestion */
 /**
  * `tab` replaces Tab's default (picking the selected row), told whether the selection was
  * moved; `enter` makes Enter pick (otherwise the draft keeps it: a slash command is sent as
