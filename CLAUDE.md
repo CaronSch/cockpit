@@ -181,7 +181,11 @@ What runs today:
   stands apart from the work (`src/omp/visibility.js` `isNarration`, `responseStarts`). A pane shows one conversation at a time: **Forks**
   sits in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring
-  spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`).
+  spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`). Its twin,
+  pointing up at the transcript's head, goes back to where the latest response starts (its
+  **Response** mark), shown while the conversation is unread, the turn is over and that start is
+  scrolled past; the conversation being read hides it, and a click on it (which reads it) hides it
+  for good for that response (`drawTop`). Pressing it is not coming into the window, so it does not read it first.
   **⌘↑** and **⌘↓** (Ctrl elsewhere, anywhere in the window, the message box; on the phone, its **↑** and **↓** buttons)
   put the agent's previous or next response (as *Only prompts and responses* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again

@@ -78,7 +78,9 @@ import { settings } from '../ui/settings.js';
 const SEEN_EVERY_MS = 60_000;
 const MAX_SUGGESTIONS = 8;
 const BOTTOM_SLACK_PX = 24;
-/** How long the jump to the latest takes, whatever the distance. */
+/** Room left above a response's start when the arrow at the transcript's head goes back to it. */
+const TOP_SLACK_PX = 12;
+/** How long a jump (to the latest, to a response's start) takes, whatever the distance. */
 const JUMP_MS = 150;
 /** ⌘ on Apple's keyboards, Ctrl elsewhere: the modifier of the previous/next response keys. */
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -122,13 +124,17 @@ export default {
 /** @param {unknown} v @returns {string | null} */
 const str = (v) => (typeof v === 'string' && v ? v : null);
 
-/** The jump-to-latest button's face: a ring (a faint track, and the arc that spins while the agent works) round a down arrow. */
-function jumpIcon() {
+/**
+ * The jump buttons' face: a ring (a faint track, and the arc that spins while the agent works)
+ * round an arrow, down to the latest or up to the start of the response.
+ * @param {'down' | 'up'} [direction]
+ */
+function jumpIcon(direction = 'down') {
   const icon = svg('svg', { viewBox: '0 0 28 28', 'aria-hidden': 'true' });
   icon.append(
     svg('circle', { class: 'omp-jump-track', cx: '14', cy: '14', r: '13' }),
     svg('circle', { class: 'omp-jump-ring', cx: '14', cy: '14', r: '13' }),
-    svg('path', { class: 'omp-jump-arrow', d: 'M14 8.5v11M9.5 15l4.5 4.5 4.5-4.5' }),
+    svg('path', { class: 'omp-jump-arrow', d: direction === 'down' ? 'M14 8.5v11M9.5 15l4.5 4.5 4.5-4.5' : 'M14 19.5v-11M9.5 13l4.5-4.5 4.5 4.5' }),
   );
   return icon;
 }
@@ -490,29 +496,38 @@ function createPane(body, ctx, daemon) {
     transcript.addEventListener('scroll', () => {
       stickToBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < BOTTOM_SLACK_PX;
       drawJump();
+      drawTop();
     });
     // Scrolled up, a small arrow at the transcript's foot goes back to the latest; its ring spins
     // while the agent works (the window's outline says when it is done or asks).
     const jump = button('omp-jump', '', jumpToLatest);
     /**
-     * Scrolls to the latest in a quick glide (JUMP_MS, easing out; at once if the user asks for
-     * less motion): the browser's own smooth scroll takes longer the further it goes. The bottom
-     * is aimed at afresh each frame, as new output may move it.
+     * Scrolls the transcript to `target()` in a quick glide (JUMP_MS, easing out; at once if the
+     * user asks for less motion): the browser's own smooth scroll takes longer the further it
+     * goes. The target is aimed at afresh each frame, as new output may move it.
+     * @param {() => number} target @param {() => void} done
      */
-    function jumpToLatest() {
+    function glide(target, done) {
       const from = transcript.scrollTop;
       const start = performance.now();
       const instant = matchMedia('(prefers-reduced-motion: reduce)').matches;
       /** @param {number} now */
       const step = (now) => {
         const t = instant ? 1 : Math.min(1, (now - start) / JUMP_MS);
-        const bottom = transcript.scrollHeight - transcript.clientHeight;
-        transcript.scrollTop = from + (bottom - from) * (1 - (1 - t) ** 3);
+        transcript.scrollTop = from + (target() - from) * (1 - (1 - t) ** 3);
         if (t < 1) return void requestAnimationFrame(step);
-        stickToBottom = true; // follows new output again
-        drawJump();
+        done();
       };
       requestAnimationFrame(step);
+    }
+    function jumpToLatest() {
+      glide(
+        () => transcript.scrollHeight - transcript.clientHeight,
+        () => {
+          stickToBottom = true; // follows new output again
+          drawJump();
+        },
+      );
     }
     jump.append(jumpIcon());
     const jumpWrap = el('div', 'omp-jump-wrap');
@@ -523,6 +538,47 @@ function createPane(body, ctx, daemon) {
       if (stickToBottom) return;
       jump.classList.toggle('is-working', state.streaming);
       jump.setAttribute('aria-label', jump.title);
+    }
+
+    // A long response followed down to its end leaves its start far above: while it is unread
+    // and its start is scrolled past, a small arrow at the transcript's head goes back there.
+    // A click on it (which reads the conversation) or the conversation being read hides it.
+    /** The key of the latest turn's response as drawn (drawTranscript), if it has one. @type {string | null} */
+    let lastResponse = null;
+    /** The response whose arrow was clicked: it does not come back for it. @type {string | null} */
+    let topTaken = null;
+    const topBtn = button('omp-jump omp-jump-top', '', toResponseStart);
+    topBtn.title = 'Start of the response';
+    topBtn.setAttribute('aria-label', topBtn.title);
+    topBtn.append(jumpIcon('up'));
+    // Pressing it is not coming into the window (which would read it, and hide it, before the
+    // click lands), and it keeps the focus where it was.
+    topBtn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    const topWrap = el('div', 'omp-jump-wrap omp-jump-wrap-top');
+    topWrap.hidden = true;
+    topWrap.append(topBtn);
+    /** Where the latest response starts: its Response mark, else its first line. */
+    const responseStart = () => (lastResponse ? (drawn.get(`response:${lastResponse}`) ?? drawn.get(lastResponse))?.node : null) ?? null;
+    /** How far the response's start is below the transcript's top edge (negative: scrolled past). @param {HTMLElement} at */
+    const below = (at) => at.getBoundingClientRect().top - transcript.getBoundingClientRect().top - transcript.clientTop;
+    function drawTop() {
+      const at = responseStart();
+      topWrap.hidden = !(at?.isConnected && !state.streaming && lastResponse !== topTaken && unreadSince() !== null && below(at) < 0);
+    }
+    function toResponseStart() {
+      const at = responseStart();
+      topTaken = lastResponse;
+      topWrap.hidden = true;
+      markRead();
+      if (!at?.isConnected) return;
+      stickToBottom = false; // reading from the start: new output no longer pulls it down
+      glide(
+        () => transcript.scrollTop + below(at) - TOP_SLACK_PX,
+        () => drawJump(),
+      );
     }
     const pinToBottom = () => {
       if (stickToBottom) transcript.scrollTop = transcript.scrollHeight;
@@ -610,7 +666,7 @@ function createPane(body, ctx, daemon) {
         cancel: (id) => void (session && daemon.rpc(session, { type: 'btw_cancel', recordId: id }).catch(() => {})),
       },
     });
-    node.append(toolbar, strip, loginStrip, banner, transcript, jumpWrap, dialogs, running, scheduled, suggestions.root, composer.root);
+    node.append(toolbar, strip, loginStrip, banner, topWrap, transcript, jumpWrap, dialogs, running, scheduled, suggestions.root, composer.root);
     const highlight = attachDragHighlight({ host: node, transcript, enabled: () => settings.get().animatedSelection });
     const offHighlight = settings.subscribe(() => highlight.refresh());
     // A click on the pane that is not on a control, in a dialog omp asked for or in the
@@ -1369,6 +1425,12 @@ function createPane(body, ctx, daemon) {
       const liveWork = state.streaming && last?.kind === 'work' ? last.key : null;
       /** @type {{ items: Array<import('../omp/transcript.js').Item | import('../omp/visibility.js').WorkItem>, working: { steps: number } | null }} */
       const shown = folded ? { items: folded, working: state.streaming && last?.kind === 'user' ? { steps: 0 } : null } : promptsAndResponses(state.items, state.streaming);
+      // The latest turn's response, for the arrow back to its start (drawTop).
+      lastResponse = null;
+      for (const item of shown.items) {
+        if (item.kind === 'user' && !item.byAgent) lastResponse = null;
+        else if (item.kind === 'assistant' && isResponse(item)) lastResponse = item.key;
+      }
       const live = new Set();
       const itemCtx = { tools: state.tools, open: openDetails };
       /** @type {Array<{ key: string, rev: number | string, render: () => HTMLElement }>} */
@@ -1679,6 +1741,7 @@ function createPane(body, ctx, daemon) {
       drawBanner();
       drawTranscript();
       drawJump();
+      drawTop();
       drawDialogs();
       drawRunning();
       drawScheduled();
