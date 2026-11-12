@@ -27,6 +27,9 @@
  * `onRewoundId` of the conversation's new id once omp reports it (what is kept under the old one
  * moves to it).
  *
+ * Each time a session's todo list changes (omp/todos.js: a `todo` result, `get_state`'s), `onTodo`
+ * hears it with the conversation's id, so its plan (plans.js) shows the agent's steps.
+ *
  * Each omp starts with what `launchWith` says then: what it appends to its system prompt and what
  * it adds to its environment, which the daemon's settings change (adhd.js, browser.js) and omp
  * keeps for the life of the process. A session started otherwise goes to sleep as soon as it is
@@ -46,6 +49,7 @@ import { applyEvent, conversationName, createTranscript, handsTurnBack } from '.
 import { runningWork } from '../src/omp/running-work.js';
 /** @import { SessionActivity, SessionEvent, SessionMeta } from './wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
+/** @import { TodoPhase } from '../src/omp/todos.js' */
 /** @import { HostTools, LaunchWith, OmpSession, SessionEventBody } from './omp-session.js' */
 /** @import { IdleCompaction, IdleCompactionOptions } from './idle-compaction.js' */
 /** @import { UnreadStore } from './unread.js' */
@@ -90,13 +94,13 @@ const sameActivity = (a, b) => a.working === b.working && a.asking === b.asking 
  *   ompPath: string, unread: Pick<UnreadStore, 'awaited'>, now?: () => number, launch?: typeof launchOmp,
  *   sleepAfterMs?: number, idleCompaction?: IdleCompactionOptions & { on(): boolean } | null, onRewound?: (file: string, next: string | null) => void,
  *   onRewoundId?: (from: string, to: string) => void, onTurnEnded?: (transcript: Transcript) => void,
- *   launchWith?: () => LaunchWith, hostTools?: HostTools,
+ *   onTodo?: (ompId: string, phases: TodoPhase[]) => void, launchWith?: () => LaunchWith, hostTools?: HostTools,
  * }} options `idleCompaction`: compacts while `on()` (the user's setting); none when null.
  *   `onTurnEnded` hears each time a session's agent hands its turn back, with the session as its events tell it.
  *   `launchWith` is how an omp launched now runs.
  * @returns {Hub}
  */
-export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, launchWith = () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {} }), hostTools = NO_HOST_TOOLS }) {
+export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, onTodo = () => {}, launchWith = () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {} }), hostTools = NO_HOST_TOOLS }) {
   const bootId = randomBytes(6).toString('hex');
   /** @type {SessionEvent[]} */
   let log = [];
@@ -125,7 +129,10 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
     let changed;
     if (seen) {
       const file = seen.transcript.meta?.sessionFile ?? null;
+      const todo = seen.transcript.todo;
       applyEvent(seen.transcript, event);
+      const conversation = seen.transcript.meta?.ompId;
+      if (seen.transcript.todo && seen.transcript.todo !== todo && conversation && OMP_ID.test(conversation)) onTodo(conversation, seen.transcript.todo.phases);
       if (idleCompaction) followIdleCompaction(seen.compaction, event, idleCompaction);
       seen.usedAt = event.at;
       if (event.kind === 'frame' && event.frame.type === 'response' && event.frame.command === 'branch' && event.frame.success) {
