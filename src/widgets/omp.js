@@ -540,12 +540,17 @@ function createPane(body, ctx, daemon) {
       jump.setAttribute('aria-label', jump.title);
     }
 
-    // A long response followed down to its end leaves its start far above: while it is unread
-    // and its start is scrolled past, a small arrow at the transcript's head goes back there.
-    // A click on it (which reads the conversation) or the conversation being read hides it.
+    // A long response followed down to its end leaves its start far above: a small arrow at the
+    // transcript's head goes back there while that start is scrolled past. It is offered for a
+    // response that ended in this window, watched or not, and for one still unread; a click on it
+    // (which reads the conversation), typing in the window or scrolling the transcript takes it away.
     /** The key of the latest turn's response as drawn (drawTranscript), if it has one. @type {string | null} */
     let lastResponse = null;
-    /** The response whose arrow was clicked: it does not come back for it. @type {string | null} */
+    /** Whether this window has drawn the agent at work since its last response: the next one ended here. */
+    let sawWork = false;
+    /** The response the arrow is offered for. @type {string | null} */
+    let topOffered = null;
+    /** The response whose arrow was taken away: it does not come back for it. @type {string | null} */
     let topTaken = null;
     const topBtn = button('omp-jump omp-jump-top', '', toResponseStart);
     topBtn.title = 'Start of the response';
@@ -565,13 +570,25 @@ function createPane(body, ctx, daemon) {
     /** How far the response's start is below the transcript's top edge (negative: scrolled past). @param {HTMLElement} at */
     const below = (at) => at.getBoundingClientRect().top - transcript.getBoundingClientRect().top - transcript.clientTop;
     function drawTop() {
+      if (state.streaming) sawWork = true;
+      else if (lastResponse && (sawWork || unreadSince() !== null)) {
+        sawWork = false;
+        topOffered = lastResponse;
+      }
       const at = responseStart();
-      topWrap.hidden = !(at?.isConnected && !state.streaming && lastResponse !== topTaken && unreadSince() !== null && below(at) < 0);
+      topWrap.hidden = !(at?.isConnected && !state.streaming && topOffered === lastResponse && lastResponse !== topTaken && below(at) < 0);
     }
+    /** The user is reading on their own (typing, scrolling): the arrow goes for this response. */
+    function takeTop() {
+      if (!topOffered || topOffered !== lastResponse) return;
+      topTaken = topOffered;
+      topWrap.hidden = true;
+    }
+    node.addEventListener('keydown', takeTop);
+    for (const type of ['wheel', 'touchmove']) transcript.addEventListener(type, takeTop, { passive: true });
     function toResponseStart() {
       const at = responseStart();
-      topTaken = lastResponse;
-      topWrap.hidden = true;
+      takeTop();
       markRead();
       if (!at?.isConnected) return;
       stickToBottom = false; // reading from the start: new output no longer pulls it down
