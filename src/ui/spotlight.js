@@ -1,8 +1,9 @@
 /**
  * Spotlight: a floating search over every conversation, as macOS's. ⌘K (Ctrl+K) or the top
- * bar's Search opens it over whatever is on screen; typing ranks conversations by what was
- * asked and answered in them (the daemon's search, daemon/search.js), each with the passage
- * that matched; with nothing typed it lists the latest. Ask (or ⌘Enter, Ctrl+Enter elsewhere)
+ * bar's Search opens it over whatever is on screen; typing finds conversations by what was
+ * asked and answered in them (the daemon's search, daemon/search.js, which keeps those that
+ * match well), each with the passage that matched, the most recently active first; with nothing
+ * typed it lists the latest. Ask (or ⌘Enter, Ctrl+Enter elsewhere)
  * hands what is typed to an agent instead (daemon/ask.js), which reads the conversations and
  * answers in a few sentences, shown above the conversations it names. ↑/↓ pick one, Enter (or a
  * click) shows it in the agent window this screen used last, as a click in Sessions does, and
@@ -21,7 +22,7 @@ import { renderMarkdown } from '../omp/markdown-dom.js';
 /** @import { LeafParams } from '../layout/grid-model.js' */
 
 const SEARCH_DEBOUNCE_MS = 120;
-/** How many conversations it lists: the latest with nothing typed, else the best. */
+/** How many conversations it lists: the latest with nothing typed, else the latest of the best matches. */
 const RECENT = 8;
 const FOUND = 30;
 
@@ -87,8 +88,10 @@ export function createSpotlight({ daemon, show }) {
     try {
       const sessions = await daemon.history(query);
       if (mine !== seq) return;
-      // The daemon lists a search best first, and everything else unordered: latest first here.
-      found = query ? sessions.slice(0, FOUND) : sessions.sort((a, b) => b.modifiedAt - a.modifiedAt).slice(0, RECENT);
+      // The daemon lists a search best first (the weak matches left out), and everything else
+      // unordered: the best matches, or the latest conversations, most recently active first here.
+      const latestFirst = (/** @type {PastSession[]} */ list) => list.sort((a, b) => b.modifiedAt - a.modifiedAt);
+      found = query ? latestFirst(sessions.slice(0, FOUND)) : latestFirst(sessions).slice(0, RECENT);
       picked = 0;
       status.textContent = found.length ? '' : query ? 'Nothing found.' : 'No conversations yet.';
     } catch (err) {

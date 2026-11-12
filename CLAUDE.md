@@ -370,9 +370,10 @@ What runs today:
   (starting or working: the word in the accent; *needs you*: it asks a question or
   an approval, the words in warm; *done*: it finished and nobody has read it, an indigo bar at its left edge; idle: nothing).
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
-  the top bar's Search; a modal dialog; ranked by `daemon/search.js` across titles, directories,
+  the top bar's Search; a modal dialog; matched by `daemon/search.js` across titles, directories,
   prompts and the agents' replies, so a question in plain words finds the conversation that
-  answers it, best first, with the passage that matched and its words marked; **Ask** (⌘↵) hands
+  answers it; its best matches listed most recently active first, as the latest are with nothing
+  typed, with the passage that matched and its words marked; **Ask** (⌘↵) hands
   the question to an agent instead, a one-shot `omp -p` with read-only tools reading an index of
   the conversations and their journals (`daemon/ask.js`), whose answer shows above the conversations
   it names; Enter shows the
