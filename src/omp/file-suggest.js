@@ -8,6 +8,7 @@
  * finished or abandoned.
  */
 import { el } from '../ui/dom.js';
+import { fileIcon, folderIcon } from '../ui/icons.js';
 import { MENTIONS, commonPrefix, matchEntries } from './file-mention.js';
 import { createSuggestions } from './suggestions.js';
 /** @import { DirEntry, MentionQuery, PathSyntax } from './file-mention.js' */
@@ -84,7 +85,10 @@ export function createFileSuggest({ draft, syntax, foldersOnly = false, enter = 
     const pick = (entry) => () => complete(q, (now) => syntax.complete(now, entry));
     list.show(
       shown.map((entry) => ({
-        cells: [entry.isDir ? el('span', 'omp-suggestion-name', `${entry.name}/`) : el('span', 'omp-suggestion-file', entry.name)],
+        cells: [
+          entry.isDir ? folderIcon() : fileIcon(),
+          entry.isDir ? el('span', 'omp-suggestion-path is-dir', `${entry.name}/`) : el('span', 'omp-suggestion-path', entry.name),
+        ],
         pick: pick(entry),
       })),
       {
