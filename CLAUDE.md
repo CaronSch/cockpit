@@ -175,7 +175,10 @@ What runs today:
   expired"). Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
-  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). A pane shows one conversation at a time: **Forks**
+  works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). What the agent says on its way
+  (narration: a message that went on to call tools) shows dimmer than a response, and a response
+  after tool calls or narration starts under a faint **Response** label and hairline, so the answer
+  stands apart from the work (`src/omp/visibility.js` `isNarration`, `responseStarts`). A pane shows one conversation at a time: **Forks**
   sits in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring
   spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`).

@@ -31,7 +31,7 @@ import { showImage } from '../ui/image-viewer.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
-import { renderItem, renderPending, renderReview, renderWork } from '../omp/items-view.js';
+import { renderItem, renderPending, renderResponseMark, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
 import { afreshCommand, composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
@@ -46,7 +46,7 @@ import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
 import { attachFileRefs } from '../files/file-window.js';
 import { awaitedAfter } from '../omp/activity.js';
-import { compactWork, isResponse, promptsAndResponses } from '../omp/visibility.js';
+import { compactWork, isResponse, promptsAndResponses, responseStarts } from '../omp/visibility.js';
 import { responseTarget } from '../omp/response-nav.js';
 import { placeReviews } from '../omp/decisions.js';
 import { coldAt } from '../omp/cold.js';
@@ -1382,6 +1382,11 @@ function createPane(body, ctx, daemon) {
       for (const { index, at, review } of placeReviews(shown.items, daemon.decisions(ompId()) ?? {}).reverse()) {
         if (review.status === 'done' && review.decisions.length === 0) continue;
         entries.splice(index, 0, { key: `review:${at}`, rev: JSON.stringify(review), render: () => renderReview(review) });
+      }
+      // A response after the agent's work starts under a quiet mark, so the answer stands apart.
+      for (const key of responseStarts(shown.items)) {
+        const at = entries.findIndex((e) => e.key === key);
+        if (at >= 0) entries.splice(at, 0, { key: `response:${key}`, rev: '', render: renderResponseMark });
       }
       // What omp holds to send later ends the transcript, as the prompts they will be.
       for (const which of /** @type {const} */ (['steering', 'followUp'])) {

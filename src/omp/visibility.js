@@ -86,6 +86,40 @@ const NOTE_SOURCES = new Set(['files', 'prompt', 'command', 'compaction']);
 export const isResponse = (item) => item.ended && item.stopReason !== 'toolUse';
 
 /**
+ * Narration: what the agent said on its way, in a message that went on to call tools (or the
+ * piece of one before its work, compactWork). Shown softer than a response.
+ * @param {AssistantItem} item
+ */
+export const isNarration = (item) => item.ended && item.stopReason === 'toolUse';
+
+/**
+ * The responses the transcript marks where they start: those with text that come after tool
+ * calls or narration since the user's last prompt, where the eye cannot tell otherwise where the
+ * answer begins. A response straight after the prompt, or after thinking alone, needs no mark.
+ * @param {ReadonlyArray<Item | WorkItem>} items as shown (compactWork's, or promptsAndResponses')
+ * @returns {Set<string>} their keys
+ */
+export function responseStarts(items) {
+  /** @type {Set<string>} */
+  const keys = new Set();
+  let worked = false;
+  for (const item of items) {
+    if (item.kind === 'user') {
+      if (!item.byAgent) worked = false;
+    } else if (item.kind === 'work') {
+      if (item.parts.some((p) => p.kind === 'tool' || p.blocks.some((b) => b.kind === 'toolCall'))) worked = true;
+    } else if (item.kind === 'assistant') {
+      if (isNarration(item)) worked = true;
+      else if (isResponse(item) && item.blocks.some((b) => b.kind === 'text' && b.text.trim() !== '')) {
+        if (worked) keys.add(item.key);
+        worked = false;
+      }
+    }
+  }
+  return keys;
+}
+
+/**
  * Narration, or a message still streaming, with text to show.
  * @param {AssistantItem} item @param {boolean} streaming
  */
