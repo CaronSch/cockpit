@@ -311,8 +311,9 @@
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle
- * (see `idle-compaction.js`); an agent window dims from then (src/omp/cold.js).
- * @typedef {{ defaultCwd: string, home: string, scratchpadDir: string, idleCompactAfterMs: number }} DaemonConfig
+ * (see `idle-compaction.js`); an agent window dims from then (src/omp/cold.js). `version`:
+ * Cockpit's, from package.json (a new conversation's welcome card shows it: src/omp/welcome.js).
+ * @typedef {{ defaultCwd: string, home: string, scratchpadDir: string, idleCompactAfterMs: number, version: string }} DaemonConfig
  */
 
 /**

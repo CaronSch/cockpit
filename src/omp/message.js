@@ -1,7 +1,8 @@
 /**
  * Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted
  * parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a
- * prompt for a new fork of the conversation), and side questions about a quote.
+ * prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its
+ * place), and side questions about a quote.
  *
  * A comment goes first as a Markdown quote of the text it is about, followed by the comment,
  * the way a reply quotes an email; the model and the transcript both read it naturally.
@@ -98,6 +99,18 @@ export const isCommand = (draft) => /^[/!]/.test(draft.trim());
 export function forkPrompt(draft) {
   const match = /^\/fork(?:\s+([\s\S]*))?$/.exec(draft.trim());
   return match ? (match[1] ?? '').trim() : null;
+}
+
+/**
+ * What a `/new` or `/archive` draft asks for, or null when the draft is neither: a new
+ * conversation in the window, in the same directory, the one it showed kept (`new`) or archived
+ * first (`archive`). `rest` is anything typed after the command, which neither takes. The
+ * workbench's own commands, never sent to omp (whose `/new` is its terminal UI's).
+ * @param {string} draft @returns {{ archive: boolean, rest: string } | null}
+ */
+export function afreshCommand(draft) {
+  const match = /^\/(new|archive)(?:\s+([\s\S]*))?$/.exec(draft.trim());
+  return match ? { archive: match[1] === 'archive', rest: (match[2] ?? '').trim() } : null;
 }
 
 /**
