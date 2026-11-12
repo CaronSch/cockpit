@@ -34,7 +34,7 @@
  * meanwhile together, so it arrives in order.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, ProcessList, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -139,6 +139,10 @@ export class DaemonError extends Error {
  *   watchTerminal(id: string, fn: (event: TerminalEvent) => void): () => void,
  *   typeInto(id: string, data: string, binary?: boolean): void,
  *   resizeTerminal(id: string, cols: number, rows: number): Promise<void>,
+ *   processes(): Promise<ProcessList>,
+ *   stopProcess(key: string): Promise<void>,
+ *   keepProcess(key: string, kept: boolean): Promise<void>,
+ *   processesSeen(at: number): Promise<void>,
  * }} DaemonClient
  */
 
@@ -832,6 +836,16 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     },
     async resizeTerminal(id, cols, rows) {
       await request(`${terminalPath(id)}/size`, { method: 'POST', body: JSON.stringify({ cols, rows }) });
+    },
+    processes: () => request('/api/processes'),
+    async stopProcess(key) {
+      await request(`/api/processes/${encodeURIComponent(key)}/stop`, { method: 'POST' });
+    },
+    async keepProcess(key, kept) {
+      await request(`/api/processes/${encodeURIComponent(key)}/keep`, { method: kept ? 'PUT' : 'DELETE' });
+    },
+    async processesSeen(at) {
+      await request('/api/processes/seen', { method: 'POST', body: JSON.stringify({ at }) });
     },
   };
 }

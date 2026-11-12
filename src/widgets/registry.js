@@ -7,6 +7,7 @@ import github from './github.js';
 import file from './file.js';
 import setup from './setup.js';
 import timeline from './timeline.js';
+import processes from './processes.js';
 
 /**
  * Widgets the palette can add, keyed by type.
@@ -93,7 +94,7 @@ import timeline from './timeline.js';
  */
 
 /** @type {readonly WidgetDef[]} */
-const DEFS = [omp, terminal, sessions, timeline, scratchpad, github, file, setup];
+const DEFS = [omp, terminal, sessions, timeline, processes, scratchpad, github, file, setup];
 
 /** @type {Readonly<Record<string, WidgetDef>>} */
 export const WIDGETS = Object.freeze(Object.fromEntries(DEFS.map((def) => [def.type, def])));

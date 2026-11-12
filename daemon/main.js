@@ -30,6 +30,7 @@ import { parseArgs } from 'node:util';
 import { JournalRefused, createHistory } from './history.js';
 import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
 import { loadSchedule, scheduleTools } from './schedule.js';
+import { loadProcesses, processesTools } from './processes.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
 import { askAgent } from './ask.js';
 import { createDelivery } from './deliver.js';
@@ -37,7 +38,7 @@ import { createGithub } from './github.js';
 import { createHub } from './hub.js';
 import { withAdhdRules } from './adhd.js';
 import { browserEnv } from './browser.js';
-import { APPEND_SYSTEM_PROMPT } from './omp-session.js';
+import { APPEND_SYSTEM_PROMPT, allHostTools } from './omp-session.js';
 import { IDLE_COMPACT_AFTER_MS, IDLE_COMPACT_MIN_TOKENS, IDLE_COMPACT_TOKENS_FLOOR } from './idle-compaction.js';
 import { createAttachments } from './attachments.js';
 import { createScratchpads } from './scratchpad.js';
@@ -112,8 +113,11 @@ const hub = createHub({
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     });
   },
-  // A rewound conversation goes on under a new id: its forks are still its forks.
-  onRewoundId: (from, to) => void forks.moved(from, to),
+  // A rewound conversation goes on under a new id: its forks are still its forks, its processes its processes.
+  onRewoundId: (from, to) => {
+    void forks.moved(from, to);
+    processes.moved(from, to);
+  },
   onTurnEnded: decisions.turnEnded,
   // "I have ADHD" adds its rules to every agent's system prompt; the browser choice, its environment.
   // An agent's shell also knows which daemon it runs under, so `bun run restart` reaches it.
@@ -121,8 +125,11 @@ const hub = createHub({
     appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd),
     env: { ...browserEnv(settings.all().browser), COCKPIT_PORT: String(port), COCKPIT_STATE_DIR: stateDir },
   }),
-  // Every agent may schedule prompts for its own conversation.
-  hostTools: scheduleTools(() => schedule),
+  // Every agent may schedule prompts for its own conversation, and sees the processes agents left running.
+  hostTools: allHostTools(
+    scheduleTools(() => schedule),
+    processesTools(() => processes),
+  ),
 });
 // Switched, a setting reaches a conversation as it next wakes: idle ones go to sleep now.
 settings.subscribe(() => hub.launchChanged());
@@ -141,6 +148,7 @@ const schedule = await loadSchedule({
   deliver: delivery.deliver,
   archivedFrom: (file) => history.archivedFrom(file),
 }).catch(unreadable);
+const processes = await loadProcesses({ hub, file: join(stateDir, 'processes.json') }).catch(unreadable);
 const scratchpadDir = join(stateDir, 'scratchpads');
 const setup = createSetup({ ompPath, ghPath, tailscalePath });
 // Phone access serves the same routes on the tailnet: `daemon` is there by the time it is switched on.
@@ -167,6 +175,7 @@ const daemon = createDaemon({
   delivery,
   bugbot,
   schedule,
+  processes,
   setup,
   remote,
   terminals,

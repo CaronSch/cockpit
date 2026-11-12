@@ -125,6 +125,15 @@
  *   DELETE /api/terminals/:id/watchers/:stream → 204 stops it. The others are 404 for a terminal not
  *                                      running (its shell exited, or the daemon restarted), PUT also
  *                                      for a stream not open; a size is 1 to 1000 columns and rows (400)
+ *   GET    /api/processes              → ProcessList: the processes cockpit's agents started, running and
+ *                                      ended within the last 30 days, and orphans found in their
+ *                                      directories (see `processes.js`)
+ *   POST   /api/processes/:key/stop    → 204: the process stopped, with the processes it started (TERM,
+ *                                      then KILL); 404 for one not listed, 409 for one that has ended
+ *   PUT    /api/processes/:key/keep    → 204: the user keeps it: it is never flagged as left over
+ *   DELETE /api/processes/:key/keep    → 204: it is flagged again when its owners are done with it
+ *   POST   /api/processes/seen         { at } → 204: the user saw the leftovers flagged up to `at`
+ *                                      (daemon time); 400 when `at` is not a number
  *   GET    /api/stream                 Server-Sent Events, one StreamEvent per message
  *   GET    /api/stream?follow=<id>:<seq>,…  the same, scoped to the sessions named (none for an empty
  *                                      `follow`): only their events with a seq above their cursor (or
@@ -382,5 +391,40 @@
  * `error`: why its last delivery failed, retried at `dueAt`. Null when neither.
  * @typedef {{ id: string, target: ConversationTarget, prompt: string, dueAt: number, createdAt: number, missedAt: number | null, error: string | null }} ScheduledTask
  */
+
+/**
+ * How a process stands (see `processes.js`): `running` while one of its owners still wants it (as
+ * long as it declared, or while it is awake for one started without a declaration: then
+ * `undeclared`); `leftover` once none does, and always for an orphan nobody owns; `kept` when the
+ * user keeps it; `ended` once it is gone.
+ * @typedef {'running' | 'undeclared' | 'leftover' | 'kept' | 'ended'} ProcessStatus
+ */
+/**
+ * A conversation that owns a process: its agent started it, with a declaration (`declared`) or
+ * without one (`undeclared`), or uses one another started (`reused`). `purpose` and `lifetime` are
+ * the agent's own words, as it declared them (`purpose` is its tool call's intent when it did
+ * not); `since`: when it took it, epoch milliseconds. `title` is the conversation's name when it
+ * was last seen awake.
+ * @typedef {{ ompId: string, sessionFile: string | null, cwd: string, title: string | null, how: 'declared' | 'undeclared' | 'reused', purpose: string | null, lifetime: string | null, since: number }} ProcessOwner
+ */
+/**
+ * A process the ledger keeps (see `processes.js`), named by `key` (its pid and start time, which
+ * no other process shares): a named service or a background job an agent started, or an orphan
+ * found in a directory one worked in (`unowned`). `command` is what the agent ran (the process's
+ * own command line for an orphan), with secret-looking values masked; `project`: the directory
+ * of the conversation that started it, or the one the orphan was found in. `ports`: those it
+ * listens on. `flaggedAt`: when it became a leftover (null while it is not one); `stoppedBy`:
+ * who stopped it from the workbench, if anyone did.
+ * @typedef {{ key: string, pid: number, startedAt: number, kind: 'service' | 'job' | 'unowned', name: string | null, command: string, cwd: string | null, project: string | null, owners: ProcessOwner[], ports: number[], kept: boolean, flaggedAt: number | null, endedAt: number | null, stoppedBy: string | null }} ProcessRecord
+ */
+/** What one sample of a running process (with those it started) found: resident memory in bytes and CPU percent. @typedef {{ at: number, rss: number, cpu: number }} ProcessSample */
+/**
+ * A process as the Processes window shows it: its record, how it stands now, which of its owners
+ * are awake, and what the OS saw of it lately, with those it started (`processes` of them):
+ * memory and CPU now (null once ended), the last hour of samples, its open TCP connections and
+ * those to a database's usual port, and when it last used CPU or had a connection.
+ * @typedef {Omit<ProcessRecord, 'owners'> & { status: ProcessStatus, owners: Array<ProcessOwner & { awake: boolean }>, rss: number | null, cpu: number | null, processes: number, connections: number, dbConnections: number, lastActiveAt: number | null, trend: ProcessSample[] }} ProcessView
+ */
+/** GET /api/processes: `seenAt`: the user has seen the leftovers flagged up to then. @typedef {{ now: number, seenAt: number, processes: ProcessView[] }} ProcessList */
 
 export {};
