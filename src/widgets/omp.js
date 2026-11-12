@@ -15,7 +15,11 @@
  * starting a copy of another journal, and `prompt` while a fork waits to send the message it
  * was dragged off another pane's Send with. What the pane shows follows the app's settings
  * (ui/settings.js), the same in every agent window. Each turn's decision review, when the
- * daemon made one (daemon/decisions.js), shows where the turn ends (omp/decisions.js).
+ * daemon made one (daemon/decisions.js), shows where the turn ends (omp/decisions.js). The
+ * conversation's plan, while its agent keeps one (daemon/plans.js), shows as a Plan line at the
+ * foot of the transcript, with how far its steps are and the one under way: a click shows it in a
+ * Plan window (widgets/plan.js) as a tab here, or brings forward the one showing it; a drag places
+ * one where it is dropped.
  *
  * New, Fork and PRs (shown while the conversation's directory is in a GitHub repository) sit in
  * the window's top bar, beside its close button; Stop is there too, shown on the phone only
@@ -50,7 +54,7 @@ import { compactWork, isResponse, promptsAndResponses, responseStarts } from '..
 import { responseTarget } from '../omp/response-nav.js';
 import { placeReviews } from '../omp/decisions.js';
 import { coldAt } from '../omp/cold.js';
-import { turnProgress } from '../omp/todos.js';
+import { todoProgress, turnProgress } from '../omp/todos.js';
 import { elapsed, runningWork } from '../omp/running-work.js';
 import { whenLabel } from '../timeline/scale.js';
 import { createPromptHistory, sentPrompts } from '../omp/prompt-history.js';
@@ -206,6 +210,8 @@ function createPane(body, ctx, daemon) {
   const offForks = daemon.onForks(() => schedule());
   // Prompts agents scheduled (daemon/schedule.js): the Scheduled line, for this conversation's.
   const offSchedule = daemon.onSchedule(() => schedule());
+  // Plans agents keep (daemon/plans.js): the Plan line, for this conversation's.
+  const offPlans = daemon.onPlans(() => schedule());
   let pointerInside = false;
   /** The user's last click, keystroke or move of focus was in this window. */
   let inside = false;
@@ -639,6 +645,26 @@ function createPane(body, ctx, daemon) {
     running.hidden = true;
     const scheduled = el('div', 'omp-scheduled');
     scheduled.hidden = true;
+    const planLine = el('div', 'omp-plan');
+    planLine.hidden = true;
+    const planChip = button('omp-chip is-plan');
+    planLine.append(el('span', 'omp-label', 'Plan'), planChip);
+    /** The params of a Plan window showing this conversation's plan. */
+    const planParams = () => ({ ompId: ompId(), name: daemon.plan(ompId())?.title ?? null });
+    // A drag places a Plan window where it is dropped; a click is not a drag (drag-controller.js).
+    planChip.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0 || ompId() === null) return;
+      event.preventDefault();
+      ctx.dragWidget('plan', planParams(), event, { label: planParams().name ?? 'Plan' });
+    });
+    planChip.addEventListener('click', () => {
+      const id = ompId();
+      if (id === null) return;
+      // The Plan window showing it comes forward; else one opens as a tab here.
+      const showing = ctx.screen.get().windows.some((w) => w.widget === 'plan' && w.params?.ompId === id);
+      if (showing) ctx.showInTab('plan', planParams(), { same: (p) => p.ompId === id, blank: () => false });
+      else ctx.openTab('plan', planParams());
+    });
     const suggestions = createSuggestions();
     const composer = createComposer({
       pane: node,
@@ -683,7 +709,7 @@ function createPane(body, ctx, daemon) {
         cancel: (id) => void (session && daemon.rpc(session, { type: 'btw_cancel', recordId: id }).catch(() => {})),
       },
     });
-    node.append(toolbar, strip, loginStrip, banner, topWrap, transcript, jumpWrap, dialogs, running, scheduled, suggestions.root, composer.root);
+    node.append(toolbar, strip, loginStrip, banner, topWrap, transcript, jumpWrap, dialogs, running, scheduled, planLine, suggestions.root, composer.root);
     const highlight = attachDragHighlight({ host: node, transcript, enabled: () => settings.get().animatedSelection });
     const offHighlight = settings.subscribe(() => highlight.refresh());
     // A click on the pane that is not on a control, in a dialog omp asked for or in the
@@ -1405,6 +1431,7 @@ function createPane(body, ctx, daemon) {
     const dialogNodes = new Map();
     let runningKey = '';
     let scheduledKey = '';
+    let planKey = '';
     /** Ticks the Running line's times while it shows. @type {ReturnType<typeof setInterval> | null} */
     let runningTimer = null;
     let stripKey = '';
@@ -1591,6 +1618,23 @@ function createPane(body, ctx, daemon) {
       scheduled.hidden = tasks.length === 0;
     }
 
+    /** This conversation's plan, if its agent keeps one: its title, how far its steps are, and the one under way. */
+    function drawPlan() {
+      const plan = daemon.plan(ompId());
+      const progress = plan ? todoProgress(plan.todo) : null;
+      const shown = plan ? { title: plan.title, done: progress?.done ?? 0, total: progress?.total ?? 0, current: progress?.current ?? null } : null;
+      const key = JSON.stringify(shown);
+      if (key === planKey) return;
+      planKey = key;
+      planLine.hidden = !shown;
+      if (!shown) return;
+      const parts = [el('span', 'omp-chip-kind', shown.total ? `${shown.done}/${shown.total}` : 'plan'), el('span', 'omp-chip-text', shown.title)];
+      if (shown.current) parts.push(el('span', 'omp-chip-step', shown.current));
+      planChip.replaceChildren(...parts);
+      planChip.classList.toggle('is-done', shown.total > 0 && shown.done === shown.total);
+      planChip.setAttribute('aria-label', `Plan: ${shown.title}, ${shown.done} of ${shown.total} steps done${shown.current ? `, now ${shown.current}` : ''}. Opens the plan`);
+    }
+
     function drawStrips() {
       const key = JSON.stringify([state.title, state.statuses, state.widgets]);
       if (key !== stripKey) {
@@ -1762,6 +1806,7 @@ function createPane(body, ctx, daemon) {
       drawDialogs();
       drawRunning();
       drawScheduled();
+      drawPlan();
       drawComposer();
       selectionPopup.refresh();
       // News heard as it landed under the reader's eyes is read (see follow). A mark the user
@@ -1847,6 +1892,7 @@ function createPane(body, ctx, daemon) {
       offDecisions();
       offForks();
       offSchedule();
+      offPlans();
       document.removeEventListener('pointerdown', pressed, { capture: true });
       document.removeEventListener('keydown', pressed, { capture: true });
       document.removeEventListener('focusin', focused, { capture: true });

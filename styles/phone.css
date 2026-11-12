@@ -108,3 +108,8 @@
 .phone .md-table-copy {
   display: none;
 }
+
+/* No Plan window on the phone: the Plan line only says how far the plan is. */
+.phone .omp-chip.is-plan {
+  pointer-events: none;
+}

@@ -44,8 +44,9 @@ const SETUP_COMMANDS = Object.freeze([
  * Appended to every session's system prompt (`--append-system-prompt`): an agent window shows
  * the agent's text, while its thinking and tool calls sit in collapsed cards or are hidden, so
  * the agent is asked to say what it is doing as it goes (Claude Code's own wording), and told
- * what the window can show (diagrams, charts, images), and to schedule a check it would
- * otherwise ask its user to come back for (the `schedule` tool: schedule.js). It takes the place
+ * what the window can show (diagrams, charts, images), to schedule a check it would
+ * otherwise ask its user to come back for (the `schedule` tool: schedule.js), and to keep a todo
+ * list and a plan its user can watch for a large task (the `plan` tool: plans.js). It takes the place
  * of any APPEND_SYSTEM.md the user has: omp reads one or the other. With "I have ADHD" on, that
  * project's rules follow it (adhd.js); they give way to it where they disagree (their "a rule
  * fights the harness").
@@ -58,6 +59,7 @@ export const APPEND_SYSTEM_PROMPT =
   "- Anything else (screenshots, plots you render yourself): an image file, shown with ![what it shows](/absolute/path/to/image.png) (png, jpeg, gif, webp or avif).\n" +
   "Everything shown must be on this machine: remote URLs are not loaded.\n\n" +
   "When something has to happen later (CI to finish, a deploy to settle, a review to come in, a long job), schedule the check yourself with the schedule tool rather than asking the user to ping you or come back.\n\n" +
+  'For a large task (several steps or files), keep a running plan the user can watch live beside the conversation: before starting, lay out the steps with the todo tool and the goal and approach with the plan tool (`new`). As you work, mark each step as it starts and ends, record every decision you take without the user with plan `decide` (what and why), and `revise` the plan when the approach changes. Then carry on as you otherwise would; the plan is for the user to follow along, not a checkpoint to wait at.\n\n' +
   'Name a pull request or issue with its repository, as owner/name#123 or its full GitHub URL, never a bare #123: the user often works across several repositories, and the view links a bare number to the repository of the directory you started in.';
 
 /** omp settings every session runs with, over the user's own (`--config`): plain titles. */

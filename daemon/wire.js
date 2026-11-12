@@ -31,6 +31,10 @@
  *   DELETE /api/pins/:ompId            → 204: it is not (see `pins.js`); both 404 for an id that is not one
  *   GET    /api/decisions/:ompId       → { reviews: Reviews }: the conversation's decision reviews, those
  *                                      under way included (see `decisions.js`); 404 for an id that is not one
+ *   GET    /api/plans                  → { plans: PlanSummary[] }: every conversation's plan, most recently
+ *                                      changed first (see `plans.js`; agents keep them with their `plan` tool)
+ *   GET    /api/plans/:ompId           → { plan: Plan | null }: the conversation's plan, null for none; 404
+ *                                      for an id that is not one
  *   PUT    /api/settings               Partial<DaemonSettings> → DaemonSettings: the daemon's settings
  *                                      changed (see `settings.js`); 400 for anything but known keys
  *                                      with values they may take
@@ -150,9 +154,9 @@
  * events up to it that follow are a replay), how many events that replay holds (`replay`, so a
  * page can draw once it has them all), session list, unread conversations, forks, settings, Bugbot watches,
  * scheduled prompts, the Setup window's login, UI version, awake sessions' activity, Phone access, the
- * terminals running and the connection's own `stream` id. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `settings`,
+ * terminals running and the connection's own `stream` id. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `plan`, `settings`,
  * `bugbot`, `schedule`, `login`, `activity`, `remote`, `terminals` and `terminal` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
- * GET /api/history and GET /api/decisions/:ompId instead, its `hello` carries the rest, and it
+ * GET /api/history, GET /api/decisions/:ompId and GET /api/plans/:ompId instead, its `hello` carries the rest, and it
  * watches its terminals again (their scrollback is their replay).
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
@@ -162,6 +166,7 @@
 /** @import { DaemonSettings } from './settings.js' */
 /** @import { LoginState } from './setup.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
+/** @import { Plan } from './plans.js' */
 
 /** @typedef {'starting' | 'ready' | 'exited' | 'failed'} SessionStatus */
 
@@ -285,6 +290,8 @@
 
 /** Sent to every page after a conversation's decision reviews changed (one started or ended), with all of them. @typedef {{ kind: 'decisions', ompId: string, reviews: Reviews }} DecisionsEvent */
 
+/** Sent to every page after a conversation's plan changed (its text, a decision, its todo list), with the whole plan (null: moved away by a rewind). @typedef {{ kind: 'plan', ompId: string, plan: Plan | null }} PlanEvent */
+
 /** Sent to every page after the daemon's settings changed, with all of them. @typedef {{ kind: 'settings', settings: DaemonSettings }} SettingsEvent */
 
 /** Sent to every page after a Bugbot watch started or changed, with all of them. @typedef {{ kind: 'bugbot', watches: BugbotWatch[] }} BugbotEvent */
@@ -307,7 +314,7 @@
  * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
  */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | PlanEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle
