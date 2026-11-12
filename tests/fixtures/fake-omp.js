@@ -33,9 +33,9 @@
  * - `compact`: answers with a summary in omp 18.12.6's `CompactionResult` shape (from its source)
  * - contains "style": says whether its system prompt carries the rules "I have ADHD" adds
  *   (daemon/adhd.js): "Writing in ADHD mode." or "Writing as usual."
- * - `schedule <JSON>`: calls the host's `schedule` tool (the daemon's, given by `set_host_tools`)
- *   with that JSON as its arguments, as omp runs a host tool (`host_tool_call`, answered by
- *   `host_tool_result`; frame shapes from omp 18.10.3's source), then replies with its answer
+ * - `schedule <JSON>`, `plan <JSON>`: calls the host's `schedule` or `plan` tool (the daemon's, given
+ *   by `set_host_tools`) with that JSON as its arguments, as omp runs a host tool (`host_tool_call`,
+ *   answered by `host_tool_result`; frame shapes from omp 18.10.3's source), then replies with its answer
  * - `/rename [title]`: like omp's builtin, names the session (with no title, from the first
  *   prompt that says something: "hi" alone is too little to name a session by; that
  *   outcome follows the answer, as omp's background title generation does)
@@ -429,9 +429,9 @@ async function runPrompt(id, text) {
     toolCall();
     await Bun.sleep(1500);
   }
-  const scheduling = /^schedule (\{.*\})$/s.exec(text);
-  if (scheduling) {
-    streamAssistant(await hostToolCall('schedule', JSON.parse(scheduling[1])));
+  const hostTool = /^(schedule|plan) (\{.*\})$/s.exec(text);
+  if (hostTool) {
+    streamAssistant(await hostToolCall(hostTool[1], JSON.parse(hostTool[2])));
   } else if (text.startsWith('say:')) {
     streamAssistant(text.slice('say:'.length).trim());
   } else if (/ask/.test(text)) {

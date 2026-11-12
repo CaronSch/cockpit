@@ -9,7 +9,7 @@
  * It keeps which conversations are unread (daemon/unread.js), pinned (daemon/pins.js) and forked from which (daemon/forks.js), the daemon's settings
  * (daemon/settings.js), its Bugbot watches (daemon/bugbot.js), the prompts agents scheduled (daemon/schedule.js), how each awake session is doing (`activity`) and whether
  * Phone access is on (`remote`), as the daemon last said: every window reads them here, so all of
- * them, and every page, agree. So are the decision reviews (daemon/decisions.js) of the conversations windows show,
+ * them, and every page, agree. So are the decision reviews (daemon/decisions.js) and plans (daemon/plans.js) of the conversations windows show,
  * asked for when a window first shows one, and again after a reconnect.
  *
  * A scoped client (the phone's, `useScopedDaemon`) hears only the sessions its windows subscribed
@@ -41,6 +41,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { Forks } from '../../daemon/forks.js' */
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @import { Reviews } from '../omp/decisions.js' */
+/** @import { Plan, PlanSummary } from '../../daemon/plans.js' */
 /** @import { LoginState, SetupStatus } from '../../daemon/setup.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
 /** @typedef {{ ok: true, rev: number | null } | { ok: false, current: Screen | null }} ScreenSave */
@@ -82,6 +83,9 @@ export class DaemonError extends Error {
  *   onForks(fn: () => void): () => void,
  *   decisions(ompId: string | null): Reviews | null,
  *   onDecisions(fn: () => void): () => void,
+ *   plan(ompId: string | null): Plan | null | undefined,
+ *   onPlans(fn: () => void): () => void,
+ *   plans(): Promise<PlanSummary[]>,
  *   settings(): DaemonSettings | null,
  *   onSettings(fn: () => void): () => void,
  *   changeSettings(patch: Partial<DaemonSettings>): Promise<void>,
@@ -278,6 +282,15 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
   const decisionsChanged = () => {
     for (const fn of decisionsListeners) fn();
   };
+  /** The plans of the conversations asked about, by omp id (null: none). @type {Map<string, Plan | null>} */
+  const plans = new Map();
+  /** Conversations whose plans are being asked for. @type {Set<string>} */
+  const askingPlans = new Set();
+  /** @type {Set<() => void>} */
+  const plansListeners = new Set();
+  const plansChanged = () => {
+    for (const fn of plansListeners) fn();
+  };
   /** @type {Set<(outdated: boolean) => void>} */
   const uiListeners = new Set();
   /** The UI version this page loaded: the first one heard. @type {string | null} */
@@ -384,6 +397,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     // Changes made while this page was away were not heard: ask again.
     decisions.clear();
     decisionsChanged();
+    plans.clear();
+    plansChanged();
     // A new connection: the terminals shown are watched on it, from their scrollback again.
     for (const id of terminalViewers.keys()) watchOn(id);
   }
@@ -420,6 +435,10 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (event.kind === 'decisions') {
       decisions.set(event.ompId, event.reviews);
       return decisionsChanged();
+    }
+    if (event.kind === 'plan') {
+      plans.set(event.ompId, event.plan);
+      return plansChanged();
     }
     replayArrived();
     const cursor = cursors.get(event.session);
@@ -658,6 +677,27 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
       decisionsListeners.add(fn);
       return () => decisionsListeners.delete(fn);
     },
+    /** Conversation `ompId`'s plan (null: it has none); undefined until the daemon has said (asking it, if no one has). */
+    plan(ompId) {
+      if (ompId === null) return null;
+      if (plans.has(ompId)) return plans.get(ompId);
+      if (askingPlans.has(ompId) || status !== 'open') return undefined;
+      askingPlans.add(ompId);
+      request(`/api/plans/${encodeURIComponent(ompId)}`)
+        // News heard meanwhile is newer than this answer. One that failed is not asked again until a reconnect.
+        .then((body) => !plans.has(ompId) && plans.set(ompId, body.plan))
+        .catch(() => !plans.has(ompId) && plans.set(ompId, null))
+        .finally(() => {
+          askingPlans.delete(ompId);
+          plansChanged();
+        });
+      return undefined;
+    },
+    onPlans(fn) {
+      plansListeners.add(fn);
+      return () => plansListeners.delete(fn);
+    },
+    plans: async () => (await request('/api/plans')).plans,
     settings: () => settings,
     onSettings(fn) {
       settingsListeners.add(fn);

@@ -15,7 +15,7 @@
  * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), forks.json
  * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), schedule.json
  * (the prompts agents scheduled), decisions/
- * (each conversation's decision reviews), fork-sources/ (journals forked mid-turn, cut to their last response, while
+ * (each conversation's decision reviews), plans/ (each conversation's plan), fork-sources/ (journals forked mid-turn, cut to their last response, while
  * their fork starts), scratchpads/, attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
@@ -32,6 +32,7 @@ import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
 import { loadSchedule, scheduleTools } from './schedule.js';
 import { loadProcesses, processesTools } from './processes.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
+import { createPlans, planTools } from './plans.js';
 import { askAgent } from './ask.js';
 import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
@@ -96,6 +97,7 @@ const decisions = createDecisionReviews({
   on: () => settings.all().decisionReview,
   ask: (turn) => askReviewer(turn, { ompPath }),
 });
+const plans = createPlans({ dir: join(stateDir, 'plans') });
 const hub = createHub({
   ompPath,
   unread,
@@ -114,21 +116,24 @@ const hub = createHub({
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     });
   },
-  // A rewound conversation goes on under a new id: its forks are still its forks, its processes its processes.
+  // A rewound conversation goes on under a new id: its forks are still its forks, its processes its processes, its plan its plan.
   onRewoundId: (from, to) => {
     void forks.moved(from, to);
     processes.moved(from, to);
+    void plans.moved(from, to).catch((err) => console.error(`[daemon] could not move the plan of conversation ${from}:`, err));
   },
   onTurnEnded: decisions.turnEnded,
+  onTodo: (ompId, phases) => void plans.todo(ompId, phases).catch((err) => console.error(`[daemon] could not follow the todo list of conversation ${ompId}:`, err)),
   // "I have ADHD" adds its rules to every agent's system prompt; the browser choice, its environment.
   // An agent's shell also knows which daemon it runs under, so `bun run restart` reaches it.
   launchWith: () => ({
     appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd),
     env: { ...browserEnv(settings.all().browser), COCKPIT_PORT: String(port), COCKPIT_STATE_DIR: stateDir },
   }),
-  // Every agent may schedule prompts for its own conversation, and sees the processes agents left running.
+  // Every agent may schedule prompts for its own conversation, keep a plan for it, and sees the processes agents left running.
   hostTools: allHostTools(
     scheduleTools(() => schedule),
+    planTools(() => plans),
     processesTools(() => processes),
   ),
 });
@@ -171,6 +176,7 @@ const daemon = createDaemon({
   forks,
   forker,
   decisions,
+  plans,
   settings,
   github,
   delivery,

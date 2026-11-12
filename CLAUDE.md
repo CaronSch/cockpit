@@ -50,13 +50,13 @@ Planned capabilities:
   (`Bun.spawn`), owning those processes, with omp settings of its own over the user's
   (`--config daemon/omp-overlay.yml`: plain titles, no title-card icon or code) and `--append-system-prompt` asking the
   agent for progress updates as it works, in Claude Code's wording, and telling it
-  what the window renders, inviting visuals, and to schedule a check rather than ask its user to
-  come back for it (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has),
+  what the window renders, inviting visuals, to schedule a check rather than ask its user to
+  come back for it, and to keep a running todo list and plan for a large task (`APPEND_SYSTEM_PROMPT`; it replaces any APPEND_SYSTEM.md the user has),
   and with the `PI_BROWSER_*` variables the Agents’ browser setting picks (`daemon/browser.js`).
   Every omp is also given the daemon's own tools (omp's RPC host tools: `set_host_tools` as it is
   set up, `host_tool_call` answered with `host_tool_result`; `HostTools` in
-  `daemon/omp-session.js`, several joined by `allHostTools`): the `schedule` tool (`daemon/schedule.js`) and the
-  `processes` tool (`daemon/processes.js`), and loads an extension of the daemon's (`-e
+  `daemon/omp-session.js`, several joined by `allHostTools`): the `schedule` tool (`daemon/schedule.js`), the
+  `plan` tool (`daemon/plans.js`) and the `processes` tool (`daemon/processes.js`), and loads an extension of the daemon's (`-e
   daemon/process-gate.js`): the gate that has an agent declare each long-running process it starts. omp is the `omp` on PATH unless `--omp`
   says otherwise. Prefer Bun's own APIs where they make the code smaller.
   It also runs the Terminal windows' shells (`daemon/terminals.js`): the user's login shell in a
@@ -181,7 +181,12 @@ What runs today:
   stands apart from the work (`src/omp/visibility.js` `isNarration`, `responseStarts`). A pane shows one conversation at a time: **Forks**
   sits in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring
-  spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`).
+  spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`). Its twin,
+  pointing up at the transcript's head, goes back to where the latest response starts (its
+  **Response** mark) while that start is scrolled past and the turn is over. It is offered for a response
+  that ended while the window showed the conversation, watched or not, and for one still unread; a
+  click on it (which reads the conversation), typing in the window or scrolling the transcript takes it
+  away for that response (`drawTop`). Pressing it is not coming into the window, so it does not read it first.
   **⌘↑** and **⌘↓** (Ctrl elsewhere, anywhere in the window, the message box; on the phone, its **↑** and **↓** buttons)
   put the agent's previous or next response (as *Only prompts and responses* counts them)
   at the top of the transcript, else its very top or its bottom, which follows new output again
@@ -255,7 +260,10 @@ What runs today:
   naming the job or, for a subagent, its agent: omp runs a revival as a job of its own, `<agent>-2`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Scheduled
   line under it lists the prompts scheduled for the conversation (its agent's `schedule` tool,
-  below), each with when it runs; a missed one says so. A Markdown table in a reply has a Copy button (on
+  below), each with when it runs; a missed one says so. A Plan line under that shows the conversation's
+  plan while its agent keeps one (below): how many of its steps are done, its title and the step under
+  way; a click shows it in a Plan window as a tab of the agent window (or brings forward the one
+  showing it), a drag places one where it is dropped. A Markdown table in a reply has a Copy button (on
   hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
   (not its language label), pinned to its corner while long lines scroll. Selected
   reply text shows Comment and Ask (following the selection as new output scrolls it); either opens a box in the transcript under the block the
@@ -433,6 +441,21 @@ What runs today:
   conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a
   conversation shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
   /api/schedule/:id`; saved, it is no longer missed). Only a failure is written under the axis.
+- Plans and the Plan window (the `plan` widget). For a large task an agent keeps a running plan
+  its user can watch, as omp's own TUI shows its todo list: the system prompt asks it to lay out the
+  steps with omp's `todo` tool and the goal and approach with the daemon's `plan` tool (`new`), then
+  to record each decision it takes without its user with `decide` (what and why) and `revise` the
+  plan when the approach changes, and carry on as it otherwise would (`daemon/plans.js`, an RPC host
+  tool as `schedule` is; `view` reads it back, after a compaction say). The steps are the agent's
+  todo list as the hub follows it from the session's events (`onTodo`), never written twice. One
+  plan per conversation, by omp's id, kept in `~/.cockpit/plans/<ompId>.json` (moved with a rewind
+  to the conversation's new id; a fork starts without one); every page hears each change (`plan`
+  events; `GET /api/plans/:ompId`). The window shows the title, how many steps are done (a bar)
+  and the one under way, the plan's text, the steps phase by phase (done, under way, to do,
+  abandoned), and the decisions and revisions newest first, each with why (a revision keeps the
+  plan before, a click away), all live. From the palette it lists every plan, most recently
+  changed first (`GET /api/plans`), to pick one; **All plans** goes back to the list. The phone
+  shows the Plan line but opens no Plan window.
 - The process ledger and the Processes window (the `processes` widget). A `bash` call that starts
   a named service (`name`) or a background job (`async`) runs only once its command ends with a
   declaration in the agent's own words, `# purpose: … ; lifetime: …` (`daemon/process-commands.js`):
@@ -840,6 +863,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
+- `src/widgets/plan.js` — An agent's plan for a large task, live beside the conversation it is for (daemon/plans.js): the goal and approach the agent wrote, its steps (its todo list) ticked off as they finish, and the decisions it took along the way and why, the newest first.
 - `src/widgets/processes.js` — The processes cockpit's agents left running: the named services and background jobs they started, and orphans found in their directories, with who owns each and why, for how long, and what it costs; leftovers can be stopped or kept, and the last 30 days are listed below them.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it, filling its window.
@@ -870,6 +894,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback (and, with Phone access on, to the owner's tailnet devices: remote.js) and runs the omp processes and shells it shows.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
+- `daemon/plans.js` — Plans: for a large task, an agent keeps a plan its user watches live beside the conversation (the Plan window, src/widgets/plan.js, and the Plan line at the foot of the agent window): the goal and approach, the steps, and a log of the decisions it took along the way and why.
 - `daemon/process-commands.js` — What the commands agents start say about themselves: the declaration an agent adds to a named service or a background job (a trailing shell comment, `# purpose: … ; lifetime: …`, in its own words), how long that lifetime is, the ports a command names, and the secret-looking values a command line must not show.
 - `daemon/process-gate.js` — The gate every omp the daemon launches loads (`-e`, omp-session.js): an omp extension that has the agent declare each long-running process before starting it.
 - `daemon/process-table.js` — What the OS says about processes, read with `ps` and `lsof`: every process with its parent, owner, memory, CPU, start time and command line; the TCP ports some listen on and the connections they hold; and their working directories.
@@ -898,6 +923,7 @@ particular, move a capability into "Current state" when it ships.
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `timeline` — Timeline: Agents by when they were last active, and the prompts they scheduled: drag one out to open it, or onto the bin to archive or delete
 - `processes` — Processes: What your agents left running: who started each and why, for how long, what it costs; stop leftovers
+- `plan` — Plan: An agent’s plan for a large task, live: its steps as they finish, and the decisions it took along the way and why
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
 - `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
 - `file` — File: Read and edit a text file (Markdown, CSV, JSON, text, code); a path in an agent’s reply opens one with a click

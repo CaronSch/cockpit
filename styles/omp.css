@@ -559,6 +559,13 @@
   cursor: pointer;
 }
 
+/* Back to the start of the latest response (omp.js `drawTop`): the same arrow, pointing up, over
+   the transcript's head, while the response is unread and its start is scrolled past. */
+.omp-jump-top {
+  top: var(--space-2);
+  bottom: auto;
+}
+
 .omp-jump svg {
   display: block;
   width: 100%;
@@ -1431,7 +1438,8 @@ div.omp-compaction::after,
 }
 
 .omp-running,
-.omp-scheduled {
+.omp-scheduled,
+.omp-plan {
   flex: none;
   display: flex;
   flex-wrap: wrap;
@@ -1470,6 +1478,48 @@ div.omp-compaction::after,
 
 .omp-chip.is-scheduled.is-failed {
   border-color: var(--color-danger);
+}
+
+/* The conversation's plan: how far its steps are, its title, and the step under way. A click
+   opens it in a Plan window, a drag places one. */
+.omp-chip.is-plan {
+  max-width: min(100%, 72ch);
+  padding-right: 8px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.omp-chip.is-plan:hover,
+.omp-chip.is-plan:focus-visible {
+  border-color: var(--color-line-focus);
+  background: var(--color-hover);
+}
+
+.omp-chip.is-plan .omp-chip-kind {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.omp-chip.is-plan.is-done .omp-chip-kind {
+  color: var(--color-ok);
+}
+
+.omp-chip.is-plan .omp-chip-text {
+  flex: none;
+  max-width: 32ch;
+}
+
+.omp-chip-step {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.omp-chip-step::before {
+  content: '· ';
 }
 
 .omp-chip-time {
