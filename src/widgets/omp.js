@@ -31,10 +31,11 @@ import { showImage } from '../ui/image-viewer.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
 import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
-import { renderItem, renderPending, renderReview, renderWork } from '../omp/items-view.js';
+import { renderItem, renderPending, renderResponseMark, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
-import { composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
+import { afreshCommand, composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
+import { pickTip, renderWelcome } from '../omp/welcome.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
@@ -45,7 +46,7 @@ import { pullOfUrl } from '../github/pr-refs.js';
 import { attachPullDrag, pullParams } from '../github/pull-window.js';
 import { attachFileRefs } from '../files/file-window.js';
 import { awaitedAfter } from '../omp/activity.js';
-import { compactWork, isResponse, promptsAndResponses } from '../omp/visibility.js';
+import { compactWork, isResponse, promptsAndResponses, responseStarts } from '../omp/visibility.js';
 import { responseTarget } from '../omp/response-nav.js';
 import { placeReviews } from '../omp/decisions.js';
 import { coldAt } from '../omp/cold.js';
@@ -86,6 +87,12 @@ const NO_FORKS = 'No forks yet. /fork <prompt> opens one as a new tab; dragging 
 const NOTHING_TO_FORK = 'Nothing to fork yet: the conversation is saved once the agent has replied';
 /** The workbench's own command, in the suggestions beside omp's (`/fork` is omp's terminal UI's only). @type {SlashCommand} */
 const FORK_COMMAND = { name: 'fork', aliases: [], hint: '<prompt>', description: 'Fork this conversation into a new tab and send the fork this prompt' };
+/** The workbench's own: a new conversation in place of this one (`/new` is omp's terminal UI's only). @type {SlashCommand[]} */
+const AFRESH_COMMANDS = [
+  { name: 'new', aliases: [], hint: '', description: 'Start a new conversation here; this one stays in Sessions' },
+  { name: 'archive', aliases: [], hint: '', description: 'Archive this conversation and start a new one here' },
+];
+const OWN_COMMANDS = new Set(['fork', 'new', 'archive']);
 
 /**
  * Whether the page is going away: its requests are cut off then, which says nothing of whether
@@ -157,11 +164,14 @@ function createPane(body, ctx, daemon) {
   let home = null;
   /** How long after its last request a conversation's window dims (omp/cold.js); null until the daemon says. @type {number | null} */
   let coldAfterMs = null;
+  /** Cockpit's version, for a new conversation's welcome card; null until the daemon says. @type {string | null} */
+  let version = null;
   daemon
     .config()
     .then((c) => {
       home = c.home;
       coldAfterMs = c.idleCompactAfterMs;
+      version = c.version;
       schedule();
     })
     .catch(() => {});
@@ -617,6 +627,18 @@ function createPane(body, ctx, daemon) {
      */
     const saved = () => asleep !== null || Boolean(meta()?.resume || meta()?.fork) || state.items.some((i) => i.kind === 'assistant' && i.ended);
     const forkable = () => Boolean(file) && saved();
+    /**
+     * A new conversation nothing was said in yet: a session of its own (not a journal being read,
+     * resumed or forked), with no prompt, reply or `!` run, and nothing queued to send.
+     */
+    const fresh = () =>
+      session !== null &&
+      !meta()?.resume &&
+      !meta()?.fork &&
+      !state.items.some((i) => i.kind === 'user' || i.kind === 'assistant' || i.kind === 'bash') &&
+      state.queue.steering.length + state.queue.followUp.length === 0;
+    /** The welcome card's tip (omp/welcome.js), one per window's view of a conversation. */
+    const tip = pickTip();
 
     // ── awake or asleep ──
     /**
@@ -849,6 +871,9 @@ function createPane(body, ctx, daemon) {
       // `/fork <prompt>` is the workbench's: a fork of this conversation, in a new tab.
       const forking = forkPrompt(draft.value);
       if (forking !== null) return forkInTab(forking);
+      // So are `/new` and `/archive`: a new conversation in this one's place.
+      const afresh = afreshCommand(draft.value);
+      if (afresh) return startAfresh(afresh);
       // `/command` and `!shell` go as typed; comments and attachments wait for the next prompt.
       const command = isCommand(draft.value);
       // A bare `!` names no command: leave it in the box rather than run nothing.
@@ -913,6 +938,41 @@ function createPane(body, ctx, daemon) {
       }
       outgoing.take();
       ctx.openTab('omp', { fork: file, cwd: cwd() || null, session: null, sessionFile: null, name: null, prompt: outgoing.message });
+    }
+
+    /**
+     * `/new` and `/archive`: a new conversation in this window, in the same directory. The one it
+     * showed stays in Sessions (and goes to sleep once idle, as any does), or with `/archive` is
+     * archived first, as Sessions' Archive does; a conversation nothing was sent to has no
+     * journal, so it is ended instead, either way. The command's own text leaves the box; the
+     * rest of the draft (its cards) waits with the conversation it was written in.
+     * @param {{ archive: boolean, rest: string }} command
+     */
+    async function startAfresh({ archive, rest }) {
+      hideSuggestions();
+      const name = archive ? '/archive' : '/new';
+      if (rest) {
+        addNote(state, 'error', archive ? 'archive' : 'new', `Nothing done: ${name} takes nothing after it.`);
+        return schedule();
+      }
+      // Archiving a working conversation is refused (the daemon's 409): say why first.
+      if (archive && saved() && state.streaming) {
+        addNote(state, 'error', 'archive', 'Not archived: the agent is working. Stop it (Esc) or let it finish, then /archive.');
+        return schedule();
+      }
+      const taken = composer.compose({ withCards: false }).take();
+      const old = session;
+      try {
+        if (archive && file && saved()) await daemon.archivePastSession(file);
+        else if (old && !saved()) await daemon.end(old);
+        const meta = await daemon.createSession({ cwd: cwd() || '~' });
+        focusNext = true;
+        ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: null, name: null });
+      } catch (err) {
+        taken.restore();
+        addNote(state, 'error', archive ? 'archive' : 'new', `${archive ? 'Not archived' : 'No new conversation'}: ${errorMessage(err)}`);
+      }
+      schedule();
     }
 
     async function stop() {
@@ -1196,8 +1256,8 @@ function createPane(body, ctx, daemon) {
       const q = match[1].toLowerCase();
       const starts = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().startsWith(q));
       const contains = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().includes(q));
-      // `/fork` is the workbench's own (send()): omp's is its terminal UI's only.
-      const all = [FORK_COMMAND, ...state.commands.filter((c) => c.name !== 'fork')];
+      // `/fork`, `/new` and `/archive` are the workbench's own (send()): omp's are its terminal UI's only.
+      const all = [FORK_COMMAND, ...AFRESH_COMMANDS, ...state.commands.filter((c) => !OWN_COMMANDS.has(c.name))];
       const commands = [...all.filter(starts), ...all.filter((c) => !starts(c) && contains(c))].slice(0, MAX_SUGGESTIONS);
       suggestions.show(
         commands.map((c) => {
@@ -1251,7 +1311,7 @@ function createPane(body, ctx, daemon) {
     // dropped, continuing a copy of this conversation (named anew by its first prompt, by the
     // daemon). This box lets go of it once it is placed.
     sendBtn.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || sendBtn.disabled || !forkable()) return;
+      if (e.button !== 0 || sendBtn.disabled || !forkable() || afreshCommand(draft.value)) return;
       const forking = forkPrompt(draft.value);
       const outgoing = forking !== null ? composer.compose({ withCards: true, draft: () => forking }) : composer.compose({ withCards: !isCommand(draft.value) });
       const line = outgoing.message.replace(/\s+/g, ' ').trim();
@@ -1323,6 +1383,11 @@ function createPane(body, ctx, daemon) {
         if (review.status === 'done' && review.decisions.length === 0) continue;
         entries.splice(index, 0, { key: `review:${at}`, rev: JSON.stringify(review), render: () => renderReview(review) });
       }
+      // A response after the agent's work starts under a quiet mark, so the answer stands apart.
+      for (const key of responseStarts(shown.items)) {
+        const at = entries.findIndex((e) => e.key === key);
+        if (at >= 0) entries.splice(at, 0, { key: `response:${key}`, rev: '', render: renderResponseMark });
+      }
       // What omp holds to send later ends the transcript, as the prompts they will be.
       for (const which of /** @type {const} */ (['steering', 'followUp'])) {
         state.queue[which].forEach((text, i) => {
@@ -1330,6 +1395,8 @@ function createPane(body, ctx, daemon) {
           entries.push({ key: `pending:${which}:${i}`, rev: text, render: () => renderPending(text, which, isContinueDirective(text), cancel) });
         });
       }
+      // A new conversation, nothing said in it yet, opens on the welcome card, as omp's TUI does.
+      if (fresh()) entries.unshift({ key: 'welcome', rev: version ?? '', render: () => renderWelcome(tip, version) });
       entries.forEach(({ key, rev, render }, i) => {
         live.add(key);
         let entry = drawn.get(key);

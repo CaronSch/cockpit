@@ -472,6 +472,66 @@
   padding: var(--space-3) var(--space-4);
 }
 
+/* A new conversation's welcome card (omp/welcome.js), as omp's TUI opens a session: the mark and
+   wordmark in pixels beside the version, then a tip. Centred in the empty transcript. */
+.omp-welcome {
+  margin-block: auto;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: 34rem;
+  padding: var(--space-4) 0;
+}
+
+.omp-welcome-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.omp-welcome-mark {
+  width: 56px;
+  height: 56px;
+}
+
+.omp-welcome-name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.omp-welcome-word {
+  height: 36px;
+  fill: var(--color-text);
+}
+
+.omp-welcome-version {
+  font: var(--weight-regular) var(--text-xs) / 1 var(--font-code);
+  color: var(--color-text-faint);
+}
+
+.omp-welcome-tip {
+  margin: 0;
+  text-align: center;
+  color: var(--color-text-dim);
+  font-family: var(--font-code);
+  font-size: var(--text-xs);
+}
+
+.omp-welcome-label {
+  color: var(--color-warn);
+  font-style: italic;
+}
+
+.omp-welcome-code {
+  padding: 0 0.3em;
+  border-radius: 4px;
+  background: var(--color-code-bg);
+  color: var(--color-code);
+}
+
 /* Back to the latest (omp.js `drawJump`): a small round arrow over the transcript's foot, shown
    once scrolled up; drawn as SVG (ring and arrow), so both are smooth and centred. Its ring
    spins in the accent while the agent works. */
@@ -604,6 +664,32 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+/* What the agent says on its way (visibility.js `isNarration`): softer than its response. */
+.omp-assistant.is-narration {
+  color: var(--color-text-dim);
+}
+
+/* Where a response starts after the agent's work (visibility.js `responseStarts`): a quiet label
+   and a hairline, as compaction's line but fainter and to one side. */
+.omp-response-mark {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block-end: calc(-1 * var(--space-1));
+  color: var(--color-text-faint);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.omp-response-mark::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-line);
 }
 
 /* What the user sent: a band across the pane, edged in the accent, so a scroll through a long
