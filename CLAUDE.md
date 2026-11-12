@@ -372,8 +372,10 @@ What runs today:
   Searching is Spotlight's, floating over the workbench (`src/ui/spotlight.js`: ⌘K / Ctrl+K or
   the top bar's Search; a modal dialog; matched by `daemon/search.js` across titles, directories,
   prompts and the agents' replies, so a question in plain words finds the conversation that
-  answers it; its best matches listed most recently active first, as the latest are with nothing
-  typed, with the passage that matched and its words marked; **Ask** (⌘↵) hands
+  answers it; its best matches listed in two groups, those whose name holds a word searched for
+  ("In the name", the word marked), then those matched in what was said ("In the conversation"),
+  each most recently active first, as the latest are with nothing typed, with the passage that
+  matched and its words marked; **Ask** (⌘↵) hands
   the question to an agent instead, a one-shot `omp -p` with read-only tools reading an index of
   the conversations and their journals (`daemon/ask.js`), whose answer shows above the conversations
   it names; Enter shows the
@@ -838,7 +840,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/sessions/notify.js` — Desktop notifications when an agent is done or needs its user, so a session can be left running while the user is elsewhere: the moments that mark a conversation unread (omp/activity.js), as they happen.
 - `src/sessions/order.js` — Sorting and labels for the Sessions window, kept free of the DOM so they can be tested.
 - `src/sessions/running.js` — Conversations as the Sessions window lists them, kept free of the DOM so they can be tested: every journal with the session holding it while one is awake, how each is doing, and what an agent window is given to show one.
-- `src/sessions/snippet.js` — The passage a search matched, as a line of DOM, shared by the Sessions window and Spotlight.
+- `src/sessions/snippet.js` — The passage a search matched, as a line of DOM, shared by the Sessions window and Spotlight; and whether a conversation's name holds a word the search matched.
 - `src/state/atom.js` — Tiny observable cell: get/set/subscribe.
 - `src/timeline/scale.js` — The timeline window's arithmetic, kept free of the DOM so it can be tested: where a moment in the future sits on its log scale (the next hour spread out, next month squeezed in), how far ahead the scale reaches, the times its axis marks, how labels share lanes without covering one another, and how long until a scheduled prompt runs, and when, said briefly (the daemon's schedule tool says it the same way).
 - `src/ui/autosize.js` — Grows a textarea to fit its text, up to a maximum height, after which it scrolls.
