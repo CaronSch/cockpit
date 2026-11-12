@@ -38,3 +38,9 @@ export const screensIcon = () => icon('M5 3.5h8.5v6.5H5zM2.5 6v6.5H11', 16);
 
 /** A small chevron pointing down: a control that opens a menu. */
 export const chevronIcon = () => icon('M2.5 4l2.5 2.5L7.5 4', 10);
+
+/** A folder: a folder entry in a list of paths. */
+export const folderIcon = () => icon('M2 4.5v8h12V6H7.5L6 4.5z', 16);
+
+/** A page with its corner folded: a file entry in a list of paths. */
+export const fileIcon = () => icon('M4 2h5.5L12.5 5v9H4zM9.5 2v3h3', 16);
