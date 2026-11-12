@@ -14,6 +14,7 @@ import { isSettingsPatch } from './settings.js';
 import { TextFileRefused, listDirectory, readTextFile, resolvePath, writeTextFile } from './files.js';
 import { DeliveryRefused } from './deliver.js';
 import { ScheduleRefused } from './schedule.js';
+import { ProcessRefused } from './processes.js';
 import { GithubError } from './github.js';
 import { LoginRefused } from './setup.js';
 import { TerminalRefused } from './terminals.js';
@@ -40,6 +41,7 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Delivery } from './deliver.js' */
 /** @import { BugbotStore } from './bugbot.js' */
 /** @import { Schedule } from './schedule.js' */
+/** @import { Processes } from './processes.js' */
 /** @import { DecisionReviews } from './decisions.js' */
 /** @import { LoginState, Setup } from './setup.js' */
 /** @import { Terminals } from './terminals.js' */
@@ -239,7 +241,7 @@ async function compressed(req, res) {
 /** @param {unknown} err */
 function errorResponse(err) {
   const status =
-    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused || err instanceof TerminalRefused
+    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused || err instanceof TerminalRefused || err instanceof ProcessRefused
       ? err.status
       : err instanceof SessionNotRunning
         ? 409
@@ -254,14 +256,14 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, processes: Processes, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, schedule, setup, remote, terminals, ask, restart, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, settings, github, delivery, bugbot, schedule, processes, setup, remote, terminals, ask, restart, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -659,6 +661,31 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           PATCH: async (req) => json(await schedule.edit(req.params.id, (await readJson(req)) ?? {})),
           DELETE: async (req) => {
             await schedule.remove(req.params.id);
+            return noContent();
+          },
+        }),
+        '/api/processes': api({ GET: () => json(processes.list()) }),
+        '/api/processes/seen': api({
+          POST: async (req) => {
+            const at = (await readJson(req))?.at;
+            if (!Number.isFinite(at)) throw new HttpError(400, 'expected { at: a time in daemon milliseconds }');
+            await processes.seen(at);
+            return noContent();
+          },
+        }),
+        '/api/processes/:key/stop': api({
+          POST: async (req) => {
+            await processes.stop(req.params.key);
+            return noContent();
+          },
+        }),
+        '/api/processes/:key/keep': api({
+          PUT: async (req) => {
+            await processes.keep(req.params.key, true);
+            return noContent();
+          },
+          DELETE: async (req) => {
+            await processes.keep(req.params.key, false);
             return noContent();
           },
         }),
