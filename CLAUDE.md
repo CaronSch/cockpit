@@ -160,7 +160,7 @@ What runs today:
   `src/omp/recent-dirs.js`), each start omp there with one click), chat with it from its
   structured event stream (streamed replies with Markdown, tables, TeX math as
   MathML, `mermaid` diagrams and `vega-lite` charts drawn once their fence closes
-  (`src/omp/visuals.js`: kept as SVG by source, live on hover, in a card whose **Save** saves an SVG or PNG file or copies a PNG; Vega's loader reads
+  (`src/omp/visuals.js`: kept as SVG by source, live on hover, in a card whose **Save** saves an SVG or PNG file or copies a PNG, and which a click shows larger in the image viewer, below; Vega's loader reads
   only local files), and images on this machine, `![alt](/abs/path.png)`, which a click shows
   in an image viewer over the workbench (`src/ui/image-viewer.js`; ⌘-click opens a tab); images and
   chart data are served by `/api/file`, raster and data types only, sandboxed;
@@ -848,7 +848,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
 - `src/ui/hover-menu.js` — Top bar menus that open while the pointer rests on their button (Config, + Widget): the menu follows the pointer, closing a moment after it leaves, and a click on the button or in the menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
 - `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
-- `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note) shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
+- `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note), or on a diagram or chart an agent drew, shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
 - `src/ui/login.js` — Signing omp in to a model provider, or another account, without a conversation: `omp login`, run by the daemon (daemon/setup.js) and shown as it goes, its questions answered from a line here.
 - `src/ui/orbit.js` — A light going round an element's outline while something it stands for is at work (a running shell or subagent): an SVG outline the size of its element whose dash moves along it, at an even pace whatever the element's shape, since the outline's length is set to 100 and the dash moves by its offset.

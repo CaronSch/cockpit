@@ -16,6 +16,7 @@
  */
 import { button, el } from '../ui/dom.js';
 import { errorMessage } from '../ui/format.js';
+import { showDrawing } from '../ui/image-viewer.js';
 import { renderCode } from './code-copy.js';
 import { copyReport } from './table-copy.js';
 /** @import { VisualLang } from './markdown.js' */
@@ -276,15 +277,18 @@ function drawing(lang, source) {
 
 /**
  * The block a closed ```mermaid or ```vega-lite fence shows: its drawing in a card, once drawn
- * (at once if it was before), with Save; else its source with why it could not be drawn.
+ * (at once if it was before), with Save; else its source with why it could not be drawn. A
+ * click on the drawing (or Enter on it) shows it in the image viewer, as large as the window
+ * allows; one that ends a text selection does not.
  * @param {VisualLang} lang @param {string} source @returns {HTMLElement}
  */
 export function renderVisual(lang, source) {
   const kind = lang === 'mermaid' ? 'diagram' : 'chart';
+  const name = lang === 'mermaid' ? 'Diagram' : 'Chart';
   const card = el('div', 'md-visual-block');
   const box = el('div', `md-visual is-${lang}`);
   box.setAttribute('role', 'img');
-  box.setAttribute('aria-label', lang === 'mermaid' ? 'Diagram' : 'Chart');
+  box.setAttribute('aria-label', name);
   card.append(box);
   drawing(lang, source).then(
     (svg) => {
@@ -292,6 +296,20 @@ export function renderVisual(lang, source) {
       fit(box);
       card.append(...saveControl(svg, kind));
       if (lang === 'vega-lite') box.addEventListener('pointerenter', () => void goLive(box, source), { once: true });
+      box.setAttribute('role', 'button');
+      box.setAttribute('aria-label', `${name}: show it larger`);
+      box.tabIndex = 0;
+      box.classList.add('is-zoomable');
+      box.addEventListener('click', (e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        if (!(document.getSelection()?.isCollapsed ?? true)) return;
+        showDrawing(svg, name);
+      });
+      box.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        showDrawing(svg, name);
+      });
     },
     (/** @type {unknown} */ err) => {
       card.replaceWith(renderCode(source, lang), el('p', 'md-visual-error', `Could not draw this ${kind}: ${err instanceof Error ? err.message : String(err)}`));

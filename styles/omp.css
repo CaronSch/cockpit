@@ -938,6 +938,16 @@
   overflow-x: auto;
 }
 
+/* A click shows it larger, in the image viewer (visuals.js). */
+.md-visual.is-zoomable {
+  cursor: zoom-in;
+}
+
+.md-visual.is-zoomable:focus-visible {
+  outline-offset: 4px;
+  border-radius: var(--radius-s);
+}
+
 .md-visual-save {
   top: 6px;
   right: 6px;
