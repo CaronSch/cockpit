@@ -51,6 +51,20 @@
   box-shadow: var(--shadow-lift);
 }
 
+/* A diagram or chart, on the surface it is drawn for (a reply's visual card), scaled to fill.
+   Its padding is the room image-viewer.js `showDrawing` leaves around the drawing. */
+.image-viewer-drawing {
+  padding: 32px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-l);
+  background: var(--color-inset);
+  box-shadow: var(--shadow-lift);
+}
+
+.image-viewer-drawing svg {
+  display: block;
+}
+
 .image-viewer-caption {
   margin: var(--space-2) 0 0;
   color: var(--color-text-dim);
