@@ -839,7 +839,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/response-nav.js` — Where an agent pane's previous/next response buttons (⌘↑ / ⌘↓) scroll its transcript: the arithmetic, kept apart from the DOM.
 - `src/omp/rewind.js` — Rewinding an omp conversation to one of the user's prompts, as omp's `/branch` does: what the rewind sets aside, and which of omp's entries the prompt is.
 - `src/omp/running-work.js` — What an agent has running now, for the agent window's Running line and the Sessions list: the shells and subagents its turn is waiting on, and its background jobs (omp/transcript.js `jobs`), which go on after their tool call has returned, even once the turn has ended.
-- `src/omp/selection-popup.js` — Actions on highlighted transcript text: select part of a reply and Comment and Ask buttons appear at the end of the selection.
+- `src/omp/selection-popup.js` — Actions on highlighted transcript text: select part of a reply and Comment and Ask buttons appear at the end of the selection; C and A press them while they show.
 - `src/omp/suggestions.js` — The suggestion list above the agent pane's message box (slash commands, `@` file entries), driven from the draft's keys so focus never leaves it.
 - `src/omp/table-copy.js` — Copy control for a rendered Markdown table: a button whose menu copies the table as Markdown, CSV or a PNG image.
 - `src/omp/table-text.js` — Plain-text forms of a parsed Markdown table: a cell's text without its formatting, and the table as CSV.

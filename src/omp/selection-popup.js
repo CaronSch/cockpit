@@ -1,14 +1,14 @@
 /**
  * Actions on highlighted transcript text: select part of a reply and Comment and Ask buttons
- * appear at the end of the selection. A selection dragged with the pointer snaps out to whole
- * words when it is let go, so a rough drag quotes clean text. Either button opens a box in the
- * transcript itself, right under the block the selection ends in (a paragraph, a list, a table,
- * a diff line), the width of the transcript and set like the message box: the quote, a field,
- * and the action clicked, which Enter does too. Comment hands the comment to the composer
- * with the selected text as its quote. Ask asks a side question about it, whose short answer
- * streams into the box and never enters the chat (omp's `btw`); follow-up questions continue
- * the same topic there, one at a time. Where questions are queued instead (the pull request
- * window's review), Ask hands the question over as Comment does.
+ * appear at the end of the selection; C and A press them while they show. A selection dragged
+ * with the pointer snaps out to whole words when it is let go, so a rough drag quotes clean text.
+ * Either button opens a box in the transcript itself, right under the block the selection ends
+ * in (a paragraph, a list, a table, a diff line), the width of the transcript and set like the
+ * message box: the quote, a field, and the action clicked, which Enter does too. Comment hands
+ * the comment to the composer with the selected text as its quote. Ask asks a side question
+ * about it, whose short answer streams into the box and never enters the chat (omp's `btw`);
+ * follow-up questions continue the same topic there, one at a time. Where questions are queued
+ * instead (the pull request window's review), Ask hands the question over as Comment does.
  *
  * In an agent window a comment or a question on an agent's reply is kept as an annotation
  * (daemon/annotations.js), which keeps its text highlighted (annotation-marks.js): `open` shows
@@ -91,6 +91,8 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   const panel = el('div', 'omp-quote-panel');
   /** @type {'closed' | 'buttons' | 'editing' | 'thread'} */
   let mode = 'closed';
+  /** What C and A do while the buttons show: press Comment and Ask. @type {Record<string, () => void>} */
+  let keyed = {};
   let quote = '';
   /** Where the quote is, as `cite` said. @type {string | null} */
   let quoteCite = null;
@@ -172,6 +174,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     prefilled = '';
     drawThread = null;
     mode = 'closed';
+    keyed = {};
     pop.hidden = true;
     pop.replaceChildren();
     panel.replaceChildren();
@@ -222,11 +225,14 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     return text && at ? { text, end, at, range } : null;
   }
 
-  /** @param {string} label @param {() => void} onClick */
-  function actionButton(label, onClick) {
+  /** @param {string} label @param {string} key the letter that presses it too @param {() => void} onClick */
+  function actionButton(label, key, onClick) {
     const action = button('omp-quote-btn', label, onClick);
+    action.title = `${label} (${key.toUpperCase()})`;
+    action.setAttribute('aria-keyshortcuts', key.toUpperCase());
     // Keep the selection (and its highlight) while the button is pressed.
     action.addEventListener('pointerdown', (e) => e.preventDefault());
+    keyed[key] = onClick;
     return action;
   }
 
@@ -246,8 +252,8 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     quoteCite = cite(found.range);
     quoteAnchor = annotations?.anchor(found.range, found.text) ?? null;
     pop.replaceChildren(
-      actionButton('Comment', () => openBox(found.at, 'comment')),
-      actionButton('Ask', () => openBox(found.at, 'ask')),
+      actionButton('Comment', 'c', () => openBox(found.at, 'comment')),
+      actionButton('Ask', 'a', () => openBox(found.at, 'ask')),
     );
     mode = 'buttons';
     place(found.end);
@@ -479,6 +485,23 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     e.stopPropagation(); // not the pane's Esc-to-stop
     close();
   };
+  /**
+   * C or A while the buttons show presses Comment or Ask. Wherever focus is: a selection in the
+   * transcript means no field is being typed in, but a field that has the key anyway keeps it.
+   * The key is taken, so the box it opens and focuses does not get the letter.
+   * @param {KeyboardEvent} e
+   */
+  const onShortcut = (e) => {
+    if (mode !== 'buttons' || pop.hidden || e.defaultPrevented || e.isComposing || e.repeat) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // ⌘C copies the selection
+    const target = /** @type {HTMLElement} */ (e.target);
+    if (target.isContentEditable || target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+    const press = keyed[e.key.toLowerCase()];
+    if (!press || !selection()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    press();
+  };
   /** @param {PointerEvent} e */
   const onOutside = (e) => {
     const target = /** @type {Node} */ (e.target);
@@ -494,6 +517,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   pop.addEventListener('keydown', onKeyDown);
   panel.addEventListener('keydown', onKeyDown);
   document.addEventListener('selectionchange', onSelectionChange);
+  document.addEventListener('keydown', onShortcut);
   document.addEventListener('pointerdown', onOutside, true);
 
   return {
@@ -530,6 +554,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       document.removeEventListener('pointercancel', onPointerCancel, true);
       transcript.removeEventListener('scroll', onScroll);
       document.removeEventListener('selectionchange', onSelectionChange);
+      document.removeEventListener('keydown', onShortcut);
       document.removeEventListener('pointerdown', onOutside, true);
       pop.remove();
     },
