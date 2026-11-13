@@ -9,7 +9,7 @@
  * It keeps which conversations are unread (daemon/unread.js), pinned (daemon/pins.js) and forked from which (daemon/forks.js), the daemon's settings
  * (daemon/settings.js), its Bugbot watches (daemon/bugbot.js), the prompts agents scheduled (daemon/schedule.js), how each awake session is doing (`activity`) and whether
  * Phone access is on (`remote`), as the daemon last said: every window reads them here, so all of
- * them, and every page, agree. So are the decision reviews (daemon/decisions.js) and plans (daemon/plans.js) of the conversations windows show,
+ * them, and every page, agree. So are the decision reviews (daemon/decisions.js), plans (daemon/plans.js) and annotations (daemon/annotations.js) of the conversations windows show,
  * asked for when a window first shows one, and again after a reconnect.
  *
  * A scoped client (the phone's, `useScopedDaemon`) hears only the sessions its windows subscribed
@@ -42,6 +42,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @import { Reviews } from '../omp/decisions.js' */
 /** @import { Plan, PlanSummary } from '../../daemon/plans.js' */
+/** @import { Annotation, AnnotationPatch, NewAnnotation } from '../../daemon/annotations.js' */
 /** @import { LoginState, SetupStatus } from '../../daemon/setup.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
 /** @typedef {{ ok: true, rev: number | null } | { ok: false, current: Screen | null }} ScreenSave */
@@ -86,6 +87,11 @@ export class DaemonError extends Error {
  *   plan(ompId: string | null): Plan | null | undefined,
  *   onPlans(fn: () => void): () => void,
  *   plans(): Promise<PlanSummary[]>,
+ *   annotations(ompId: string | null): Annotation[] | null,
+ *   onAnnotations(fn: () => void): () => void,
+ *   addAnnotation(ompId: string, annotation: NewAnnotation): Promise<Annotation>,
+ *   updateAnnotation(ompId: string, id: string, patch: AnnotationPatch): Promise<void>,
+ *   deleteAnnotation(ompId: string, id: string): Promise<void>,
  *   settings(): DaemonSettings | null,
  *   onSettings(fn: () => void): () => void,
  *   changeSettings(patch: Partial<DaemonSettings>): Promise<void>,
@@ -291,6 +297,15 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
   const plansChanged = () => {
     for (const fn of plansListeners) fn();
   };
+  /** The annotations of the conversations asked about, by omp id. @type {Map<string, Annotation[]>} */
+  const annotations = new Map();
+  /** Conversations whose annotations are being asked for. @type {Set<string>} */
+  const askingAnnotations = new Set();
+  /** @type {Set<() => void>} */
+  const annotationsListeners = new Set();
+  const annotationsChanged = () => {
+    for (const fn of annotationsListeners) fn();
+  };
   /** @type {Set<(outdated: boolean) => void>} */
   const uiListeners = new Set();
   /** The UI version this page loaded: the first one heard. @type {string | null} */
@@ -399,6 +414,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     decisionsChanged();
     plans.clear();
     plansChanged();
+    annotations.clear();
+    annotationsChanged();
     // A new connection: the terminals shown are watched on it, from their scrollback again.
     for (const id of terminalViewers.keys()) watchOn(id);
   }
@@ -439,6 +456,10 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (event.kind === 'plan') {
       plans.set(event.ompId, event.plan);
       return plansChanged();
+    }
+    if (event.kind === 'annotations') {
+      annotations.set(event.ompId, event.annotations);
+      return annotationsChanged();
     }
     replayArrived();
     const cursor = cursors.get(event.session);
@@ -560,6 +581,7 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
   const padPath = (/** @type {string} */ id) => `/api/scratchpads/${encodeURIComponent(id)}`;
   const workspacePath = (/** @type {string} */ name) => `/api/workspaces/${encodeURIComponent(name)}`;
   const unreadPath = (/** @type {string} */ ompId) => `/api/unread/${encodeURIComponent(ompId)}`;
+  const annotationsPath = (/** @type {string} */ ompId) => `/api/annotations/${encodeURIComponent(ompId)}`;
 
   /** @param {string} session @param {(event: SessionEvent) => void} fn @returns {() => void} */
   function subscribe(session, fn) {
@@ -698,6 +720,35 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
       return () => plansListeners.delete(fn);
     },
     plans: async () => (await request('/api/plans')).plans,
+    /** Conversation `ompId`'s annotations; null until the daemon has said (asking it, if no one has). */
+    annotations(ompId) {
+      if (ompId === null) return null;
+      const known = annotations.get(ompId);
+      if (known || askingAnnotations.has(ompId) || status !== 'open') return known ?? null;
+      askingAnnotations.add(ompId);
+      request(annotationsPath(ompId))
+        // News heard meanwhile is newer than this answer. One that failed is not asked again until a reconnect.
+        .then((body) => !annotations.has(ompId) && annotations.set(ompId, body.annotations))
+        .catch(() => !annotations.has(ompId) && annotations.set(ompId, []))
+        .finally(() => {
+          askingAnnotations.delete(ompId);
+          annotationsChanged();
+        });
+      return null;
+    },
+    onAnnotations(fn) {
+      annotationsListeners.add(fn);
+      return () => annotationsListeners.delete(fn);
+    },
+    async addAnnotation(ompId, annotation) {
+      return (await request(annotationsPath(ompId), { method: 'POST', body: JSON.stringify(annotation) })).annotation;
+    },
+    async updateAnnotation(ompId, id, patch) {
+      await request(`${annotationsPath(ompId)}/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    },
+    async deleteAnnotation(ompId, id) {
+      await request(`${annotationsPath(ompId)}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
     settings: () => settings,
     onSettings(fn) {
       settingsListeners.add(fn);

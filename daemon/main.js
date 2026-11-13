@@ -33,6 +33,7 @@ import { loadSchedule, scheduleTools } from './schedule.js';
 import { loadProcesses, processesTools } from './processes.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
 import { createPlans, planTools } from './plans.js';
+import { createAnnotations } from './annotations.js';
 import { askAgent } from './ask.js';
 import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
@@ -98,6 +99,7 @@ const decisions = createDecisionReviews({
   ask: (turn) => askReviewer(turn, { ompPath }),
 });
 const plans = createPlans({ dir: join(stateDir, 'plans') });
+const annotations = createAnnotations({ dir: join(stateDir, 'annotations') });
 const hub = createHub({
   ompPath,
   unread,
@@ -116,11 +118,12 @@ const hub = createHub({
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     });
   },
-  // A rewound conversation goes on under a new id: its forks are still its forks, its processes its processes, its plan its plan.
+  // A rewound conversation goes on under a new id: its forks are still its forks, its processes its processes, its plan its plan, its annotations its annotations.
   onRewoundId: (from, to) => {
     void forks.moved(from, to);
     processes.moved(from, to);
     void plans.moved(from, to).catch((err) => console.error(`[daemon] could not move the plan of conversation ${from}:`, err));
+    void annotations.moved(from, to).catch((err) => console.error(`[daemon] could not move the annotations of conversation ${from}:`, err));
   },
   onTurnEnded: decisions.turnEnded,
   onTodo: (ompId, phases) => void plans.todo(ompId, phases).catch((err) => console.error(`[daemon] could not follow the todo list of conversation ${ompId}:`, err)),
@@ -177,6 +180,7 @@ const daemon = createDaemon({
   forker,
   decisions,
   plans,
+  annotations,
   settings,
   github,
   delivery,

@@ -14,6 +14,7 @@ import { isSettingsPatch } from './settings.js';
 import { TextFileRefused, listDirectory, readTextFile, resolvePath, writeTextFile } from './files.js';
 import { DeliveryRefused } from './deliver.js';
 import { ScheduleRefused } from './schedule.js';
+import { AnnotationRefused } from './annotations.js';
 import { ProcessRefused } from './processes.js';
 import { GithubError } from './github.js';
 import { LoginRefused } from './setup.js';
@@ -44,6 +45,7 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Processes } from './processes.js' */
 /** @import { DecisionReviews } from './decisions.js' */
 /** @import { Plan, Plans } from './plans.js' */
+/** @import { Annotation, Annotations } from './annotations.js' */
 /** @import { LoginState, Setup } from './setup.js' */
 /** @import { Terminals } from './terminals.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
@@ -242,7 +244,7 @@ async function compressed(req, res) {
 /** @param {unknown} err */
 function errorResponse(err) {
   const status =
-    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused || err instanceof TerminalRefused || err instanceof ProcessRefused
+    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused || err instanceof TerminalRefused || err instanceof ProcessRefused || err instanceof AnnotationRefused
       ? err.status
       : err instanceof SessionNotRunning
         ? 409
@@ -257,14 +259,14 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, processes: Processes, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, annotations: Annotations, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, processes: Processes, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, plans, settings, github, delivery, bugbot, schedule, processes, setup, remote, terminals, ask, restart, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, plans, annotations, settings, github, delivery, bugbot, schedule, processes, setup, remote, terminals, ask, restart, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -306,7 +308,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
-        // No id: scratchpad, history, unread, pins, forks, decisions, plan, settings, bugbot, schedule, login, activity, remote and terminal events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, forks, decisions, plan, annotations, settings, bugbot, schedule, login, activity, remote and terminal events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
@@ -318,6 +320,9 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           write(`data: ${JSON.stringify({ kind: 'decisions', ompId, reviews })}\n\n`),
         );
         const offPlans = plans.subscribe((/** @type {string} */ ompId, /** @type {Plan | null} */ plan) => write(`data: ${JSON.stringify({ kind: 'plan', ompId, plan })}\n\n`));
+        const offAnnotations = annotations.subscribe((/** @type {string} */ ompId, /** @type {Annotation[]} */ all) =>
+          write(`data: ${JSON.stringify({ kind: 'annotations', ompId, annotations: all })}\n\n`),
+        );
         const offSettings = settings.subscribe((/** @type {DaemonSettings} */ all) => write(`data: ${JSON.stringify({ kind: 'settings', settings: all })}\n\n`));
         const offBugbot = bugbot.subscribe((/** @type {readonly BugbotWatch[]} */ watches) => write(`data: ${JSON.stringify({ kind: 'bugbot', watches })}\n\n`));
         const offSchedule = schedule.subscribe((/** @type {readonly ScheduledTask[]} */ tasks) => write(`data: ${JSON.stringify({ kind: 'schedule', tasks })}\n\n`));
@@ -341,6 +346,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           offForks();
           offDecisions();
           offPlans();
+          offAnnotations();
           offSettings();
           offBugbot();
           offSchedule();
@@ -521,6 +527,17 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         '/api/decisions/:id': api({ GET: async (req) => json({ reviews: await decisions.reviews(ompIdOf(req)) }) }),
         '/api/plans': api({ GET: async () => json({ plans: await plans.list() }) }),
         '/api/plans/:id': api({ GET: async (req) => json({ plan: await plans.plan(ompIdOf(req)) }) }),
+        '/api/annotations/:id': api({
+          GET: async (req) => json({ annotations: await annotations.list(ompIdOf(req)) }),
+          POST: async (req) => json({ annotation: await annotations.add(ompIdOf(req), await readJson(req)) }, 201),
+        }),
+        '/api/annotations/:id/:annotation': api({
+          PATCH: async (req) => json({ annotation: await annotations.update(ompIdOf(req), req.params.annotation, await readJson(req)) }),
+          DELETE: async (req) => {
+            await annotations.remove(ompIdOf(req), req.params.annotation);
+            return noContent();
+          },
+        }),
         '/api/settings': api({
           PUT: async (req) => {
             const patch = await readJson(req);

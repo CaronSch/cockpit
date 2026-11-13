@@ -271,7 +271,19 @@ What runs today:
   action alone, which Enter does too. A comment goes quoted with the next prompt; a
   question goes to omp's `btw`, whose answer streams into that box, outside the chat, where
   follow-up questions continue the same topic, one at a time (every question asks
-  for an answer of at most three sentences); pasted text goes into the
+  for an answer of at most three sentences). The text a comment or a question is on stays
+  highlighted, as in Google Docs, in every agent window showing the conversation (comments in
+  the accent, questions in the code colour; the CSS Custom Highlight API, `src/omp/annotation-marks.js`):
+  each is kept as an annotation from the moment it is posted, sent or not (`daemon/annotations.js`,
+  `~/.cockpit/annotations/<ompId>.json`, every page hears changes as `annotations` events; moved with a
+  rewind), naming its reply by the message's timestamp and the passage by its text and which
+  occurrence of it it is, and a question keeps omp's answers, which omp keeps nowhere once its session
+  ends. A plain click on a highlight opens the same box again under its block: a comment in its field
+  to edit (emptied, it goes, and so does its card if it still waits in the message box; removing or
+  editing the card does the same to the annotation), or the questions with their answers, a field
+  for another (a new `btw` topic about the quote once omp's is gone) and Remove. A selection
+  spanning several replies, or outside one, is not annotated; highlights are reached by pointer
+  only. Pasted text goes into the
   message box as typed, and pasted or dropped files wait over the box as cards (a thumbnail
   for an image, the name and size, a × on the corner while pointed at; a click previews one:
   an image in the image viewer, another file as a file tab), are stored in
@@ -800,6 +812,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/layout/snap.js` — Magnetic sash behaviour: detents pull the sash onto aligned positions, then minimum sizes clamp the result.
 - `src/main.js` — Bootstrap: starts the app and shows a visible error if it cannot.
 - `src/omp/activity.js` — Which omp events make a session "unread": the agent's final response, when it hands the turn back to the user, or a question it stops to ask them.
+- `src/omp/annotation-marks.js` — Highlights on the parts of agent replies the user commented on or asked about (daemon/annotations.js), as in Google Docs: drawn with the CSS Custom Highlight API, so the transcript's DOM is never touched, comments in the accent and questions in the code colour, and a plain click on one opens it again (selection-popup.js `open`).
 - `src/omp/code-copy.js` — A fenced code block as rendered Markdown shows it, with a Copy button in its top-right corner that copies the code itself (the fence's contents, not its language label).
 - `src/omp/cold.js` — When an agent window dims: its conversation has been quiet past the point at which idle compaction (daemon/idle-compaction.js) compacts a long one, 54 minutes after the last model request, so its prompt cache is about to expire and the next message reads the conversation in full.
 - `src/omp/composer.js` — The agent pane's message box: a draft that starts one line high and grows with its text up to half the pane, cards for what goes with the next message (comments on quoted transcript text, files), and the Send button.
@@ -877,6 +890,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
+- `daemon/annotations.js` — Annotations: the comments and questions the user left on parts of an agent's replies, as in Google Docs, so the text they are on stays highlighted in every agent window showing the conversation and a click on it shows them again (src/omp/annotation-marks.js).
 - `daemon/ask.js` — Asking an agent where something was said: Spotlight's Ask (src/ui/spotlight.js) hands a question in plain words to a one-shot omp that reads the user's conversations and answers it, naming the conversations that do.
 - `daemon/attachments.js` — Files attached to omp prompts: stored where omp can read them, one folder per day, so a prompt can mention them as `@"<path>"` and omp attaches them itself (images to the model, text inlined; see omp's file mentions).
 - `daemon/browser.js` — Which browser agents drive (settings.js `browser`, picked in Setup or Config): a separate one of omp's own by default, so an agent testing a page never takes over the tab its user is reading.
@@ -945,6 +959,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/processes.test.js`, `tests/remote.test.js`, `tests/snap.test.js`
+`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/processes.test.js`, `tests/remote.test.js`, `tests/snap.test.js`
 
 <!-- END GENERATED -->

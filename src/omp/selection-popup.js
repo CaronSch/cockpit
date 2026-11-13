@@ -9,6 +9,11 @@
  * streams into the box and never enters the chat (omp's `btw`); follow-up questions continue
  * the same topic there, one at a time. Where questions are queued instead (the pull request
  * window's review), Ask hands the question over as Comment does.
+ *
+ * In an agent window a comment or a question on an agent's reply is kept as an annotation
+ * (daemon/annotations.js), which keeps its text highlighted (annotation-marks.js): `open` shows
+ * the same box again for it, the comment in its field to edit (emptied, it goes), or the
+ * questions with their answers, a field for another and Remove.
  */
 import { button, el } from '../ui/dom.js';
 import { autosize } from '../ui/autosize.js';
@@ -17,6 +22,8 @@ import { snapToWords } from '../ui/word-snap.js';
 import { withMentions } from './file-suggest.js';
 /** @import { SideAnswer } from './transcript.js' */
 /** @import { ListDir } from './file-suggest.js' */
+/** @import { Anchor } from './annotation-marks.js' */
+/** @import { Annotation, AnnotationPatch, AnnotationQA, NewAnnotation } from '../../daemon/annotations.js' */
 
 const GAP_PX = 6;
 const EDGE_PX = 8;
@@ -42,26 +49,40 @@ const BLOCK = '.omp-md > *, .gh-item-body > *, .gh-line, .gh-thread';
  */
 
 /**
- * A question asked in the shown thread: its turn in omp's topic once omp has taken it, or why
- * it could not be asked.
- * @typedef {{ question: string, turn: number | null, error: string | null }} Asked
+ * Where comments and questions are kept as annotations: `anchor` says where a selection of
+ * `quote` is (null: nowhere an annotation can be); `add` keeps a new one and answers with its id
+ * (null if it could not); `update` and `remove` change and forget one.
+ * @typedef {{
+ *   anchor(range: Range, quote: string): Anchor | null,
+ *   add(annotation: NewAnnotation): Promise<string | null>,
+ *   update(id: string, patch: AnnotationPatch): Promise<void>,
+ *   remove(id: string): Promise<void>,
+ * }} AnnotationStore
+ */
+
+/**
+ * A question asked in the shown thread: its topic and turn in it once omp has taken it, or why
+ * it could not be asked; or, asked before the box was opened again, as it was kept (`kept`).
+ * @typedef {{ question: string, topic: string | null, turn: number | null, error: string | null, kept: AnnotationQA | null }} Asked
  */
 
 /**
  * @param {{
  *   host: HTMLElement,
  *   transcript: HTMLElement,
- *   onComment: (quote: string, comment: string, cite: string | null) => void,
+ *   onComment: (quote: string, comment: string, cite: string | null, anchor: Anchor | null) => void,
  *   ask: SideQuestions | QueuedQuestions,
  *   cite?: (range: Range) => string | null,
  *   listDir?: ListDir,
+ *   annotations?: AnnotationStore,
  * }} options `host`: the positioned element the buttons float in; `transcript`: where selections
  * count, and where the box goes; `cite` says where a selection is, for the comment or question
  * on it (e.g. a file and its lines); `listDir`, if given, lists the folders `@` paths typed in
- * the box name, to suggest their entries.
+ * the box name, to suggest their entries; `annotations` keeps comments (with `anchor`, handed to
+ * `onComment`) and questions, and edits them.
  * Call `refresh()` whenever the session's state changes, so a shown thread keeps up.
  */
-export function attachSelectionPopup({ host, transcript, onComment, ask, cite = () => null, listDir }) {
+export function attachSelectionPopup({ host, transcript, onComment, ask, cite = () => null, listDir, annotations }) {
   const queued = 'queue' in ask ? ask : null;
   const side = 'queue' in ask ? null : ask;
   const pop = el('div', 'omp-quote-pop');
@@ -73,7 +94,13 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   let quote = '';
   /** Where the quote is, as `cite` said. @type {string | null} */
   let quoteCite = null;
-  /** omp's id for the side topic shown, once it has taken a question in it. @type {string | null} */
+  /** Where the quote is, for an annotation on it. @type {Anchor | null} */
+  let quoteAnchor = null;
+  /** The annotation keeping the shown thread, once it has one: its id, after every save asked for so far. @type {Promise<string | null> | null} */
+  let threadNote = null;
+  /** The thread as last saved. @type {string | null} */
+  let savedThread = null;
+  /** omp's id for the side topic the thread asks in now, once it has taken a question in it. @type {string | null} */
   let topic = null;
   /** The questions asked in the shown thread, oldest first. @type {Asked[]} */
   let asked = [];
@@ -82,21 +109,67 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   /** Redraws the shown thread; null unless one is shown. @type {(() => void) | null} */
   let drawThread = null;
 
-  /** omp's answer to `entry` so far; undefined until omp has taken it and said so. @param {Asked} entry */
-  const answerTo = (entry) => (entry.turn === null || topic === null ? undefined : side?.answers(topic)?.[entry.turn]);
+  /** omp's answer to `entry` so far (or as kept); undefined until omp has taken it and said so. @param {Asked} entry */
+  const answerTo = (entry) => entry.kept ?? (entry.turn === null || entry.topic === null ? undefined : side?.answers(entry.topic)?.[entry.turn]);
   /** Whether the thread's newest question is still on its way or being answered: omp runs one at a time. */
   const running = () => {
     const newest = asked.at(-1);
     return mode === 'thread' && newest !== undefined && newest.error === null && (answerTo(newest)?.status ?? 'running') === 'running';
   };
+
+  /**
+   * Keeps the shown thread in its annotation, made with the first question omp takes. An answer
+   * on its way is kept as interrupted, without its text, until it ends (`stopping`: it is being
+   * stopped, with what it said so far).
+   */
+  function saveThread(stopping = false) {
+    if (!annotations || !quoteAnchor) return;
+    /** @type {AnnotationQA[]} */
+    const thread = asked.flatMap((entry) => {
+      if (entry.kept) return [entry.kept];
+      if (entry.error !== null) return [{ question: entry.question, answer: '', status: /** @type {const} */ ('error'), error: entry.error }];
+      const answer = answerTo(entry);
+      if (entry.turn === null) return [];
+      if (!answer || answer.status === 'running') {
+        return [{ question: entry.question, answer: stopping ? (answer?.answer ?? '') : '', status: stopping ? /** @type {const} */ ('cancelled') : /** @type {const} */ ('interrupted'), error: null }];
+      }
+      return [{ question: entry.question, answer: answer.answer, status: answer.status, error: answer.error }];
+    });
+    const key = JSON.stringify(thread);
+    if (key === savedThread) return;
+    if (!threadNote) {
+      // Made once omp has taken a question: one it never took is no annotation.
+      if (!asked.some((entry) => entry.turn !== null)) return;
+      threadNote = annotations.add({ kind: 'ask', ...quoteAnchor, quote, comment: null, thread });
+    } else {
+      const store = annotations;
+      // One save after another, so the last one asked for is the one kept.
+      threadNote = threadNote.then(async (id) => {
+        if (id) await store.update(id, { thread });
+        return id;
+      });
+    }
+    savedThread = key;
+  }
+  /** The comment the box opened with, when it opened on one kept (`open`). */
+  let prefilled = '';
   /** Whether the box holds something written and not sent yet. */
-  const drafted = () => Boolean(panel.querySelector('textarea')?.value.trim());
+  const drafted = () => {
+    const text = panel.querySelector('textarea')?.value.trim();
+    return Boolean(text) && text !== prefilled;
+  };
 
   function close() {
-    if (topic !== null && running()) side?.cancel(topic);
+    if (topic !== null && running()) {
+      saveThread(true);
+      side?.cancel(topic);
+    }
     generation++;
     topic = null;
     asked = [];
+    threadNote = null;
+    savedThread = null;
+    prefilled = '';
     drawThread = null;
     mode = 'closed';
     pop.hidden = true;
@@ -146,7 +219,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     const rects = range.getClientRects();
     const end = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
     const at = spot(range.endContainer);
-    return text && at ? { text, end, at, cite: cite(range) } : null;
+    return text && at ? { text, end, at, range } : null;
   }
 
   /** @param {string} label @param {() => void} onClick */
@@ -170,7 +243,8 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     if (mode === 'buttons' && found.text === quote) return; // already offered for it
     close();
     quote = found.text;
-    quoteCite = found.cite;
+    quoteCite = cite(found.range);
+    quoteAnchor = annotations?.anchor(found.range, found.text) ?? null;
     pop.replaceChildren(
       actionButton('Comment', () => openBox(found.at, 'comment')),
       actionButton('Ask', () => openBox(found.at, 'ask')),
@@ -204,18 +278,26 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   }
 
   /**
-   * The box for a comment or a question on the quote, as `action` chose; Enter sends it.
+   * The box for a comment or a question on the quote, as `action` chose; Enter sends it. With
+   * `editing`, the comment kept for it, there to edit: emptied, it goes.
    * @param {{ below: Element } | { inside: Element }} at @param {'comment' | 'ask'} action
+   * @param {Annotation | null} [editing]
    */
-  function openBox(at, action) {
+  function openBox(at, action, editing = null) {
     mode = 'editing';
     pop.hidden = true;
     const submit = () => {
       const text = box.value.trim();
+      if (editing) {
+        if (!text) void annotations?.remove(editing.id);
+        else if (text !== editing.comment) void annotations?.update(editing.id, { comment: text });
+        close();
+        return;
+      }
       if (!text) return;
       document.getSelection()?.removeAllRanges();
       if (action === 'comment') {
-        onComment(quote, text, quoteCite);
+        onComment(quote, text, quoteCite, quoteAnchor);
         close();
       } else if (queued) {
         queued.queue(quote, text, quoteCite);
@@ -230,8 +312,9 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       submit,
     );
     const go = button('btn btn-accent', action === 'comment' ? (queued ? 'Add comment' : 'Comment') : queued ? 'Add question' : 'Ask', submit);
+    if (editing) box.value = prefilled = editing.comment ?? '';
     const sync = () => {
-      go.disabled = !box.value.trim();
+      go.disabled = !editing && !box.value.trim();
     };
     box.addEventListener('input', sync);
     sync();
@@ -239,14 +322,17 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     actions.append(button('btn', 'Cancel', close), go);
     panel.replaceChildren(el('blockquote', 'omp-quote-preview', quote), withMentions(box, listDir), actions);
     insertPanel(at);
+    autosize(box, { max: INPUT_MAX_PX });
     box.focus({ preventScroll: true });
   }
 
   /**
    * Shows the side questions about the quote in the box, each with its answer as it streams
    * in, and a field for a follow-up that is available whenever no answer is on its way.
+   * Reopened on annotation `reopened`, it also offers to remove it.
+   * @param {string | null} [reopened]
    */
-  function openThread() {
+  function openThread(reopened = null) {
     mode = 'thread';
     const thread = el('div', 'omp-ask-thread');
     thread.setAttribute('aria-live', 'polite');
@@ -268,7 +354,13 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
     });
     askBtn.disabled = true;
     const actions = el('div', 'omp-quote-actions');
-    actions.append(closeBtn, askBtn);
+    if (reopened) {
+      const removeBtn = button('btn omp-quote-remove', 'Remove', () => {
+        void annotations?.remove(reopened);
+        close();
+      });
+      actions.append(closeBtn, removeBtn, askBtn);
+    } else actions.append(closeBtn, askBtn);
     panel.replaceChildren(el('blockquote', 'omp-quote-preview', quote), thread, withMentions(box, listDir), actions);
     closeBtn.focus({ preventScroll: true }); // Esc closes from here while the field is unavailable
 
@@ -296,7 +388,9 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       if (wasRunning && !busy && document.activeElement === closeBtn) box.focus({ preventScroll: true });
       wasRunning = busy;
       if (changed && panel.isConnected) panel.scrollIntoView({ block: 'nearest' });
+      saveThread();
     };
+    drawThread();
   }
 
   /**
@@ -330,7 +424,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   function askInThread(question) {
     if (!side) return;
     /** @type {Asked} */
-    const entry = { question, turn: null, error: null };
+    const entry = { question, topic: null, turn: null, error: null, kept: null };
     asked.push(entry);
     drawThread?.();
     const sent = generation;
@@ -341,7 +435,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       }
       if ('error' in result) entry.error = result.error;
       else {
-        topic = result.id;
+        topic = entry.topic = result.id;
         entry.turn = result.turn;
       }
       drawThread?.();
@@ -403,6 +497,28 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   document.addEventListener('pointerdown', onOutside, true);
 
   return {
+    /**
+     * Shows the box for `annotation` again, under the block its text (`range`) ends in: the
+     * comment to edit, or the questions and their answers, with a field for another (asked in
+     * a new topic about the quote, as omp's topic may be gone). Nothing changes while a box holds
+     * something written or an answer on its way.
+     * @param {Annotation} annotation @param {Range} range
+     */
+    open(annotation, range) {
+      if (drafted() || running()) return;
+      const at = spot(range.endContainer);
+      if (!at) return;
+      close();
+      quote = annotation.quote;
+      quoteCite = null;
+      quoteAnchor = { at: annotation.at, occurrence: annotation.occurrence };
+      if (annotation.kind === 'comment') return openBox(at, 'comment', annotation);
+      asked = annotation.thread.map((qa) => ({ question: qa.question, topic: null, turn: null, error: null, kept: qa }));
+      threadNote = Promise.resolve(annotation.id);
+      savedThread = JSON.stringify(annotation.thread);
+      insertPanel(at);
+      openThread(annotation.id);
+    },
     /** Redraws a shown thread from the latest session state. */
     refresh() {
       drawThread?.();
