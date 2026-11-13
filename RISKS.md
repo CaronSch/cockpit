@@ -37,27 +37,27 @@ Each entry gives: what goes wrong, and the planned response once the threshold i
   the interrupted turn and its subagents; supervise outside the daemon only if
   that is not enough.
 
-## When omp is upgraded past 18.12.3
+## When omp is upgraded past 18.19.0
 
 omp is installed on its own, not pinned by the workbench; the threshold is
 crossed when the omp the daemon runs (on PATH, or `--omp`/`COCKPIT_OMP`)
 is newer. The daemon prints its version at start.
 
 - **The fake omp drifts from the real one.** `tests/fixtures/fake-omp.js`
-  copies frame shapes recorded from omp 18.12.3: startup, setup commands,
-  `get_state`, models, thinking levels, login providers, `bash`, aborts,
-  builtin `/rename` (with no title, omp generates one in the background, so the
-  fake answers first and reports the outcome after; that order follows 18.12.3's
-  source), `/dirs` (its output shape from 18.12.3's source), the start of a `btw`, failed prompts and `--resume`. The
-  frames of a turn a model actually answers (a pre-filled assistant
-  `message_start`, deltas, tool calls, `ask` dialogs, `btw_delta`, follow-up `btw`
-  turns, a generated title) were checked against 18.12.3's source only, because no
-  model call succeeded during the recording; their recorded shapes are still 18.10.3's.
-  The fake's `--fork` and the journals it writes follow omp 18.10.3's source
-  (`SessionManager.forkFrom`), not a recording. Its `todo` tool frames match
-  live omp 18.10.3 frames (a result's `details` carry its `op` and the whole
-  `phases` list), minus fields the pane does not read.
-  Tests stay green while a newer omp sends something else. *Response:*
+  copies frame shapes recorded from omp 18.19.0 with a working model: startup, setup
+  commands, `get_state`, models, thinking levels, login providers, answered turns (an
+  assistant `message_start` holding only the first piece streamed, each block's
+  `*_start`/`*_end` carrying it as `block`, `toolcall_delta`), `bash`, `todo` and host
+  tool calls, the `ask` tool (an HTML form, walked without a form surface as a `select`,
+  then an `input` for Other; a cancel fails the call and aborts the turn), aborts,
+  `btw` with a follow-up, builtin `/rename` (answered first, then
+  `session_info_update` and its output) and `/dirs`, `compact` (now between
+  `manual_compaction_start` and `_end`), `branch` (a new journal whose header names the
+  old one by path), `--resume` and `--fork` (the fork's header names its source by id).
+  The `ask` dialog method is now only an extension's `ui.askDialog`. Subagents, revivals,
+  background-job deliveries, notices and `set_editor_text` keep the shapes of 18.12.6's
+  source and earlier recordings. The fake writes its journals flat, which the daemon reads
+  as one path. Tests stay green while a newer omp sends something else. *Response:*
   re-record a session with the real omp (with a working model, so those turn
   frames are recorded too), diff its frame and message types against the fake,
   update the fake and this version number.
@@ -66,17 +66,20 @@ is newer. The daemon prints its version at start.
   of an untitled session the daemon sends `/rename` with no title, once. That relies on
   omp generating a title for it in the background in RPC mode (and reporting it with
   `session_info_update`), and on `session_settled` following only agent activity, so
-  the first one ends the first turn. A change shows up as sessions that stay untitled
+  the first one ends the first turn (both checked live against 18.19.0). A change shows up as sessions that stay untitled
   (they keep showing their first prompt) or a title asked for before the conversation
-  says anything. *Response:* re-read omp's `slash-commands/builtin-lifecycle.ts`
+  says anything. A title model may also decline to name one (`<title/>`; omp logs
+  `model-returned-none`): on 18.19.0, Claude Haiku 4.5 through OpenRouter declined a question
+  Gemini 2.5 Flash named, so which model omp titles with matters, not the protocol.
+  *Response:* re-read omp's `slash-commands/builtin-lifecycle.ts`
   (`rename`) and `modes/rpc/rpc-session-settle.ts`, then update `daemon/omp-session.js`
   and the fake.
 
 - **Plain titles lean on omp's `--config` overlay and `title.icons`.** Every session is launched
   with `--config daemon/omp-overlay.yml`, whose `title.icons: boring` keeps generated titles
   free of title cards (an emoji and an ALL-CAPS code before the title). Checked live against
-  18.12.3: `/rename` gave "Explain Bloom filter purpose" with the overlay and "🌸 BLOOM: Explain
-  Bloom filter purpose" without. A change shows up as new sessions titled with an emoji and a
+  18.19.0: `/rename` gave "Explain Bloom filter" with the overlay and "🌸 BLOOM: Define Bloom
+  filter" without. A change shows up as new sessions titled with an emoji and a
   code again, or omp refusing to start ("Config overlay not found" / "must be a YAML mapping").
   *Response:* check `omp --help` (`--config`) and `omp config list` (`title.icons`), and update
   the overlay's keys.
@@ -84,15 +87,20 @@ is newer. The daemon prints its version at start.
 - **Idle compaction leans on omp's usage and `compact`.** `daemon/idle-compaction.js`
   (checked against 18.12.6's source) reads the cache entry from an assistant
   `message_end`'s `usage.cttl.ephemeral1h`, times it from that message's `message_start`,
-  and sends RPC `compact`, whose answer carries the summary. omp runs its own idle
-  compaction only in its TUI; PR can1357/oh-my-pi#14468 would move it into the session
-  for RPC too. A change shows up as long sessions never compacted, or compacted twice.
-  *Response:* re-read `session/cache-warmer.ts`, `modes/rpc/rpc-mode.ts` (`compact`) and,
-  once omp runs idle compaction over RPC, drop the daemon's in favour of omp's.
+  and sends RPC `compact`, whose answer carries the summary (18.19.0 also brackets it with
+  `manual_compaction_start` and `_end`, which the transcript passes over: the daemon notes the
+  compaction itself). omp 18.19.0 moved its idle compaction into the session
+  (`session/idle-maintenance.ts`), but only its TUI turns it on
+  (`AgentSession.enableIdleMaintenance`, called from `modes/interactive-mode.ts`), so an RPC
+  session is still compacted by the daemon alone. A change shows up as long sessions never
+  compacted, or compacted twice. *Response:* re-read `session/cache-warmer.ts`,
+  `session/idle-maintenance.ts` and `modes/rpc/rpc-mode.ts` (`compact`, and whether it calls
+  `enableIdleMaintenance`); once omp runs idle compaction over RPC, drop the daemon's in favour
+  of omp's.
 - **Unread marks lean on omp's conversation id.** A session's mark is kept under
   `get_state`'s `sessionId`, which must be its journal header's `id` (what the Sessions
   window lists a past session by), also when resumed (`SessionManager` sets it from the
-  header). A change shows up as a session that is unread while it runs but read once it
+  header); both held live on 18.19.0. A change shows up as a session that is unread while it runs but read once it
   stops, or the reverse. *Response:* re-read `session/session-manager.ts`
   (`#applyEntries`) and `modes/rpc/rpc-mode.ts` (`get_state`), then update
   `daemon/omp-session.js` and the fake.
@@ -100,22 +108,24 @@ is newer. The daemon prints its version at start.
 - **The Sessions window reads omp's private journal format.** `daemon/history.js`
   parses `~/.omp/agent/sessions/<project>/*.jsonl` directly (the `title` and
   `session` records, user messages and their `attribution`); omp has no rpc for
-  listing past sessions. A format change shows up as sessions with no title,
+  listing past sessions. Fresh 18.19.0 journals list with their title, directory and
+  prompts. A format change shows up as sessions with no title,
   no directory, or missing from the list. *Response:* compare a fresh journal
   with `tests/history.test.js`'s fixtures and update both.
 
 - **An asleep conversation is read from its journal as omp would resume it.**
   `daemon/conversation.js` follows the entry tree (`id`/`parentId`) from the newest
-  entry and turns the path into messages as omp 18.12.3's session context does
+  entry and turns the path into messages as omp's session context does
   (`message`, `custom_message`, `branch_summary`, `compaction`; tool results marked
-  `useless` dropped). A change shows up as a window whose conversation looks
+  `useless` dropped); on 18.19.0 a fresh journal and a rewound one drew the same
+  transcript from `conversationOf` as from omp's `get_messages`. A change shows up as a window whose conversation looks
   different asleep than awake, or a rewind that misses its prompt after waking (the
   pending rewind is found again by its place and text). omp's own `get_messages`
   left out an empty aborted reply the journal holds ("Previous OMP process exited
   before completing the turn"); asleep, the window shows it. *Response:* resume a
   journal with `omp --mode rpc-ui --resume` on a copy, compare `get_messages` with
   `conversationOf`, and update `tests/conversation.test.js`. A rewind (`branch`)
-  moving the session onto a new journal is omp 18.12.3's behaviour too; if it
+  moving the session onto a new journal is omp 18.19.0's behaviour too; if it
   rewinds in place again, `onRewound` never fires and nothing is archived.
 
 - **Archiving leans on omp's session layout, and `omp gc` cannot see the archive.**
@@ -189,7 +199,8 @@ is newer. The daemon prints its version at start.
 - **Messages from outside an agent window lean on `prompt`'s `streamingBehavior`.** The pull
   request window's review, Bugbot's findings and scheduled prompts reach a conversation through the daemon
   (`daemon/deliver.js`) as a `prompt` with `streamingBehavior: 'followUp'`, which omp 18.10.3
-  runs at once when idle and queues after the turn while the agent works. A change shows up as
+  runs at once when idle and queues after the turn while the agent works (18.19.0's source keeps
+  it, and live it ran one at once when idle). A change shows up as
   a review refused mid-turn ("Agent is already processing") or one that interrupts the turn.
   *Response:* re-read `session/agent-session.ts` (`prompt`) and update `deliver.js`.
 
@@ -199,7 +210,7 @@ is newer. The daemon prints its version at start.
   called through `host_tool_call` (`id`, `toolCallId`, `toolName`, `arguments`) and answered with
   `host_tool_result` (`{ content, details }`, `isError`), as omp 18.10.3's `modes/rpc/host-tools.ts`
   and `rpc-types.ts` have them; a live 18.10.3 session accepted the tool and called it unprompted
-  for a CI check. The fake omp's frames follow that source. A change shows up as a `set_host_tools
+  for a CI check, and a live 18.19.0 one called it with the same frames. The fake omp's frames follow that source. A change shows up as a `set_host_tools
   failed` note in every agent window, or an agent whose schedule calls never answer. *Response:*
   re-read those files and `tools/essential-tools.ts`, then update `omp-session.js` and the fake.
 
@@ -211,7 +222,8 @@ is newer. The daemon prints its version at start.
   daemon/process-gate.js`) whose `tool_call` refuses a call by returning `{ block, reason }`, and
   learns the conversation from `ctx.sessionManager.getSessionId()`. All checked live against omp
   18.10.3 (a named service, an `async` job and a `cmd &` each followed, the refusal read and obeyed
-  by the agent). A change shows up as processes agents started missing from the Processes window,
+  by the agent); on 18.19.0 the gate refused an undeclared `async` job, the agent declared it and
+  retried, and the source keeps `details.service.pid` and the `__omp_worker_` helpers. A change shows up as processes agents started missing from the Processes window,
   or long-running starts no longer refused. *Response:* rerun that check (an agent starting the
   three) and follow omp's change.
 
@@ -226,7 +238,9 @@ is newer. The daemon prints its version at start.
 - **Decision reviews lean on `omp -p` and message timestamps.** `daemon/decisions.js` runs
   `omp -p --no-session --no-tools … --model @smol --thinking off --system-prompt <prompt> <turn>`
   and reads the decisions from its stdout, one a line; a turn is named by its user message's
-  `timestamp` (ms), which live frames and journals carry alike (omp 18.10.3). `--no-tools` does
+  `timestamp` (ms), which live frames and journals carry alike (omp 18.10.3; on 18.19.0 the
+  reviewer still answers one decision a line, and a failed `@smol` model's error is the reason
+  shown). `--no-tools` does
   not stop omp connecting the user's MCP servers, so each review takes about 5 s more than its
   model call. A change shows up as reviews that all fail (the reason is omp's last stderr line),
   that list omp's own output as decisions, or that show under no turn. *Response:* re-read
@@ -241,6 +255,9 @@ is newer. The daemon prints its version at start.
   `PI_BROWSER_RELAY`, `PI_BROWSER_CMUX` and `PI_BROWSER_TERN`, which override omp's
   `browser.relay`, `browser.cmux` and `browser.tern` settings (`tools/browser/relay/kind.ts`,
   `cmux/rpc.ts`, `tern/kind.ts`); a new way for omp to reach the user's browser is not covered.
+  omp 18.19.0 added one more browser of its own, its WebKit engine (`tools/browser/webkit/kind.ts`,
+  `PI_BROWSER_WEBKIT`), which an agent may get instead of Chrome for Testing: still a separate
+  browser, so nothing is set for it.
   A change shows up as Setup saying no provider is signed in while agents start, a login that
   waits forever for an answer the window never shows, or agents driving the user's Chrome
   with *A separate browser* chosen. *Response:* re-read `cli/models-cli.ts`,
@@ -327,8 +344,9 @@ is newer. The daemon prints its version at start.
   localhost.
 - **Some omp features may be TUI-only.** Anything omp does not expose over rpc
   is a parity gap for structured panes. Known: `!!cmd` (run, but keep the output
-  out of the model's context) has no rpc form, since `bash` takes only a command;
-  the pane runs it as the shell command `!cmd`, which fails visibly. *Response:*
+  out of the model's context): the pane runs it as the shell command `!cmd`, which
+  fails visibly, though omp 18.19.0's RPC `bash` now takes `excludeFromContext`
+  (offered when `ready.supportsBashExcludeFromContext` is true). *Response:*
   list the gaps; the terminal pane running omp's own TUI covers them until omp's
   rpc catches up.
 

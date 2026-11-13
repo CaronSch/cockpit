@@ -146,6 +146,8 @@ const KNOWN_UNRENDERED = new Set([
   'cache_warming_end',
   'host_tool_call', // omp asks the daemon to run its tool (daemon/schedule.js); the call's own tool frames show it
   'host_tool_cancel',
+  'manual_compaction_start', // a `compact`: the daemon's idle compaction notes it as it is sent and answered
+  'manual_compaction_end',
 ]);
 
 /** How a message reached a subagent that was not running, and so set it going again. */
@@ -779,7 +781,9 @@ function applyUpdate(state, frame) {
       item.blocks[at] = { kind: 'thinking', text: String(event.content ?? ''), redacted: false };
       break;
     case 'toolcall_start': {
-      const prev = current?.kind === 'toolCall' ? current : null;
+      // Under the `delta` filter the start carries the call opened (its id and name, no arguments yet).
+      const opened = event.block?.type === 'toolCall' ? toBlock(event.block) : null;
+      const prev = opened?.kind === 'toolCall' ? opened : current?.kind === 'toolCall' ? current : null;
       item.blocks[at] = { kind: 'toolCall', id: prev?.id ?? null, name: prev?.name ?? '', args: null, argsText: '', intent: prev?.intent ?? null };
       break;
     }
