@@ -15,7 +15,7 @@ export const TIPS = [
   'Start a line with `!` to run it as a shell command in the session’s directory, even while the agent works',
   'Send just `.` and the agent carries on with what it was doing, no prompt needed',
   '⌘↑ and ⌘↓ (Ctrl elsewhere) jump between the agent’s responses in a long conversation',
-  'Select text in a reply to Comment on it (quoted with your next prompt) or Ask about it on the side, without adding to the conversation',
+  'Select text in a reply to Comment on it (quoted with your next prompt) or Ask about it on the side, without adding to the conversation; C and A do the same',
   'Up in an empty message box steps back through this conversation’s prompts and `!` commands',
   'Esc in the message box stops a running turn',
   'Type `@` and a path to mention a file; Tab completes it',
