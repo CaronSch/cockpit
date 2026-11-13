@@ -106,6 +106,29 @@ describe('inline', () => {
   });
 });
 
+describe('wiki links', () => {
+  const wiki = (/** @type {string} */ target, /** @type {string} */ label) => ({ type: 'wikilink', target, label });
+
+  test('a target, a label after |, a heading after #, an embed; in a table the | is escaped', () => {
+    assert.deepEqual(parseInline('see [[Daily/2026-11-13]] and ![[Plan#Next steps|the plan]]'), [
+      { type: 'text', text: 'see ' },
+      wiki('Daily/2026-11-13', 'Daily/2026-11-13'),
+      { type: 'text', text: ' and ' },
+      wiki('Plan', 'the plan'),
+    ]);
+    assert.deepEqual(parseInline('[[Plan#Next steps]] [[#Below]]'), [wiki('Plan', 'Plan > Next steps'), { type: 'text', text: ' ' }, wiki('', 'Below')]);
+    const [table] = parseMarkdown('| a |\n|---|\n| [[Plan\\|the plan]] |');
+    assert.ok(table.type === 'table');
+    assert.deepEqual(table.rows[0][0], [wiki('Plan', 'the plan')]);
+  });
+
+  test('empty, unclosed, holding a bracket or a line break, or in code, they stay text', () => {
+    for (const text of ['[[]]', '[[open', '[[a]b]]', '[[a\nb]]', '`[[a]]`']) {
+      assert.ok(!JSON.stringify(parseInline(text)).includes('wikilink'), text);
+    }
+  });
+});
+
 describe('link safety', () => {
   test('http, https and mailto links become links', () => {
     assert.deepEqual(parseInline('[docs](https://example.com/a?b=1) <mailto:me@example.com>'), [

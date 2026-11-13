@@ -8,10 +8,12 @@
  * desktop notifications (sessions/notify.js). Below them the menu lists the daemon's settings
  * (daemon/settings.js), the same for every browser, while the daemon can be reached: its
  * switches, Phone access (with, while it is on, the QR code a phone signs in with), which
- * browser agents drive, and Accounts, which signs omp in to a model provider (ui/login.js).
+ * browser agents drive, the Obsidian vault wiki links are found in, and Accounts, which signs omp
+ * in to a model provider (ui/login.js).
  * The Setup window (widgets/setup.js) offers the same ones, Phone access in a step of its own.
  */
 import { button, el } from './dom.js';
+import { tildeHome } from './format.js';
 import { createAtom } from '../state/atom.js';
 import { createLogin } from './login.js';
 import { openOnHover } from './hover-menu.js';
@@ -243,6 +245,51 @@ export function browserChoice(daemon, choice) {
 }
 
 /**
+ * The Obsidian vault wiki links (`[[note]]`) are found in when the text they are in is in no vault
+ * (the daemon's `vault`, daemon/vaults.js): None, or one of the vaults Obsidian knows, each a radio
+ * changing the daemon's setting; `show` follows a change made elsewhere. Hidden while there is
+ * nothing to pick (no Obsidian, and none picked).
+ * @param {DaemonClient} daemon @param {string | null} vault
+ */
+function vaultChoice(daemon, vault) {
+  const root = el('fieldset', 'config-group');
+  root.hidden = true;
+  const name = `vault-${crypto.randomUUID().slice(0, 8)}`;
+  let current = vault;
+  /** @type {HTMLInputElement[]} */
+  let radios = [];
+  /** @param {string | null} next */
+  function show(next) {
+    current = next;
+    for (const radio of radios) radio.checked = radio.value === (next ?? '');
+  }
+  Promise.all([daemon.vaults(), daemon.config()]).then(
+    ([{ vaults }, { home }]) => {
+      const paths = current && !vaults.includes(current) ? [current, ...vaults] : vaults;
+      if (!paths.length) return;
+      root.append(el('legend', 'config-legend', 'Obsidian vault'), el('p', 'config-detail', 'Where [[wiki links]] lead from text in no vault'));
+      radios = [null, ...paths].map((path) => {
+        const row = el('label', 'config-setting');
+        const radio = el('input');
+        radio.type = 'radio';
+        radio.name = name;
+        radio.value = path ?? '';
+        radio.checked = path === current;
+        // The daemon tells every page, this one too; until then the radio shows the choice.
+        radio.addEventListener('change', () => radio.checked && daemon.changeSettings({ vault: path }).catch(() => show(current)));
+        const label = path ? path.slice(path.lastIndexOf('/') + 1) : 'None';
+        row.append(radio, el('span', '', label), el('span', 'config-detail', path ? tildeHome(path, home) : 'Wiki links lead only within a vault'));
+        root.append(row);
+        return radio;
+      });
+      root.hidden = false;
+    },
+    () => {},
+  );
+  return { root, show };
+}
+
+/**
  * Desktop notifications, as Config offers them: this browser's, off until turned on here (which
  * asks the browser's permission), and saying why when the browser will not show them.
  * @param {Notifier} notifier
@@ -295,6 +342,8 @@ export function createConfigMenu({ daemon, notifier }) {
   const daemonBoxes = new Map();
   /** The browser choice, while the menu is open with the daemon's settings. @type {ReturnType<typeof browserChoice> | null} */
   let browser = null;
+  /** The vault choice, while the menu is open with the daemon's settings. @type {ReturnType<typeof vaultChoice> | null} */
+  let vault = null;
   /** Phone access, while the menu is open with the daemon's settings. @type {ReturnType<typeof phoneAccess> | null} */
   let phone = null;
   /** Accounts, while the menu is open with the daemon's settings. @type {ReturnType<typeof accountsGroup> | null} */
@@ -304,6 +353,7 @@ export function createConfigMenu({ daemon, notifier }) {
     const atDaemon = daemon.settings();
     daemonBoxes.clear();
     browser = atDaemon ? browserChoice(daemon, atDaemon.browser) : null;
+    vault = atDaemon ? vaultChoice(daemon, atDaemon.vault) : null;
     phone = atDaemon ? phoneAccess(daemon) : null;
     accounts?.destroy();
     accounts = atDaemon ? accountsGroup(daemon) : null;
@@ -324,6 +374,7 @@ export function createConfigMenu({ daemon, notifier }) {
         : []),
       ...(phone ? [phone.root] : []),
       ...(browser ? [browser.root] : []),
+      ...(vault ? [vault.root] : []),
       ...(accounts ? [accounts.root] : []),
     );
   }
@@ -334,6 +385,7 @@ export function createConfigMenu({ daemon, notifier }) {
     if (!browser) return render();
     for (const [key, box] of daemonBoxes) box.checked = atDaemon[key];
     browser.show(atDaemon.browser);
+    vault?.show(atDaemon.vault);
     phone?.show();
   });
   daemon.onRemote(() => {

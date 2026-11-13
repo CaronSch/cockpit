@@ -133,19 +133,22 @@
   padding: var(--space-3);
 }
 
-/* A text file a reply names: opened as a tab with a click, placed with a drag (files/file-window.js). */
-.omp-transcript .md-file-ref {
+/*
+ * A text file a reply or a Markdown file names, or a note an Obsidian wiki link names: opened with
+ * a click, placed with a drag (files/file-window.js).
+ */
+:is(.omp-transcript, .fv-rendered) :is(.md-file-ref, .md-wiki-link) {
   text-decoration: underline dotted;
   text-underline-offset: 2px;
   cursor: pointer;
 }
 
-.omp-transcript .md-file-ref:hover {
+:is(.omp-transcript, .fv-rendered) :is(.md-file-ref, .md-wiki-link):hover {
   color: var(--color-accent);
 }
 
-/* Clicked, it was not there (a file of another repository, say): struck through, it opens nothing. */
-.omp-transcript .md-file-ref.is-missing {
+/* Clicked, it was not there (a file of another repository, a note no vault has): struck through, it opens nothing. */
+:is(.omp-transcript, .fv-rendered) :is(.md-file-ref, .md-wiki-link).is-missing {
   color: var(--color-text-faint);
   text-decoration: line-through;
   cursor: default;

@@ -12,6 +12,7 @@ import { SessionNotRunning } from './omp-session.js';
 import { OMP_ID } from './unread.js';
 import { isSettingsPatch } from './settings.js';
 import { TextFileRefused, listDirectory, readTextFile, resolvePath, writeTextFile } from './files.js';
+import { findWikiTarget, knownVaults } from './vaults.js';
 import { DeliveryRefused } from './deliver.js';
 import { ScheduleRefused } from './schedule.js';
 import { AnnotationRefused } from './annotations.js';
@@ -541,7 +542,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         '/api/settings': api({
           PUT: async (req) => {
             const patch = await readJson(req);
-            if (!isSettingsPatch(patch)) throw new HttpError(400, "expected some of { idleCompaction: boolean, decisionReview: boolean, adhd: boolean, browser: 'isolated' | 'relay' | 'omp', setupDone: boolean, remote: boolean }");
+            if (!isSettingsPatch(patch)) throw new HttpError(400, "expected some of { idleCompaction: boolean, decisionReview: boolean, adhd: boolean, browser: 'isolated' | 'relay' | 'omp', setupDone: boolean, remote: boolean, vault: string | null }");
             // The phone must not lock itself out (or anyone in): Phone access is switched on the Mac.
             if (listener.remote && Object.hasOwn(patch, 'remote')) throw new HttpError(403, 'Phone access is switched on the Mac');
             await settings.set(patch);
@@ -761,6 +762,18 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
             } catch (err) {
               throw err instanceof TextFileRefused ? new HttpError(err.status, err.message) : err;
             }
+          },
+        }),
+        '/api/vaults': api({ GET: async () => json({ vaults: await knownVaults() }) }),
+        '/api/wiki': api({
+          GET: async (req) => {
+            const query = new URL(req.url).searchParams;
+            const target = query.get('target') ?? '';
+            if (!target) throw new HttpError(400, 'expected ?target=<note>&from=<dir>');
+            const found = await findWikiTarget(target, resolvePath(query.get('from') ?? '', homedir()), settings.all().vault);
+            if (!found.vault) throw new HttpError(404, 'not in an Obsidian vault, and none is picked in Config');
+            if (!found.path) throw new HttpError(404, `no "${target}" in ${found.vault}`);
+            return json({ path: found.path });
           },
         }),
         '/api/sessions/:id/ui': api({

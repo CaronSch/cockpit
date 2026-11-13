@@ -6,6 +6,7 @@
  * `<file>` (state-file.js): `{ version: 1, settings: { [key]: value } }`; a key it lacks has
  * its default.
  */
+import { isAbsolute } from 'node:path';
 import { BROWSER_CHOICES } from './browser.js';
 import { loadStateFile } from './state-file.js';
 /** @import { BrowserChoice } from './browser.js' */
@@ -17,12 +18,14 @@ const VERSION = 1;
  * after every turn, list the decisions the agent took without its user (decisions.js); `adhd`:
  * agents shape their replies for a reader with ADHD (adhd.js); `browser`: which browser agents
  * drive (browser.js); `setupDone`: the user has been through Setup, so an empty screen no longer
- * opens it; `remote`: Phone access, the daemon also serving the owner's tailnet devices (remote.js).
- * @typedef {{ idleCompaction: boolean, decisionReview: boolean, adhd: boolean, browser: BrowserChoice, setupDone: boolean, remote: boolean }} DaemonSettings
+ * opens it; `remote`: Phone access, the daemon also serving the owner's tailnet devices (remote.js);
+ * `vault`: the Obsidian vault (an absolute path) wiki links are found in when the text they are in
+ * is in no vault (vaults.js), or none.
+ * @typedef {{ idleCompaction: boolean, decisionReview: boolean, adhd: boolean, browser: BrowserChoice, setupDone: boolean, remote: boolean, vault: string | null }} DaemonSettings
  */
 
 /** @type {Readonly<DaemonSettings>} */
-const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: false, remote: false });
+const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: false, remote: false, vault: null });
 
 /** Whether each setting may take a value. @type {Readonly<Record<keyof DaemonSettings, (value: unknown) => boolean>>} */
 const VALID = Object.freeze({
@@ -32,6 +35,7 @@ const VALID = Object.freeze({
   browser: (value) => BROWSER_CHOICES.includes(/** @type {BrowserChoice} */ (value)),
   setupDone: (value) => typeof value === 'boolean',
   remote: (value) => typeof value === 'boolean',
+  vault: (value) => value === null || (typeof value === 'string' && isAbsolute(value)),
 });
 
 /**

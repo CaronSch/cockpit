@@ -117,6 +117,8 @@ export class DaemonError extends Error {
  *   respondUi(session: string, response: Record<string, unknown>): Promise<void>,
  *   listFiles(dir: string): Promise<DirListing>,
  *   textFile(path: string): Promise<TextFile>,
+ *   wikiTarget(target: string, from: string): Promise<{ path: string }>,
+ *   vaults(): Promise<{ vaults: string[] }>,
  *   saveTextFile(path: string, text: string, base: string): Promise<{ ok: true, file: TextFile } | { ok: false, current: TextFile }>,
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
  *   checkUi(): Promise<void>,
@@ -838,6 +840,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     // A folder is found relative to home, as a new session's directory is.
     listFiles: (dir) => request(`/api/files?dir=${encodeURIComponent(dir)}`),
     textFile: (path) => request(`/api/text?path=${encodeURIComponent(path)}`),
+    wikiTarget: (target, from) => request(`/api/wiki?${new URLSearchParams({ target, from })}`),
+    vaults: () => request('/api/vaults'),
     async saveTextFile(path, text, base) {
       const result = await save('/api/text', { path, text, base }, false);
       return 'conflict' in result ? { ok: false, current: result.conflict } : { ok: true, file: result.answer };

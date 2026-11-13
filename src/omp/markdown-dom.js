@@ -13,7 +13,8 @@
  * So are text files (files/file-refs.js) where `files` asks for them, for the file window
  * (files/file-window.js): a path to one in plain text is a `md-file-ref` span, and a code span
  * holding just one gets the class, each with its `path` as written and the `line` named after
- * it, if any.
+ * it, if any. An Obsidian wiki link (`[[note]]`) there is a `md-wiki-link` span with its `wiki`
+ * target, which the window finds in a vault; elsewhere it is its text.
  */
 import temml from 'temml';
 import { el } from '../ui/dom.js';
@@ -147,6 +148,12 @@ function renderInline(node, options) {
     }
     case 'image':
       return renderImage(node.path, node.alt, options);
+    case 'wikilink': {
+      if (!options.files || !node.target) return document.createTextNode(node.label);
+      const link = el('span', 'md-wiki-link', node.label);
+      link.dataset.wiki = node.target;
+      return link;
+    }
     case 'math':
       return renderMath(node.tex, node.display);
   }
