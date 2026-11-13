@@ -247,11 +247,11 @@ is newer. The daemon prints its version at start.
   `cli/login-cli.ts`, `cli/oauth-terminal.ts` and `tools/browser.ts` (`resolveBrowserKind`),
   then update `setup.js`, `browser.js` and the fake's `models` and `login`.
 
-## When `gh` is upgraded past 2.92, or Cursor changes Bugbot
+## When `gh` is upgraded past 2.103.3, or Cursor changes Bugbot
 
 - **Pull requests lean on `gh`'s output.** `daemon/github.js` reads `gh pr list`/`pr view
   --json` fields, `gh pr diff`, the comment URL `gh pr comment` prints as its last line, and
-  `gh api --paginate --slurp` (gh 2.48 and later), as gh 2.92 gives them;
+  `gh api --paginate --slurp` (gh 2.48 and later), as gh 2.103.3 gives them;
   `tests/fixtures/fake-gh.js` copies those shapes. A change shows up as a directory whose pull
   requests are not offered (the reason is a parse error), or Bugbot not asked ("gh did not say
   where the comment is"). *Response:* compare `gh`'s output with the fake's and update both.

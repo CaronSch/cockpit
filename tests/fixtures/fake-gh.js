@@ -14,7 +14,7 @@
  * `bugbot go` makes Cursor Bugbot "review" `afterMs` later, with that body and those line
  * comments; comments made are kept in `issueComments`, Bugbot's reviews in `botReviews`.
  *
- * Shapes follow gh 2.92 and GitHub's REST API, in the fields the daemon reads.
+ * Shapes and error messages follow gh 2.103.3 and GitHub's REST API, in the fields the daemon reads.
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -64,7 +64,10 @@ if (args[0] === 'repo' && args[1] === 'list') {
 // Who is signed in (Setup's check, daemon/setup.js): `$FAKE_GH_USER`, `octocat` unless set; set empty, nobody.
 if (args[0] === 'api' && args[1] === 'user') {
   const user = process.env.FAKE_GH_USER ?? 'octocat';
-  if (!user) fail('To get started with GitHub CLI, please run:  gh auth login');
+  if (!user) {
+    process.stderr.write('To get started with GitHub CLI, please run:  gh auth login\nAlternatively, populate the GH_TOKEN environment variable with a GitHub API authentication token.\n');
+    process.exit(4);
+  }
   process.stdout.write(`${user}\n`);
   process.exit(0);
 }
@@ -117,7 +120,7 @@ if (group === 'repo' && verb === 'view') {
   /** @type {RegExpExecArray | null} */
   let m;
   if ((m = /^repos\/[^/]+\/[^/]+\/issues\/comments\/(\d+)$/.exec(path))) {
-    print((state.issueComments ?? []).find((/** @type {any} */ c) => c.id === Number(m?.[1])) ?? fail('HTTP 404: Not Found'));
+    print((state.issueComments ?? []).find((/** @type {any} */ c) => c.id === Number(m?.[1])) ?? fail('gh: Not Found (HTTP 404)'));
   } else if ((m = /^repos\/[^/]+\/[^/]+\/pulls\/(\d+)\/comments$/.exec(path))) {
     pages(pull(m[1]).reviewComments ?? []);
   } else if ((m = /^repos\/[^/]+\/[^/]+\/pulls\/(\d+)\/reviews$/.exec(path))) {
