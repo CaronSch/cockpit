@@ -544,11 +544,19 @@ What runs today:
   relative to the conversation's directory, or a bare name; in text or alone in a code span; a
   `:42` after it names a line) is marked: a click shows it in the file window this screen used
   last, or opens one as a tab of the agent window, and a drag places one where it is dropped, or
-  shows it in the file window it is dropped on (`src/files/file-window.js`). The window shows the
-  text with line numbers, the line asked for marked and scrolled to; Markdown, and CSV and TSV
+  shows it in the file window it is dropped on (`src/files/file-window.js`). So is an Obsidian
+  wiki link (`[[note]]`, `[[note#heading|label]]`, an embed `![[note]]`), shown by its label: the
+  daemon finds the file it names as Obsidian does (`GET /api/wiki`, `daemon/vaults.js`: a Markdown
+  note unless an extension is given, any case; beside the linking text, then from the vault's top,
+  then the shortest path ending in it), in the vault the text is in (a folder holding
+  `.obsidian/`), else the one picked in Config's **Obsidian vault** (the daemon's `vault`: None or
+  a vault Obsidian lists in its `obsidian.json`; hidden without Obsidian); one it cannot find is
+  struck through. A dragged one's window asks the daemon itself (`wiki` and `from` in its params).
+  The window shows the text with line numbers, the line asked for marked and scrolled to; Markdown, and CSV and TSV
   as a table (`src/files/csv.js`, drawn as a reply's tables are, with their Copy; the first 5000
-  rows), show rendered unless a line is asked for, with **Source** / **Rendered** to switch;
-  **Reload** reads it again,
+  rows), show rendered unless a line is asked for, with **Source** / **Rendered** to switch (a
+  rendered Markdown file's paths and wiki links open as a reply's do, read from its folder, so a
+  vault is read from note to note); **Reload** reads it again,
   as showing it again does. Opened from the palette, it asks for a path. The source view is
   editable, the rendered one is not: **Save** (Cmd/Ctrl+S) writes the file in place, and only
   then; unsaved edits are kept per path for the page's life (a window showing that file again
@@ -794,7 +802,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/daemon/client.js` — Browser side of the daemon connection: one event stream per page, shared by every widget.
 - `src/files/csv.js` — CSV and TSV as the file window (widgets/file.js) renders them: a table, drawn as an agent reply's Markdown tables are (omp/markdown-dom.js `renderTable`), so it looks and copies the same.
 - `src/files/file-refs.js` — Text files named in text the workbench shows (an agent's reply): which files the file window (widgets/file.js) shows, by extension (Markdown, JSON, plain text and common code), and the paths of such files in a run of text or a code span, with the line a `:42` after one names, kept free of the DOM so they can be tested.
-- `src/files/file-window.js` — Opening a file window (widgets/file.js) from text that names a text file (marked by omp/markdown-dom.js): a click opens it in the file window this screen used last, or as a tab of the window clicked in if there is none; a drag places a new one where it is dropped, or shows it in the file window it is dropped on.
+- `src/files/file-window.js` — Opening a file window (widgets/file.js) from text that names a text file, or a note through an Obsidian wiki link (both marked by omp/markdown-dom.js): a click opens it in the file window this screen used last, or as a tab of the window clicked in if there is none; a drag places a new one where it is dropped, or shows it in the file window it is dropped on.
 - `src/github/bugbot.js` — Cursor Bugbot's reviews, read from GitHub as the daemon's watcher (daemon/bugbot.js) finds them, and told to the agent: which review answers a `bugbot go` comment, and its findings as one message, kept free of I/O so they can be tested.
 - `src/github/diff.js` — A pull request's changes as the pull request window shows them: `gh pr diff`'s unified diff parsed into files, their hunks and each line with its numbers in the old and the new file, kept free of the DOM so it can be tested.
 - `src/github/pr-mention.js` — `#` pull request mentions typed in the agent pane's message box: the one the caret ends, the pull requests and repositories that match what is typed, and the text that completes it, kept free of the DOM so they can be tested.
@@ -930,6 +938,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/token.js` — The daemon's access token: random, created once, kept owner-only in the state directory so a browser stays signed in across daemon restarts.
 - `daemon/ui-files.js` — The files that make up the browser UI: which ones the daemon serves, and a version that changes whenever any of them does, so an open page can tell it is running older code.
 - `daemon/unread.js` — Which omp conversations have news their user has not read: kept in one small file in the state directory, so a mark outlives windows, browsers, daemon restarts and the session itself (a stopped session is a past one, still unread).
+- `daemon/vaults.js` — Obsidian vaults, for the wiki links (`[[note]]`) in agents' replies and Markdown files: the vaults Obsidian knows, the vault a folder is in, and the file a link names there, found as Obsidian finds it.
 - `daemon/wire.js` — Wire contract between the daemon and the browser: session metadata, stream events and HTTP payloads.
 - `daemon/workspace.js` — Workspaces: the screens of each one (a layout tree per browser window), kept by the daemon so a layout outlives a browser profile and an address change.
 
@@ -959,6 +968,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/processes.test.js`, `tests/remote.test.js`, `tests/snap.test.js`
+`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/processes.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/vaults.test.js`
 
 <!-- END GENERATED -->

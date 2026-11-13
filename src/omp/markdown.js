@@ -3,7 +3,7 @@
  *
  * Supported: paragraphs (newlines kept as line breaks), ATX headings, fenced code with a
  * language, inline code, bold/italic, bullet and numbered lists, block quotes, horizontal
- * rules, links and autolinks, `mermaid` diagrams and `vega-lite` charts (a closed fence), images on this machine (`![alt](/abs/or/~/path.png)`), and GFM tables (column alignment, inline formatting in cells;
+ * rules, links and autolinks, Obsidian wiki links (`[[note]]`, `[[note#heading|label]]`, embeds `![[note]]`), `mermaid` diagrams and `vega-lite` charts (a closed fence), images on this machine (`![alt](/abs/or/~/path.png)`), and GFM tables (column alignment, inline formatting in cells;
  * a table may start right under a paragraph line), and TeX math: `$$…$$` and `\[…\]` on their
  * own as display math, `$…$` and `\(…\)` inline (markdown-dom.js renders it). Raw HTML is
  * plain text. Only
@@ -19,6 +19,7 @@
  *   | { type: 'em', children: Inline[] }
  *   | { type: 'link', href: string, children: Inline[] }
  *   | { type: 'image', path: string, alt: string }
+ *   | { type: 'wikilink', target: string, label: string }
  *   | { type: 'break' }
  *   | { type: 'math', tex: string, display: boolean }
  * )} Inline
@@ -346,6 +347,16 @@ export function parseInline(text) {
       continue;
     }
 
+    if (text.startsWith('[[', ch === '!' ? i + 1 : i)) {
+      const wiki = parseWikiLink(text, i);
+      if (wiki) {
+        flush();
+        out.push(wiki.node);
+        i = wiki.next;
+        continue;
+      }
+    }
+
     if (ch === '!' && text[i + 1] === '[') {
       const image = parseImage(text, i);
       if (image) {
@@ -460,6 +471,29 @@ function parseEmphasis(text, start) {
     search = close + 1;
   }
   return null;
+}
+
+/** `[[…]]` (or the embed `![[…]]`) on one line, nothing in it but the closing brackets. */
+const WIKI_LINK = /^!?\[\[([^[\]\n]+)\]\]/;
+
+/**
+ * An Obsidian wiki link at `start`: the note it names (`target`, as written: the reader finds it
+ * in a vault) and the text it shows, as Obsidian shows it: its label after a `|` (written `\|` in
+ * a table), else the note and the heading after a `#`, `Note > Heading`. An embed (`![[…]]`) is a
+ * link too: the workbench shows no note inside another. A link to a heading of the same note has no
+ * target.
+ * @param {string} text @param {number} start @returns {{ node: Inline, next: number } | null}
+ */
+function parseWikiLink(text, start) {
+  const match = WIKI_LINK.exec(text.slice(start));
+  if (!match) return null;
+  const inner = match[1].replaceAll('\\|', '|');
+  const bar = inner.indexOf('|');
+  const path = bar === -1 ? inner : inner.slice(0, bar);
+  const target = path.split('#')[0].trim();
+  const label = (bar === -1 ? '' : inner.slice(bar + 1).trim()) || path.split('#').map((part) => part.trim()).filter(Boolean).join(' > ');
+  if (!label) return null;
+  return { node: { type: 'wikilink', target, label }, next: start + match[0].length };
 }
 
 /**

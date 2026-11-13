@@ -82,6 +82,10 @@
  *                                      GET, already there and `editable`), or 409 { error, current:
  *                                      TextFile } when it is no longer at version `base`; 422 when the
  *                                      file, or `text`, cannot be saved
+ *   GET    /api/vaults                 → { vaults: string[] }: the Obsidian vaults Obsidian knows (vaults.js)
+ *   GET    /api/wiki?target=t&from=dir → { path }: the file Obsidian wiki link `[[t]]` names, from text
+ *                                      in folder `dir` (path as `dir` above): in the vault `dir` is in,
+ *                                      else the settings' `vault`; 404 when there is no vault, or no such file
  *   GET    /api/scratchpads            → { pads: ScratchpadSummary[] } (most recently changed first)
  *   GET    /api/scratchpads/:id        → Scratchpad (empty text for a pad never written)
  *   PUT    /api/scratchpads/:id        { text, base } → { rev }, or 409 { error, current: Scratchpad }

@@ -1,12 +1,16 @@
 /**
  * A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code
  * (files/file-refs.js), through the daemon (`/api/text`). A path an agent's reply names opens one
- * with a click, or a drag (files/file-window.js).
+ * with a click, or a drag (files/file-window.js), as do the paths and Obsidian wiki links
+ * (`[[note]]`) in a Markdown file shown rendered, read from the file's folder: a vault's notes are
+ * read from one to the next.
  *
  * Params (persisted with the layout): `path` (absolute, or from home with `~/`), `line` (the one
  * to show, marked, or null) and `rendered` (Markdown, or CSV and TSV as a table (files/csv.js),
- * shown rendered rather than as their source; unset, they are, unless a line is asked for).
- * Without a path, the window asks for one. The file is read when shown and again on Reload.
+ * shown rendered rather than as their source; unset, they are, unless a line is asked for). A
+ * window dropped from a wiki link has no path yet but the link (`wiki`) and the folder of the text
+ * it was in (`from`): it asks the daemon which file that is (daemon/vaults.js), and shows it.
+ * Without either, the window asks for a path. The file is read when shown and again on Reload.
  *
  * The source view is editable; the rendered one only shows. Edits are saved with Save (or
  * Cmd/Ctrl+S), never by themselves: the file is the user's, or an agent's, not the window's. Until
@@ -23,6 +27,7 @@ import { tabIndent } from '../ui/indent.js';
 import { getDaemon } from '../daemon/client.js';
 import { renderMarkdown, renderTable } from '../omp/markdown-dom.js';
 import { delimitedTable, tableDelimiter } from '../files/csv.js';
+import { attachFileRefs } from '../files/file-window.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { TextFile } from '../../daemon/wire.js' */
@@ -70,12 +75,15 @@ function createFileWindow(body, ctx, daemon) {
       path: typeof ctx.params.path === 'string' && ctx.params.path ? ctx.params.path : null,
       line: Number.isInteger(line) && line > 0 ? line : null,
       rendered: typeof ctx.params.rendered === 'boolean' ? ctx.params.rendered : null,
+      wiki: typeof ctx.params.wiki === 'string' && ctx.params.wiki ? ctx.params.wiki : null,
+      from: typeof ctx.params.from === 'string' ? ctx.params.from : '',
     };
   };
 
   const root = el('div', 'fv');
   body.append(root);
   tabIndent(root);
+  const offFileRefs = attachFileRefs({ root, ctx, cwd: () => (file ? file.path.slice(0, file.path.lastIndexOf('/')) || '/' : null) });
   const saveBtn = button('omp-tool-btn', 'Save', () => void save());
   const revertBtn = button('omp-tool-btn', 'Revert', () => {
     if (file) drafts.delete(file.path);
@@ -125,7 +133,8 @@ function createFileWindow(body, ctx, daemon) {
   const viewKey = (file) => JSON.stringify([file.path, rendered(), params().line, file.editable]);
 
   async function load() {
-    const { path } = params();
+    const { path, wiki, from } = params();
+    if (!path && wiki) return findWiki(wiki, from);
     if (!path) return draw();
     const mine = ++loads;
     shownPath = path;
@@ -251,12 +260,23 @@ function createFileWindow(body, ctx, daemon) {
     return bar;
   }
 
+  /** Shows the file wiki link `wiki` names, from text in folder `from`, once the daemon has found it. @param {string} wiki @param {string} from */
+  async function findWiki(wiki, from) {
+    const mine = ++loads;
+    try {
+      const { path } = await daemon.wikiTarget(wiki, from);
+      if (mine === loads && !destroyed) ctx.setParams({ path, line: null, wiki: null, from: null });
+    } catch (err) {
+      if (mine === loads && !destroyed) root.replaceChildren(el('p', 'omp-error fv-message', `Cannot show [[${wiki}]]: ${errorMessage(err)}`));
+    }
+  }
+
   /** Markdown rendered, or CSV and TSV as a table. @param {string} path @param {string} text */
   function renderedView(path, text) {
     const node = el('div', 'fv-body fv-rendered omp-md');
     const delimiter = tableDelimiter(path);
     if (delimiter === null) {
-      node.append(renderMarkdown(text));
+      node.append(renderMarkdown(text, { files: true }));
       return node;
     }
     const table = delimitedTable(text, delimiter);
@@ -366,6 +386,7 @@ function createFileWindow(body, ctx, daemon) {
     destroy() {
       // Unsaved edits stay in `drafts`: the file shown again brings them back.
       destroyed = true;
+      offFileRefs();
       resize.disconnect();
       offZoom();
       ctx.headActions.replaceChildren();

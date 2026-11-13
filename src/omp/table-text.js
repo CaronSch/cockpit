@@ -14,6 +14,7 @@ export function inlineText(inlines) {
       if (node.type === 'break') return '\n';
       if (node.type === 'math') return node.tex; // its TeX, the closest plain text there is
       if (node.type === 'image') return node.alt;
+      if (node.type === 'wikilink') return node.label;
       return inlineText(node.children);
     })
     .join('');
