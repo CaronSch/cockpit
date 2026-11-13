@@ -20,7 +20,6 @@ import { createGithub } from '../daemon/github.js';
 import { createDelivery } from '../daemon/deliver.js';
 import { loadBugbot } from '../daemon/bugbot.js';
 import { loadSchedule, scheduleTools } from '../daemon/schedule.js';
-import { loadProcesses } from '../daemon/processes.js';
 import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
 import { createPlans } from '../daemon/plans.js';
 import { createAnnotations } from '../daemon/annotations.js';
@@ -66,8 +65,6 @@ let delivery;
 let bugbot;
 /** @type {import('../daemon/schedule.js').Schedule} */
 let schedule;
-/** @type {import('../daemon/processes.js').Processes} */
-let processes;
 /** @type {import('../daemon/decisions.js').DecisionReviews} */
 let decisions;
 /** @type {import('../daemon/setup.js').Setup} */
@@ -217,8 +214,6 @@ beforeAll(async () => {
   delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
   bugbot = await loadBugbot({ file: join(cwd, 'state', 'bugbot.json'), github, delivery, pollMs: 100 });
   schedule = await loadSchedule({ file: join(cwd, 'state', 'schedule.json'), deliver: delivery.deliver, archivedFrom: (file) => history.archivedFrom(file) });
-  // The ledger sees no process of the machine's: the suite never stops one.
-  processes = await loadProcesses({ hub, file: join(cwd, 'state', 'processes.json'), os: { processes: async () => [], sockets: async () => new Map(), directories: async () => new Map() } });
   // Setup's fake omp keeps who is signed in in a file of the suite's own, with nobody to start with.
   setup = createSetup({ ompPath: FAKE_OMP, ghPath: FAKE_GH, tailscalePath: FAKE_TAILSCALE, env: { ...process.env, FAKE_OMP_AUTH: join(cwd, 'fake-omp-auth') } });
   tailscaleStatus = join(cwd, 'tailscale-status.json');
@@ -248,7 +243,6 @@ beforeAll(async () => {
     delivery,
     bugbot,
     schedule,
-    processes,
     setup,
     remote,
     terminals,
@@ -273,7 +267,6 @@ afterAll(async () => {
   await terminals.closeAll();
   bugbot.stop();
   schedule.stop();
-  processes.close();
   await hub.closeAll();
   await server.stop(true);
 });
