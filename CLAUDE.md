@@ -451,11 +451,16 @@ What runs today:
   their time, and past that one goes on beside the one before it, its stem bent back along the
   axis; a missed one is marked so. A label is the start of its conversation's name; a conversation with news its user has not read (a
   scheduled prompt that ran, say) is ringed in the accent, as an unread window is, until it is read
-  anywhere. Dragged onto the grid, a label opens its conversation as a Sessions row does; while
-  one is dragged a bin shows over the axis (the drag controller's `target`), which archives the
-  conversation or deletes the scheduled prompt (`DELETE /api/schedule/:id`). A click on a
-  conversation shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
-  /api/schedule/:id`; saved, it is no longer missed). Only a failure is written under the axis.
+  anywhere. Labels are dragged by the window itself, not the drag controller: a scheduled prompt
+  dragged along the axis moves as far along the scale as the pointer does, its new date and time
+  on the ghost and a mark on the axis, and dropped there runs then (`PATCH /api/schedule/:id`,
+  to the minute, a minute ahead at the least). Out of the window (its head included) the ghost
+  says **Delete Task** for a prompt, **Archive Session** for a conversation, and dropping does
+  it (`DELETE /api/schedule/:id`; archived as Sessions' Archive does); a conversation dropped
+  inside stays as it was, and Esc ends any drag with nothing done. A click on a conversation
+  shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
+  /api/schedule/:id`; saved or moved, it is no longer missed). Only a failure is written under
+  the axis.
 - Plans and the Plan window (the `plan` widget). For a large task an agent keeps a running plan
   its user can watch, as omp's own TUI shows its todo list: the system prompt asks it to lay out the
   steps with omp's `todo` tool and the goal and approach with the daemon's `plan` tool (`new`), then
@@ -938,7 +943,7 @@ particular, move a capability into "Current state" when it ships.
 - `omp` — Agent: Chat with a coding agent in a directory
 - `terminal` — Terminal: A shell in a directory; closing its window ends it
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
-- `timeline` — Timeline: Agents by when they were last active, and the prompts they scheduled: drag one out to open it, or onto the bin to archive or delete
+- `timeline` — Timeline: Agents by when they were last active, and the prompts they scheduled: drag a prompt along the axis to move it, or a label out to delete or archive it
 - `processes` — Processes: What your agents left running: who started each and why, for how long, what it costs; stop leftovers
 - `plan` — Plan: An agent’s plan for a large task, live: its steps as they finish, and the decisions it took along the way and why
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page

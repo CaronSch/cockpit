@@ -10,11 +10,6 @@
  * tab where the pointer is between its tabs; dropped on its middle, as its last tab, unless the
  * window takes what is dropped there itself (`canDropInto`). A tab of a stack dragged along its
  * own strip moves within it, and dragged to an edge of its own slot, leaves it.
- *
- * A drag may also end on an element of the window it started from (`target`: the timeline's
- * bin): armed (`is-drop-armed`) while the drag runs, lit (`is-drop-over`) while the pointer is
- * over it, when the grid previews nothing; released there, the grid stays as it was and `onEnd`
- * says so (`onTarget`).
  */
 import { applyDrop, canDropInto, findSlot } from '../layout/grid-model.js';
 import { computeLayout } from '../layout/compute-layout.js';
@@ -38,8 +33,8 @@ import { computeDropZone, detectEdgeZone } from '../layout/drop-zone.js';
  * @property {(tree: Tree, options?: { animate?: boolean }) => void} commitTree
  * @property {(dragging: boolean) => void} [onDragStateChange]
  */
-/** @typedef {{ activated: boolean, dropped: boolean, onTarget: boolean }} DragEndResult */
-/** @typedef {{ label?: string, onEnd?: (result: DragEndResult) => void, target?: HTMLElement | null }} DragStartOptions */
+/** @typedef {{ activated: boolean, dropped: boolean }} DragEndResult */
+/** @typedef {{ label?: string, onEnd?: (result: DragEndResult) => void }} DragStartOptions */
 /**
  * Where a drop would land; `tab`, for a drop into a slot's tabs: the head's bottom edge and a
  * caret where the tab goes, in grid coordinates.
@@ -63,8 +58,6 @@ import { computeDropZone, detectEdgeZone } from '../layout/drop-zone.js';
  * @property {number} frame
  * @property {DOMRect} [gridRect] set once the drag activates
  * @property {HTMLDivElement} [ghost] set once the drag activates
- * @property {HTMLElement | null} target the element it may end on instead of the grid
- * @property {boolean} overTarget whether the pointer is over `target`
  */
 /** @typedef {ReturnType<typeof createDragController>} DragController */
 
@@ -96,7 +89,7 @@ const swallow = (event) => {
  * started from (Send, Resume), whose click would do what the drag did not. Call it as the
  * pointer is released: the click follows in the same task.
  */
-const swallowReleaseClick = () => {
+export const swallowReleaseClick = () => {
   window.addEventListener('click', swallow, { capture: true, once: true });
   setTimeout(() => window.removeEventListener('click', swallow, true));
 };
@@ -181,15 +174,6 @@ export function createDragController(app) {
     if (!ghost || !gridRect) return;
     ghost.style.transform = `translate3d(${clientX}px, ${clientY}px, 0)`;
 
-    const over = isOverTarget(s);
-    if (over !== s.overTarget) {
-      s.overTarget = over;
-      s.target?.classList.toggle('is-drop-over', over);
-    }
-    if (over) {
-      s.key = 'target';
-      return clearTarget(s);
-    }
     const hit = hitTest(s, gridRect, clientX, clientY);
     if (hit === undefined) return;
     const where = hit?.target.kind === 'tab' ? `${hit.target.id}:${hit.target.index}` : hit?.target.kind === 'leaf' ? hit.target.id : '';
@@ -218,13 +202,6 @@ export function createDragController(app) {
     indicator.show({ ...rect, y: top, h: rect.y + rect.h - top }, app.getBounds(), `Tab · ${rect.w}×${rect.h}`, tab.caret);
   }
 
-  /** Whether the pointer is over the drag's own target now. @param {DragSession} s */
-  function isOverTarget(s) {
-    const box = s.target?.getBoundingClientRect();
-    const { clientX: x, clientY: y } = s.latest;
-    return Boolean(box && box.width > 0 && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom);
-  }
-
   /** @param {DragSession} s */
   function activate(s) {
     s.active = true;
@@ -236,7 +213,6 @@ export function createDragController(app) {
     document.body.append(ghost);
     document.body.classList.add('is-dragging');
     if (s.source.kind === 'move') app.frameElement(s.source.id)?.classList.add('is-drag-source');
-    s.target?.classList.add('is-drop-armed');
     app.onDragStateChange?.(true);
   }
 
@@ -264,20 +240,17 @@ export function createDragController(app) {
     window.removeEventListener('pointercancel', onPointerCancel);
     window.removeEventListener('keydown', onKeyDown, true);
 
-    // The last move may not have been drawn yet: where the pointer is now decides.
-    const onTarget = commit && s.active && isOverTarget(s);
     if (s.active) {
       s.ghost?.remove();
       document.body.classList.remove('is-dragging');
       if (s.source.kind === 'move') app.frameElement(s.source.id)?.classList.remove('is-drag-source');
-      s.target?.classList.remove('is-drop-armed', 'is-drop-over');
       indicator.hide();
       app.onDragStateChange?.(false);
     }
 
-    const dropped = Boolean(commit && s.active && s.nextTree && !onTarget);
+    const dropped = Boolean(commit && s.active && s.nextTree);
     if (dropped) app.commitTree(s.nextTree, { animate: true });
-    s.onEnd?.({ activated: s.active, dropped, onTarget });
+    s.onEnd?.({ activated: s.active, dropped });
   }
 
   /** @param {PointerEvent} event */
@@ -305,7 +278,7 @@ export function createDragController(app) {
   }
 
   /** @param {DropSource} source @param {PointerEvent} event @param {DragStartOptions} [options] */
-  function start(source, event, { label = 'Widget', onEnd, target = null } = {}) {
+  function start(source, event, { label = 'Widget', onEnd } = {}) {
     if (session || event.button !== 0 || app.isStacked?.()) return;
     session = {
       source,
@@ -321,8 +294,6 @@ export function createDragController(app) {
       op: null,
       nextTree: null,
       frame: 0,
-      target,
-      overTarget: false,
     };
     window.addEventListener('pointermove', onPointerMove, { passive: false });
     window.addEventListener('pointerup', onPointerUp);
