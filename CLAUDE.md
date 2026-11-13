@@ -878,7 +878,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it, or to open a copy of this one in a new tab.
 - `src/ui/settings.js` — App-wide settings, picked in the top bar's Config menu and kept per browser.
 - `src/ui/spotlight.js` — Spotlight: a floating search over every conversation, as macOS's.
-- `src/ui/update-notice.js` — The "updated, reload" notice in the top bar: a Reload button among the top bar's own, shown while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
+- `src/ui/update-notice.js` — The top bar's update notice: Update while Cockpit's checkout is behind the newest `main` on GitHub (daemon/updates.js), else Reload while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.
 - `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).
@@ -935,6 +935,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/token.js` — The daemon's access token: random, created once, kept owner-only in the state directory so a browser stays signed in across daemon restarts.
 - `daemon/ui-files.js` — The files that make up the browser UI: which ones the daemon serves, and a version that changes whenever any of them does, so an open page can tell it is running older code.
 - `daemon/unread.js` — Which omp conversations have news their user has not read: kept in one small file in the state directory, so a mark outlives windows, browsers, daemon restarts and the session itself (a stopped session is a past one, still unread).
+- `daemon/updates.js` — Updates to Cockpit itself: whether its own checkout is behind the newest `main` on GitHub, and taking that update from the workbench (the top bar's Update, src/ui/update-notice.js).
 - `daemon/wire.js` — Wire contract between the daemon and the browser: session metadata, stream events and HTTP payloads.
 - `daemon/workspace.js` — Workspaces: the screens of each one (a layout tree per browser window), kept by the daemon so a layout outlives a browser profile and an address change.
 
@@ -964,6 +965,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/processes.test.js`, `tests/remote.test.js`, `tests/snap.test.js`
+`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/processes.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/updates.test.js`
 
 <!-- END GENERATED -->

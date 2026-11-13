@@ -56,6 +56,7 @@ import { loadSettings } from './settings.js';
 import { createSetup, ompVersion } from './setup.js';
 import { createTerminals } from './terminals.js';
 import { RESTART_AFTER_MS, noteInterrupted, startSuccessor, wakeInterrupted } from './restart.js';
+import { createUpdates } from './updates.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const ROOT = resolve(import.meta.dir, '..');
@@ -168,6 +169,8 @@ remote.subscribe((state) => {
   else if (state.state === 'error') console.error(`[daemon] Phone access: ${state.error}`);
 });
 const terminals = createTerminals();
+// Whether this checkout is behind the newest `main`, and taking it from the top bar.
+const updates = createUpdates({ root: ROOT, restart });
 const daemon = createDaemon({
   hub,
   history,
@@ -192,6 +195,7 @@ const daemon = createDaemon({
   terminals,
   ask: (question) => askAgent(question, { ompPath, history }),
   restart,
+  updates,
   token,
   root: ROOT,
   config: {
@@ -222,6 +226,8 @@ ompVersion(ompPath).then((version) =>
 );
 // The agents a restart (`bun run restart`) cut short carry on.
 void wakeInterrupted(stateDir, delivery.deliver);
+// Every hour (and now): is there a newer Cockpit on GitHub?
+updates.start();
 
 let stopping = false;
 /** Stops the daemon, as Ctrl+C does; with `successor`, starts it again once stopped (restart.js). */
@@ -229,6 +235,7 @@ async function shutdown(successor = false) {
   if (stopping) return process.exit(1); // second Ctrl+C: stop waiting
   stopping = true;
   void server.stop(true);
+  updates.stop();
   void remote.stop();
   setup.login.cancel();
   await Promise.all([hub.closeAll(), terminals.closeAll()]);

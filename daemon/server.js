@@ -19,6 +19,7 @@ import { ProcessRefused } from './processes.js';
 import { GithubError } from './github.js';
 import { LoginRefused } from './setup.js';
 import { TerminalRefused } from './terminals.js';
+import { UpdateRefused } from './updates.js';
 import { REPO } from '../src/github/pr-refs.js';
 import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
@@ -26,9 +27,10 @@ import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
 import { isValidTree } from '../src/layout/grid-model.js';
 import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion } from './ui-files.js';
 /** @import { BunRequest, Server } from 'bun' */
-/** @import { BugbotWatch, ConversationTarget, DaemonConfig, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent, TerminalEvent, TerminalInfo } from './wire.js' */
+/** @import { BugbotWatch, ConversationTarget, DaemonConfig, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent, TerminalEvent, TerminalInfo, UpdateState } from './wire.js' */
 /** @import { Hub } from './hub.js' */
 /** @import { RemoteAccess } from './remote.js' */
+/** @import { Updates } from './updates.js' */
 /** @typedef {ReturnType<typeof import('./history.js').createHistory>} History */
 /** Asks an agent a question about the conversations (ask.js `askAgent`). @typedef {(question: string) => Promise<{ answer: string, sessions: PastSession[] }>} Ask */
 /** @typedef {ReturnType<typeof import('./scratchpad.js').createScratchpads>} Scratchpads */
@@ -244,7 +246,7 @@ async function compressed(req, res) {
 /** @param {unknown} err */
 function errorResponse(err) {
   const status =
-    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused || err instanceof TerminalRefused || err instanceof ProcessRefused || err instanceof AnnotationRefused
+    err instanceof HttpError || err instanceof JournalRefused || err instanceof DeliveryRefused || err instanceof LoginRefused || err instanceof ScheduleRefused || err instanceof TerminalRefused || err instanceof ProcessRefused || err instanceof AnnotationRefused || err instanceof UpdateRefused
       ? err.status
       : err instanceof SessionNotRunning
         ? 409
@@ -259,14 +261,14 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, annotations: Annotations, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, processes: Processes, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, annotations: Annotations, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, processes: Processes, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, updates: Updates, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, plans, annotations, settings, github, delivery, bugbot, schedule, processes, setup, remote, terminals, ask, restart, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, plans, annotations, settings, github, delivery, bugbot, schedule, processes, setup, remote, terminals, ask, restart, updates, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -302,13 +304,13 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           for (const [id, seq] of cursors) cursors.set(id, Math.max(seq, lastSeen));
           replay = [...hub.since(Math.min(...cursors.values()))].filter((event) => event.seq > (cursors.get(event.session) ?? Infinity));
         }
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), terminals: terminals.list(), stream: streamId })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), update: updates.state(), terminals: terminals.list(), stream: streamId })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of replay) send(event);
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
-        // No id: scratchpad, history, unread, pins, forks, decisions, plan, annotations, settings, bugbot, schedule, login, activity, remote and terminal events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, forks, decisions, plan, annotations, settings, bugbot, schedule, login, activity, remote, update and terminal events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
@@ -331,6 +333,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           write(`data: ${JSON.stringify({ kind: 'activity', session, activity })}\n\n`),
         );
         const offRemote = remote.subscribe((/** @type {RemoteState} */ state) => write(`data: ${JSON.stringify({ kind: 'remote', ...state })}\n\n`));
+        const offUpdate = updates.subscribe((/** @type {UpdateState | null} */ update) => write(`data: ${JSON.stringify({ kind: 'update', update })}\n\n`));
         const offTerminals = terminals.subscribe((/** @type {TerminalInfo[]} */ all) => write(`data: ${JSON.stringify({ kind: 'terminals', terminals: all })}\n\n`));
         /** @type {Map<string, () => void>} */
         const watches = new Map();
@@ -353,6 +356,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           offLogin();
           offActivity();
           offRemote();
+          offUpdate();
           offTerminals();
           streams.delete(streamId);
           for (const stopWatching of watches.values()) stopWatching();
@@ -678,6 +682,11 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
             restart();
             return json({}, 202);
           },
+        }),
+        // GET looks again at what was fetched last; POST takes the update and restarts (updates.js).
+        '/api/update': api({
+          GET: async () => json({ update: await updates.refresh() }),
+          POST: async () => json({ update: await updates.apply() }, 202),
         }),
         '/api/schedule/:id': api({
           PATCH: async (req) => json(await schedule.edit(req.params.id, (await readJson(req)) ?? {})),

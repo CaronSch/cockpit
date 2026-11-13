@@ -25,7 +25,8 @@
  *
  * It also tracks the UI files' version (see daemon/ui-files.js): the first one the daemon
  * reports is the code this page loaded, and `onUiChange` hears when the files served stop
- * being, or become again, those.
+ * being, or become again, those; and whether Cockpit's checkout is behind the newest `main`
+ * (`update`, daemon/updates.js), as the daemon last said.
  *
  * Terminals (daemon/terminals.js) come on the same stream: every page hears which are running,
  * and the output of those its windows watch. Watching one has the daemon send its scrollback
@@ -34,7 +35,7 @@
  * meanwhile together, so it arrives in order.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, ProcessList, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, ProcessList, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, UpdateState, Workspace } from '../../daemon/wire.js' */
 /** @import { Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -120,6 +121,10 @@ export class DaemonError extends Error {
  *   saveTextFile(path: string, text: string, base: string): Promise<{ ok: true, file: TextFile } | { ok: false, current: TextFile }>,
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
  *   checkUi(): Promise<void>,
+ *   update(): UpdateState | null,
+ *   onUpdate(fn: () => void): () => void,
+ *   checkUpdate(): Promise<void>,
+ *   applyUpdate(): Promise<void>,
  *   pulls(at: { repo: string } | { cwd: string }): Promise<PullList>,
  *   repos(cwd: string): Promise<RepoList>,
  *   pull(at: { repo: string } | { cwd: string }, number: number): Promise<Pull>,
@@ -330,6 +335,15 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     remote = next;
     for (const fn of remoteListeners) fn();
   };
+  /** Null while unknown. @type {UpdateState | null} */
+  let update = null;
+  /** @type {Set<() => void>} */
+  const updateListeners = new Set();
+  /** @param {UpdateState | null} next */
+  const setUpdate = (next) => {
+    update = next;
+    for (const fn of updateListeners) fn();
+  };
   /** The terminals running, as the daemon last said. @type {readonly TerminalInfo[]} */
   let terminals = [];
   /** @type {Set<() => void>} */
@@ -409,6 +423,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     activities = new Map(Object.entries(hello.activity));
     activityChanged();
     setRemote(hello.remote);
+    // A daemon from before updates.js says nothing: no update known.
+    setUpdate(hello.update ?? null);
     // Changes made while this page was away were not heard: ask again.
     decisions.clear();
     decisionsChanged();
@@ -439,6 +455,7 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (event.kind === 'schedule') return setScheduled(event.tasks);
     if (event.kind === 'login') return setLogin(event.login);
     if (event.kind === 'remote') return setRemote({ state: event.state, error: event.error });
+    if (event.kind === 'update') return setUpdate(event.update);
     if (event.kind === 'terminals') return setTerminals(event.terminals);
     if (event.kind === 'terminal') {
       for (const fn of terminalViewers.get(event.id) ?? []) fn(event);
@@ -804,6 +821,20 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     async checkUi() {
       const body = await request('/api/ui').catch(() => null);
       noteUi(body?.version);
+    },
+    update: () => update,
+    onUpdate(fn) {
+      updateListeners.add(fn);
+      return () => updateListeners.delete(fn);
+    },
+    /** Has the daemon count again what the checkout lacks: a `git pull` made by hand ends the offer. */
+    async checkUpdate() {
+      const body = await request('/api/update').catch(() => null);
+      if (body && 'update' in body) setUpdate(body.update);
+    },
+    /** Takes the update: the daemon fast-forwards to the newest `main` and restarts (`onReset` follows). */
+    async applyUpdate() {
+      await request('/api/update', { method: 'POST' });
     },
     config() {
       // Fixed for the daemon's lifetime: asked once, and again after a failure or a restart.

@@ -166,6 +166,16 @@ input[type='radio'],
   border-radius: var(--radius-m);
 }
 
+/* The update notice (src/ui/update-notice.js): its buttons are the top bar's own. */
+.update-notice {
+  display: contents;
+}
+
+/* "Update available" only informs, through its tooltip: nothing to press. */
+.topbar-actions .update-info {
+  cursor: help;
+}
+
 /* + Widget: its full-width ＋ brings room of its own on the left, so the button gives less. */
 #palette-toggle {
   gap: 4px;
