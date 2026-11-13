@@ -1,6 +1,6 @@
 /* Timeline window, laid out for a wide, short window: one axis along its bottom, idle
-   conversations left of now, busy ones at now, scheduled prompts right of it, to scale; a bin
-   over the axis while a label is dragged. */
+   conversations left of now, busy ones at now, scheduled prompts right of it, to scale; while a
+   prompt is dragged along it, a mark at the time it would run. */
 
 /* Short windows are the usual: the whole height for the axis and its labels. */
 .widget-body:has(> .timeline) {
@@ -304,7 +304,7 @@
 .timeline-chip.is-failed {
   border-color: var(--color-danger);
 }
-/* ── what went wrong, if anything; the bin, over the axis while a label is dragged ── */
+/* ── what went wrong, if anything ── */
 .timeline-status {
   flex: none;
   margin: 0 var(--space-2);
@@ -318,30 +318,31 @@
   display: none;
 }
 
-.timeline-bin {
+/* ── dragging a label ── */
+.timeline-chip.is-drag-source {
+  opacity: 0.4;
+}
+
+/* Where a dragged prompt would run, across the future side down to the axis. */
+.timeline-drop-mark {
   position: absolute;
-  bottom: 0;
-  left: 50%;
-  z-index: 1;
-  display: none;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--space-4);
-  transform: translateX(-50%);
-  border: 1px dashed var(--color-line-strong);
-  border-radius: 12px;
-  background: var(--color-surface);
-  color: var(--color-text-dim);
-  transition: transform var(--duration-fast) var(--ease-snap);
+  top: 0;
+  bottom: calc(var(--timeline-axis-h) - 4px);
+  width: 2px;
+  transform: translateX(-1px);
+  background: var(--color-accent);
+  pointer-events: none;
 }
 
-.timeline-bin.is-drop-armed {
-  display: flex;
+/* A conversation's whole name can be long: the ghost shows its start. */
+.timeline-ghost {
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.timeline-bin.is-drop-over {
-  transform: translateX(-50%) scale(1.15);
-  border-style: solid;
+/* Out of the window: dropping it deletes the prompt or archives the conversation. */
+.timeline-ghost.is-removing {
   border-color: var(--color-danger);
   color: var(--color-danger);
 }

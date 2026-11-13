@@ -17,6 +17,13 @@ const MIN_SPAN_MS = 24 * 3_600_000;
 export const position = (ms, span) => Math.min(1, Math.log1p(Math.max(0, ms) / KNEE_MS) / Math.log1p(span / KNEE_MS));
 
 /**
+ * How far from now the point `p` along the future side is (0 at now, 1 at `span`): `position`
+ * undone, for a label dragged along the axis.
+ * @param {number} p @param {number} span
+ */
+export const offsetAt = (p, span) => KNEE_MS * Math.expm1(Math.min(1, Math.max(0, p)) * Math.log1p(span / KNEE_MS));
+
+/**
  * How far ahead the future side reaches: a day at least, else past the furthest prompt by enough
  * that its label, starting at its time, still fits before the end: a share `room` of the side
  * (its label's width over the side's), and a quarter of the way further at the least.

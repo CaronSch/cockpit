@@ -39,10 +39,7 @@ import plan from './plan.js';
  * opens it as a new tab beside that window (a new window if there is none);
  * `ctx.dragWidget(type, params, pointerdown)` lets the user drop it where they want, exactly
  * like dragging from the palette (a plain click does nothing): onto a window's middle or head,
- * it stacks there as a tab; with `into`, the middle of a window of `type` shows it instead;
- * with `target`, onto that element of the window's own instead (a bin), which then gets
- * `is-drop-armed` while the drag runs and `is-drop-over` while the pointer is over it, and
- * `onEnd` hears `onTarget`.
+ * it stacks there as a tab; with `into`, the middle of a window of `type` shows it instead.
  * `ctx.setUnread(true)` lights the window's border (and its tab's dot, in a stack): it has
  * news its user has not seen.
  * `ctx.setLabel(text)` names what the window shows (e.g. the agent window's conversation) in
@@ -78,7 +75,7 @@ import plan from './plan.js';
  *   showWidget(type: string, params: LeafParams): void,
  *   showInTab(type: string, params: LeafParams, match: TabMatch): void,
  *   openTab(type: string, params: LeafParams): void,
- *   dragWidget(type: string, params: LeafParams, event: PointerEvent, options?: { label?: string, into?: boolean, onEnd?: (result: DragEndResult) => void, target?: HTMLElement }): void,
+ *   dragWidget(type: string, params: LeafParams, event: PointerEvent, options?: { label?: string, into?: boolean, onEnd?: (result: DragEndResult) => void }): void,
  *   setUnread(unread: boolean): void,
  *   setLabel(text: string | null): void,
  *   readonly headActions: HTMLElement,

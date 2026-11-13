@@ -9,10 +9,12 @@
  *
  * A label is the start of its conversation's name; pointing at it shows the whole. One with news
  * its user has not read (a scheduled prompt that ran, say) is ringed in blue until it is read,
- * here or anywhere. Dragged onto the grid a label opens the conversation in an agent window, as a
- * Sessions row does; dragged onto the bin that appears meanwhile, it archives the conversation or
- * deletes the scheduled prompt (a future one). A click on a conversation shows it in the agent
- * window this screen used last; on a scheduled prompt it edits the prompt and its time, in place.
+ * here or anywhere. A scheduled prompt dragged along the axis runs where it is dropped (to the
+ * minute, a minute ahead at the least). Any label dragged out of the window says what dropping it
+ * there does, and dropping does it: the scheduled prompt is deleted, the conversation archived; a
+ * conversation dropped back inside stays as it was. A click on a conversation shows it in the
+ * agent window this screen used last; on a scheduled prompt it edits the prompt and its time, in
+ * place.
  *
  * Archived conversations are not shown, nor the prompts scheduled for them, which wait until the
  * conversation is restored. A prompt missed while the daemon was off or the Mac slept is marked
@@ -20,11 +22,12 @@
  * it is still wanted; one whose last delivery failed is marked so, with the reason.
  */
 import { button, el } from '../ui/dom.js';
+import { swallowReleaseClick } from '../interaction/drag-controller.js';
 import { errorMessage } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { displayTitle, sortSessions } from '../sessions/order.js';
 import { conversationMatch, listConversations, runningState, showConversation } from '../sessions/running.js';
-import { futureSpan, pack, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
+import { futureSpan, offsetAt, pack, position, ticks, toLocalInput, whenLabel } from '../timeline/scale.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { PastSession, ScheduledTask } from '../../daemon/wire.js' */
@@ -34,12 +37,18 @@ import { futureSpan, pack, position, ticks, toLocalInput, whenLabel } from '../t
 const CLOCK_MS = 30_000;
 /** Space between two labels in one lane of the future side, and between lanes. */
 const GAP_PX = 6;
+/** How far a press on a label moves before it is a drag. */
+const DRAG_PX = 4;
+const MINUTE_MS = 60_000;
+
+/** When a dragged prompt would run, as its ghost says it: the date and the time. @param {number} at */
+const runsAt = (at) => new Date(at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 export default {
   type: 'timeline',
   title: 'Timeline',
   glyph: '⇥',
-  description: 'Agents by when they were last active, and the prompts they scheduled: drag one out to open it, or onto the bin to archive or delete',
+  description: 'Agents by when they were last active, and the prompts they scheduled: drag a prompt along the axis to move it, or a label out to delete or archive it',
 
   /** @param {HTMLElement} body @param {WidgetContext} ctx */
   mount(body, ctx) {
@@ -64,23 +73,24 @@ function createTimeline(body, ctx, daemon) {
   const futureList = el('ol', 'timeline-list timeline-future-list');
   futureList.setAttribute('aria-label', 'Scheduled prompts, the soonest first');
   const nothing = el('p', 'timeline-empty', 'Nothing scheduled');
-  future.append(axis, futureList, nothing);
+  // While a scheduled prompt is dragged along the axis: the time it would run at.
+  const mark = el('span', 'timeline-drop-mark');
+  mark.hidden = true;
+  future.append(axis, futureList, nothing, mark);
   track.append(past, now, future);
-  const bin = el('div', 'timeline-bin');
-  bin.setAttribute('aria-hidden', 'true');
   const status = el('p', 'timeline-status');
   status.setAttribute('aria-live', 'polite');
   // The editor of a scheduled prompt: in the top layer (a popover), so it is not cut off by the
   // timeline's edges.
   const editor = createEditor();
-  root.append(track, status, bin, editor.el);
+  root.append(track, status, editor.el);
   body.append(root);
 
   /** @type {PastSession[]} */
   let sessions = [];
   /** @type {string | null} */
   let error = null;
-  /** Why the last archive or delete failed, until the next one. @type {string | null} */
+  /** Why the last archive, delete or move failed, until the next one. @type {string | null} */
   let actionError = null;
   let requestSeq = 0;
   /**
@@ -97,6 +107,10 @@ function createTimeline(body, ctx, daemon) {
   let followNow = true;
   /** The latest conversation as last drawn. @type {string | null} */
   let shownLatest = null;
+  /** The future side's span as last drawn: a drag along the axis reads times off it. */
+  let shownSpan = futureSpan(0);
+  /** The drag a press on a label began, until it is released. @type {{ cancel: () => void } | null} */
+  let drag = null;
   let frame = 0;
   const scheduleDraw = () => {
     frame ||= requestAnimationFrame(() => {
@@ -179,7 +193,9 @@ function createTimeline(body, ctx, daemon) {
   function paint(chip, c, classes) {
     const state = stateOf(c);
     const name = nameOf(c);
-    put(chip, 'className', `timeline-chip ${classes}${state ? ` is-${state}` : ''}${isUnread(c) ? ' is-unread' : ''}`);
+    // Dragged, it stays dimmed as it is redrawn.
+    const dragged = chip.classList.contains('is-drag-source') ? ' is-drag-source' : '';
+    put(chip, 'className', `timeline-chip ${classes}${state ? ` is-${state}` : ''}${isUnread(c) ? ' is-unread' : ''}${dragged}`);
     if (chip.getAttribute('aria-label') !== name) chip.setAttribute('aria-label', name);
     put(/** @type {HTMLElement} */ (chip.querySelector('.timeline-name')), 'textContent', name);
   }
@@ -256,6 +272,7 @@ function createTimeline(body, ctx, daemon) {
     const furthest = tasks.at(-1);
     const room = furthest && width > 0 ? (/** @type {HTMLElement} */ (futureNodes.get(furthest.task.id)).offsetWidth + GAP_PX) / width : 0;
     const span = futureSpan(furthest ? furthest.task.dueAt - at : 0, room);
+    shownSpan = span;
     axis.replaceChildren(
       ...ticks(span, width).map((t) => {
         const tick = el('span', 'timeline-tick', t.label);
@@ -367,23 +384,125 @@ function createTimeline(body, ctx, daemon) {
     draw();
   }
 
+  /** Moves a scheduled prompt to run at `dueAt`; as an edit does, that ends its missed or failed mark. @param {ScheduledTask} task @param {number} dueAt */
+  async function reschedule(task, dueAt) {
+    actionError = null;
+    try {
+      await daemon.editScheduled(task.id, { dueAt });
+    } catch (err) {
+      actionError = `Could not move the scheduled prompt: ${errorMessage(err)}`;
+    }
+    draw();
+  }
+
+  /**
+   * A press on a label, until it is released: past `DRAG_PX`, a drag, its ghost following the
+   * pointer. A scheduled prompt moves along the scale as far as the pointer does from where it was
+   * pressed, its new date and time on the ghost and marked on the axis. Out of the window (its
+   * head included) the ghost says what dropping does: "Delete Task" for a prompt, "Archive
+   * Session" for a conversation. A conversation dropped inside stays as it was; Esc ends any drag
+   * with nothing done.
+   * @param {HTMLElement} chip @param {{ conversation: Listed, task: ScheduledTask | null }} what @param {PointerEvent} event
+   */
+  function startDrag(chip, { conversation, task }, event) {
+    const pane = body.parentElement ?? body;
+    const { pointerId, clientX: originX, clientY: originY } = event;
+    // The scale as drawn when the press began, and where on it the prompt was.
+    const span = shownSpan;
+    const from = task ? position(task.dueAt - Date.now(), span) : 0;
+    /** @type {HTMLElement | null} */
+    let ghost = null;
+    let outside = false;
+    /** When a scheduled prompt dropped now runs; null while dropping moves nothing. @type {number | null} */
+    let dueAt = null;
+
+    /** @param {number} x @param {number} y */
+    function follow(x, y) {
+      if (!ghost) return;
+      const box = pane.getBoundingClientRect();
+      outside = x < box.left || x > box.right || y < box.top || y > box.bottom;
+      const at = Date.now();
+      const width = future.clientWidth;
+      dueAt = null;
+      if (task && !outside && x !== originX && width > 0) {
+        const moved = Math.round((at + offsetAt(from + (x - originX) / width, span)) / MINUTE_MS) * MINUTE_MS;
+        // A minute ahead at the least, so a prompt dropped on now does not run as it lands.
+        dueAt = Math.max(moved, Math.ceil((at + MINUTE_MS) / MINUTE_MS) * MINUTE_MS);
+      }
+      ghost.classList.toggle('is-removing', outside);
+      if (outside) ghost.textContent = task ? 'Delete Task' : 'Archive Session';
+      // The time first: a long name is cut short at the ghost's end.
+      else if (task) ghost.textContent = `${runsAt(dueAt ?? task.dueAt)} · ${nameOf(conversation)}`;
+      else ghost.textContent = nameOf(conversation);
+      ghost.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      mark.hidden = dueAt === null;
+      if (dueAt !== null) mark.style.left = `${position(dueAt - at, span) * width}px`;
+    }
+
+    /** @param {PointerEvent} e */
+    function onMove(e) {
+      if (e.pointerId !== pointerId) return;
+      if (!ghost) {
+        if (Math.hypot(e.clientX - originX, e.clientY - originY) < DRAG_PX) return;
+        ghost = el('div', 'drag-ghost timeline-ghost');
+        document.body.append(ghost);
+        document.body.classList.add('is-dragging');
+        chip.classList.add('is-drag-source');
+      }
+      e.preventDefault();
+      follow(e.clientX, e.clientY);
+    }
+    /** @param {PointerEvent} e */
+    function onUp(e) {
+      if (e.pointerId !== pointerId) return;
+      // The release that ends a drag is no click: it would show the conversation or edit the prompt.
+      if (ghost) swallowReleaseClick();
+      follow(e.clientX, e.clientY);
+      end(true);
+    }
+    /** @param {PointerEvent} e */
+    function onCancel(e) {
+      if (e.pointerId === pointerId) end(false);
+    }
+    /** @param {KeyboardEvent} e */
+    function onKey(e) {
+      if (e.key !== 'Escape' || !ghost) return;
+      e.stopPropagation();
+      e.preventDefault();
+      end(false);
+      // The pointer is still down: its release ends the gesture Esc cancelled.
+      window.addEventListener('pointerup', swallowReleaseClick, { once: true });
+    }
+
+    /** @param {boolean} commit */
+    function end(commit) {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('keydown', onKey, true);
+      drag = null;
+      if (!ghost) return;
+      ghost.remove();
+      document.body.classList.remove('is-dragging');
+      chip.classList.remove('is-drag-source');
+      mark.hidden = true;
+      if (!commit) return;
+      if (outside) void (task ? unschedule(task) : archive(conversation));
+      else if (task && dueAt !== null) void reschedule(task, dueAt);
+    }
+
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('keydown', onKey, true);
+    return { cancel: () => end(false) };
+  }
+
   root.addEventListener('pointerdown', (event) => {
     const chip = chipAt(event.target);
     const what = chip && shown.get(chip);
-    if (event.button !== 0 || !what) return;
-    const { conversation, task } = what;
-    bin.textContent = task ? 'Delete' : 'Archive';
-    const params = showConversation({ file: conversation.file, meta: conversation.meta, cwd: conversation.cwd, name: nameOf(conversation) });
-    ctx.dragWidget('omp', params, event, {
-      label: nameOf(conversation),
-      into: true,
-      target: bin,
-      onEnd: ({ dropped, onTarget }) => {
-        if (onTarget) void (task ? unschedule(task) : archive(conversation));
-        // Dropped, it shows in an agent window: that reads it, as a click does.
-        else if (dropped) read(conversation);
-      },
-    });
+    if (event.button !== 0 || !what || drag) return;
+    drag = startDrag(chip, what, event);
   });
   /** @param {HTMLElement} chip */
   function activate(chip) {
@@ -521,6 +640,7 @@ function createTimeline(body, ctx, daemon) {
       clearInterval(clock);
       resized.disconnect();
       cancelAnimationFrame(frame);
+      drag?.cancel();
       editor.close();
       root.remove();
     },
