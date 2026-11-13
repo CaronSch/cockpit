@@ -35,8 +35,11 @@ Planned capabilities:
 - **Notes**: free-form notes with screenshots next to the agents, any
   number of them, each openable in several windows.
 - **Terminal panes**: a real shell (and omp's own TUI, if wanted).
-- **Process view**: beside the Processes window's memory, CPU and connections (below), each
-  process's disk and network I/O.
+- **Process view**: the processes each agent runs, and their CPU, memory and I/O. A first
+  ledger of what agents left running was built and reverted: omp already ends a conversation's
+  jobs and services when it sleeps, so little is ever left; a process whose parent is gone is
+  not abandoned (omp's own shared browser is one, in use); and a lifetime an agent declares
+  flags a job still at work once it overruns.
 - **Telemetry**: every model call, tool call, process and file-system access,
   including reads and data sent to model providers.
 
@@ -55,16 +58,14 @@ Planned capabilities:
   and with the `PI_BROWSER_*` variables the Agents’ browser setting picks (`daemon/browser.js`).
   Every omp is also given the daemon's own tools (omp's RPC host tools: `set_host_tools` as it is
   set up, `host_tool_call` answered with `host_tool_result`; `HostTools` in
-  `daemon/omp-session.js`, several joined by `allHostTools`): the `schedule` tool (`daemon/schedule.js`), the
-  `plan` tool (`daemon/plans.js`) and the `processes` tool (`daemon/processes.js`), and loads an extension of the daemon's (`-e
-  daemon/process-gate.js`): the gate that has an agent declare each long-running process it starts. omp is the `omp` on PATH unless `--omp`
+  `daemon/omp-session.js`, several joined by `allHostTools`): the `schedule` tool (`daemon/schedule.js`) and the
+  `plan` tool (`daemon/plans.js`). omp is the `omp` on PATH unless `--omp`
   says otherwise. Prefer Bun's own APIs where they make the code smaller.
   It also runs the Terminal windows' shells (`daemon/terminals.js`): the user's login shell in a
   pseudo-terminal of Bun's own (`Bun.spawn`'s `terminal`), owned like omp, never by a window.
   The workbench is self-contained: it shows agents it launched and does not attach
-  to sessions started in other terminals. It reads the machine's process table every few seconds
-  for the processes its agents start (`daemon/processes.js`, `daemon/process-table.js`); later it
-  also proxies model calls and observes the filesystem.
+  to sessions started in other terminals. Later it also samples process trees,
+  proxies model calls and observes the filesystem.
 - **Wire** (`daemon/wire.js`): a JSON API for commands and one Server-Sent Events
   stream per page carrying every session's events in order: each omp stdout frame
   verbatim, each frame the daemon wrote to omp, stderr lines, undecodable stdout
@@ -476,35 +477,6 @@ What runs today:
   plan before, a click away), all live. From the palette it lists every plan, most recently
   changed first (`GET /api/plans`), to pick one; **All plans** goes back to the list. The phone
   shows the Plan line but opens no Plan window.
-- The process ledger and the Processes window (the `processes` widget). A `bash` call that starts
-  a named service (`name`) or a background job (`async`) runs only once its command ends with a
-  declaration in the agent's own words, `# purpose: … ; lifetime: …` (`daemon/process-commands.js`):
-  the gate omp loads refuses it otherwise and says how (`daemon/process-gate.js`, an omp extension's
-  `tool_call`). Nothing an agent reads about declaring gives examples, units or limits, on the
-  owner's word, so as not to steer it; any lifetime goes, "forever" too. The daemon reads the
-  process table every 5 s (`ps`; `lsof` for ports and connections every 15 s, and for orphans'
-  directories every minute) and keeps a ledger (`daemon/processes.js`, `~/.cockpit/processes.json`):
-  a named service by the pid omp's result names; a background job as the topmost process under a
-  session's omp that started during one of its `bash` calls and outlived it (omp's own helpers
-  aside), with that call's declaration, or none (*undeclared*, its call's intent as its purpose);
-  and an orphan (its parent gone) of the user's, running in or from a directory one of the daemon's
-  conversations worked in, as *Unowned*. Each has its owners (conversations, by omp's id): one
-  wants it for as long as it declared (a length of time from then, for good, or words naming no
-  time: while its conversation is awake), an undeclared one while its conversation is awake. Once
-  none does it is a *leftover*, flagged until the user has seen it (`POST /api/processes/seen`),
-  never stopped by itself; the user can keep one, which is then never flagged. A process is named
-  by its pid and start time, which Stop checks before it sends TERM to it and what it started,
-  then KILL to what is left 3 s later. Memory, CPU, connections and an hour of samples are kept in
-  memory; ended processes stay 30 days. Agents have a `processes` tool: `list` what runs in their
-  project, `reuse` one (with their own purpose and lifetime: they own it too), `stop` one only they
-  own or a leftover; a declared start that would duplicate one running in the project (its
-  command, or a port it names) goes ahead, and the gate tells the agent of the other beside the
-  call's result. The window (polling `GET /api/processes` every 5 s) groups running processes by
-  project, leftovers first, Unowned last, then the last 30 days behind a toggle; a row shows what
-  the OS saw (age, memory, CPU, ports, connections, last activity) apart from what the agent says
-  (purpose, lifetime), opens to the full command and an hour of memory and CPU, and has Stop (asked
-  first, naming its other owners and open connections) and Keep. A leftover flagged since the user
-  last looked lights the window's border until they come into it.
 - Nothing pops up on hover but the top bar's Config and + Widget menus (`src/ui/hover-menu.js`:
   open while pointed at, pinned by a click): no tooltips (no `title` attributes), and no other
   menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
@@ -885,7 +857,6 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
 - `src/widgets/omp.js` — The agent pane: a conversation with an omp coding agent in a chosen directory, through the daemon, rendered from omp's structured event stream.
 - `src/widgets/plan.js` — An agent's plan for a large task, live beside the conversation it is for (daemon/plans.js): the goal and approach the agent wrote, its steps (its todo list) ticked off as they finish, and the decisions it took along the way and why, the newest first.
-- `src/widgets/processes.js` — The processes cockpit's agents left running: the named services and background jobs they started, and orphans found in their directories, with who owns each and why, for how long, and what it costs; leftovers can be stopped or kept, and the last 30 days are listed below them.
 - `src/widgets/registry.js` — Widgets the palette can add, keyed by type.
 - `src/widgets/scratchpad.js` — Notes beside the agents: text with screenshots and files in it, filling its window.
 - `src/widgets/sessions.js` — omp conversations, one list, sortable and narrowed to a directory.
@@ -917,10 +888,6 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
 - `daemon/plans.js` — Plans: for a large task, an agent keeps a plan its user watches live beside the conversation (the Plan window, src/widgets/plan.js, and the Plan line at the foot of the agent window): the goal and approach, the steps, and a log of the decisions it took along the way and why.
-- `daemon/process-commands.js` — What the commands agents start say about themselves: the declaration an agent adds to a named service or a background job (a trailing shell comment, `# purpose: … ; lifetime: …`, in its own words), how long that lifetime is, the ports a command names, and the secret-looking values a command line must not show.
-- `daemon/process-gate.js` — The gate every omp the daemon launches loads (`-e`, omp-session.js): an omp extension that has the agent declare each long-running process before starting it.
-- `daemon/process-table.js` — What the OS says about processes, read with `ps` and `lsof`: every process with its parent, owner, memory, CPU, start time and command line; the TCP ports some listen on and the connections they hold; and their working directories.
-- `daemon/processes.js` — The process ledger: the long-running processes cockpit's agents start, each with who started it, why and for how long (what the agent said), and what the OS saw of it (memory, CPU, ports, connections, activity), from start to end, kept 30 days after it ends, so the owner can see what is running, what was left behind, and how long anything ran.
 - `daemon/remote.js` — Phone access (settings.js `remote`): while it is on, the daemon also serves the owner's own devices on their tailnet, through a second listener bound to the Mac's Tailscale IPv4 with the same routes as loopback (server.js), behind a whois gate.
 - `daemon/restart.js` — Restarting the daemon from the inside (`bun run restart`, scripts/restart.js), so an agent working on the workbench itself can take up its own changes and carry on afterwards.
 - `daemon/schedule.js` — Scheduled prompts: an agent sends its own conversation a prompt later, at a set time or after a while, through the `schedule` tool the daemon gives every omp it launches (omp's RPC host tools: omp-session.js `HostTools`).
@@ -945,7 +912,6 @@ particular, move a capability into "Current state" when it ships.
 - `terminal` — Terminal: A shell in a directory; closing its window ends it
 - `sessions` — Sessions: Agent conversations: click or drag one to show it in an agent window
 - `timeline` — Timeline: Agents by when they were last active, and the prompts they scheduled: drag a prompt along the axis to move it, or a label out to delete or archive it
-- `processes` — Processes: What your agents left running: who started each and why, for how long, what it costs; stop leftovers
 - `plan` — Plan: An agent’s plan for a large task, live: its steps as they finish, and the decisions it took along the way and why
 - `scratchpad` — Notes: Notes with screenshots and files; each new window starts a fresh page
 - `github` — Pull request: Review a GitHub pull request beside its agent: comment, ask, and send it all back
@@ -965,6 +931,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/processes.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/updates.test.js`
+`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/updates.test.js`
 
 <!-- END GENERATED -->

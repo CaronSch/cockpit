@@ -12,9 +12,8 @@
  * prompt that says something.
  *
  * The daemon gives the agent tools of its own (omp's RPC host tools, `HostTools`: the
- * `schedule` tool, schedule.js, and the `processes` tool, processes.js), which omp asks the daemon
- * to run when the agent calls one, and loads an extension of its own into omp: the gate that has
- * the agent declare each long-running process it starts (process-gate.js).
+ * `schedule` tool, schedule.js, and the `plan` tool, plans.js), which omp asks the daemon to run
+ * when the agent calls one.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -64,8 +63,6 @@ export const APPEND_SYSTEM_PROMPT =
 
 /** omp settings every session runs with, over the user's own (`--config`): plain titles. */
 const OMP_OVERLAY = join(import.meta.dir, 'omp-overlay.yml');
-/** The extension every session runs with (`-e`): the long-running processes gate. */
-const PROCESS_GATE = join(import.meta.dir, 'process-gate.js');
 
 /** Successful responses after which omp is logged in to other providers. */
 const LOGIN_CHANGING_COMMANDS = new Set(['login', 'logout']);
@@ -177,7 +174,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   let child = null;
   try {
     const from = resume ? ['--resume', resume] : fork ? ['--fork', fork] : [];
-    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--config', OMP_OVERLAY, '-e', PROCESS_GATE, '--append-system-prompt', appendSystemPrompt, ...from], {
+    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--config', OMP_OVERLAY, '--append-system-prompt', appendSystemPrompt, ...from], {
       cwd,
       env: { ...process.env, ...env },
       stdin: 'pipe',

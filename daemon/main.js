@@ -30,7 +30,6 @@ import { parseArgs } from 'node:util';
 import { JournalRefused, createHistory } from './history.js';
 import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
 import { loadSchedule, scheduleTools } from './schedule.js';
-import { loadProcesses, processesTools } from './processes.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
 import { createPlans, planTools } from './plans.js';
 import { createAnnotations } from './annotations.js';
@@ -119,10 +118,9 @@ const hub = createHub({
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     });
   },
-  // A rewound conversation goes on under a new id: its forks are still its forks, its processes its processes, its plan its plan, its annotations its annotations.
+  // A rewound conversation goes on under a new id: its forks are still its forks, its plan its plan, its annotations its annotations.
   onRewoundId: (from, to) => {
     void forks.moved(from, to);
-    processes.moved(from, to);
     void plans.moved(from, to).catch((err) => console.error(`[daemon] could not move the plan of conversation ${from}:`, err));
     void annotations.moved(from, to).catch((err) => console.error(`[daemon] could not move the annotations of conversation ${from}:`, err));
   },
@@ -134,11 +132,10 @@ const hub = createHub({
     appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd),
     env: { ...browserEnv(settings.all().browser), COCKPIT_PORT: String(port), COCKPIT_STATE_DIR: stateDir },
   }),
-  // Every agent may schedule prompts for its own conversation, keep a plan for it, and sees the processes agents left running.
+  // Every agent may schedule prompts for its own conversation and keep a plan for it.
   hostTools: allHostTools(
     scheduleTools(() => schedule),
     planTools(() => plans),
-    processesTools(() => processes),
   ),
 });
 // Switched, a setting reaches a conversation as it next wakes: idle ones go to sleep now.
@@ -158,7 +155,6 @@ const schedule = await loadSchedule({
   deliver: delivery.deliver,
   archivedFrom: (file) => history.archivedFrom(file),
 }).catch(unreadable);
-const processes = await loadProcesses({ hub, file: join(stateDir, 'processes.json') }).catch(unreadable);
 const scratchpadDir = join(stateDir, 'scratchpads');
 const setup = createSetup({ ompPath, ghPath, tailscalePath });
 // Phone access serves the same routes on the tailnet: `daemon` is there by the time it is switched on.
@@ -189,7 +185,6 @@ const daemon = createDaemon({
   delivery,
   bugbot,
   schedule,
-  processes,
   setup,
   remote,
   terminals,
