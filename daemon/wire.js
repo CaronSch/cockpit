@@ -103,6 +103,11 @@
  *                                      journal, 409 when it is archived
  *   POST   /api/restart                → 202: the daemon restarts in a moment, as it was started, and
  *                                      wakes the agents it cut short (`restart.js`; `bun run restart`)
+ *   GET    /api/update                 → { update: UpdateState | null }: whether Cockpit's checkout is
+ *                                      behind `origin/main`, counted again from what was fetched last
+ *   POST   /api/update                 → 202 { update }: fast-forwards the checkout to `origin/main` and
+ *                                      restarts as POST /api/restart does; 409 when there is no update
+ *                                      or it is `blocked`, 500 when git failed (`updates.js`)
  *   PATCH  /api/schedule/:id           { prompt?, dueAt? } → ScheduledTask: the user changed a scheduled
  *                                      prompt (its text, its time in epoch ms, or both; it is no longer
  *                                      missed); 400 for an empty prompt or a time past
@@ -257,10 +262,11 @@
  * `bugbot` holds the Bugbot reviews watched for (see `bugbot.js`); `schedule` the prompts agents
  * scheduled (see `schedule.js`); `login` the Setup window's
  * `omp login`, null if none ran since the daemon started (see `setup.js`). `activity` holds
- * how every awake session is doing, by session id; `remote` how Phone access is (`remote.js`).
+ * how every awake session is doing, by session id; `remote` how Phone access is (`remote.js`);
+ * `update` whether Cockpit's checkout is behind the newest `main` (`updates.js`).
  * `terminals` are the terminals running (`terminals.js`); `stream` names this connection, for
  * watching a terminal on it (PUT /api/terminals/:id/watchers/:stream).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState, terminals: TerminalInfo[], stream: string }} HelloEvent
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState, update: UpdateState | null, terminals: TerminalInfo[], stream: string }} HelloEvent
  */
 
 /**
@@ -283,6 +289,15 @@
  * the token); all three null otherwise.
  * @typedef {RemoteState & { url: string | null, login: string | null, qr: string | null }} RemoteInfo
  */
+
+/**
+ * Cockpit's own checkout against the newest `main` (updates.js; null when unknown, or not a git
+ * checkout with `origin/main`): how many commits it lacks (`behind`), why the workbench cannot
+ * take them itself (`blocked`, null when it can), whether it is taking them now (`updating`), and
+ * why the last try failed (`error`). GET /api/update looks again; POST takes the update.
+ * @typedef {{ behind: number, blocked: string | null, updating: boolean, error: string | null }} UpdateState
+ */
+/** Sent to every page after the update state changed. @typedef {{ kind: 'update', update: UpdateState | null }} UpdateEvent */
 
 /** A scratchpad's text; `rev` names this exact text (a hash of it). @typedef {{ text: string, rev: string }} Scratchpad */
 /** @typedef {{ id: string, title: string, modifiedAt: number, size: number }} ScratchpadSummary */
@@ -324,7 +339,7 @@
  * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
  */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

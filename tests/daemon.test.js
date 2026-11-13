@@ -27,6 +27,7 @@ import { createAnnotations } from '../daemon/annotations.js';
 import { askAgent } from '../daemon/ask.js';
 import { createSetup } from '../daemon/setup.js';
 import { createTerminals } from '../daemon/terminals.js';
+import { createUpdates } from '../daemon/updates.js';
 /** @import { RemoteState, RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
 /** @import { DaemonOptions } from '../daemon/server.js' */
 /** @import { RemoteAccess } from '../daemon/remote.js' */
@@ -196,7 +197,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'plan' && e.kind !== 'annotations' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.kind !== 'terminals' && e.kind !== 'terminal' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'plan' && e.kind !== 'annotations' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.kind !== 'update' && e.kind !== 'terminals' && e.kind !== 'terminal' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -253,6 +254,8 @@ beforeAll(async () => {
     terminals,
     ask: (question) => askAgent(question, { ompPath: FAKE_OMP, history }),
     restart: () => restarts++,
+    // A temporary directory is no git checkout: never an update to offer.
+    updates: createUpdates({ root: cwd, restart: () => restarts++ }),
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
     workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),

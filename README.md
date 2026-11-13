@@ -53,6 +53,12 @@ digits and dashes; the default is `main`). Windows at two different addresses at
 once (say `127.0.0.1` and `localhost`) do not see which screens the other has
 open.
 
+**Updates.** Every hour the daemon checks GitHub for a newer `main`. When there is one, the top bar
+shows **Update**: it fast-forwards the checkout the daemon runs from, restarts the daemon (agents
+cut short carry on, as after `bun run restart`) and reloads the page. Where that would be more than
+a fast-forward of a clean `main` (another branch, local changes or commits, or new dependencies to
+install), it shows **Update available** instead, and its tooltip says why.
+
 **Phone.** Read and answer your agents from an Android phone over
 [Tailscale](https://tailscale.com). Sign in to Tailscale on the Mac and the phone with the same
 account, turn on **Phone access** (in Setup or Config), and scan its QR code once. The phone
