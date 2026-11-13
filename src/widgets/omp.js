@@ -41,6 +41,7 @@ import { createComposer } from '../omp/composer.js';
 import { afreshCommand, composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
 import { pickTip, renderWelcome } from '../omp/welcome.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
+import { attachAnnotationMarks } from '../omp/annotation-marks.js';
 import { attachDragHighlight } from '../omp/drag-highlight.js';
 import { createSuggestions } from '../omp/suggestions.js';
 import { createFileSuggest } from '../omp/file-suggest.js';
@@ -212,6 +213,8 @@ function createPane(body, ctx, daemon) {
   const offSchedule = daemon.onSchedule(() => schedule());
   // Plans agents keep (daemon/plans.js): the Plan line, for this conversation's.
   const offPlans = daemon.onPlans(() => schedule());
+  // Comments and questions on replies (daemon/annotations.js): their highlights.
+  const offAnnotations = daemon.onAnnotations(() => schedule());
   let pointerInside = false;
   /** The user's last click, keystroke or move of focus was in this window. */
   let inside = false;
@@ -681,14 +684,52 @@ function createPane(body, ctx, daemon) {
       },
       // Kept for the conversation; while rewinding, what the box held before (see `rewind`).
       onChange: () => keepDraft(),
+      // A comment card's edits reach the annotation highlighting its quote.
+      onAnnotation: (id, comment) => void (comment === null ? notes.remove(id) : notes.update(id, { comment })),
     });
     const { draft, sendBtn } = composer;
+    /** @param {string} what @param {unknown} err */
+    const noteFailed = (what, err) => {
+      addNote(state, 'error', 'annotation', `Could not ${what} the annotation: ${errorMessage(err)}`);
+      schedule();
+    };
+    /**
+     * This conversation's annotations (daemon/annotations.js); a change made in the transcript's
+     * box reaches the comment's card too, if it is still waiting in the message box.
+     * @type {import('../omp/selection-popup.js').AnnotationStore}
+     */
+    const notes = {
+      anchor: (range, quote) => marks.anchor(range, quote),
+      async add(annotation) {
+        const id = ompId();
+        if (id === null) return null;
+        try {
+          return (await daemon.addAnnotation(id, annotation)).id;
+        } catch (err) {
+          noteFailed('keep', err);
+          return null;
+        }
+      },
+      async update(note, patch) {
+        const id = ompId();
+        if (patch.comment !== undefined) composer.annotationChanged(note, patch.comment);
+        if (id !== null) await daemon.updateAnnotation(id, note, patch).catch((err) => noteFailed('save', err));
+      },
+      async remove(note) {
+        const id = ompId();
+        composer.annotationChanged(note, null);
+        if (id !== null) await daemon.deleteAnnotation(id, note).catch((err) => noteFailed('delete', err));
+      },
+    };
     const selectionPopup = attachSelectionPopup({
       host: node,
       transcript,
       listDir: listMentioned,
-      onComment: (quote, comment) => {
-        composer.addComment(quote, comment);
+      annotations: notes,
+      // The comment is kept as an annotation as it is posted, so its text is highlighted at once.
+      onComment: async (quote, comment, _cite, anchor) => {
+        const id = anchor ? await notes.add({ kind: 'comment', ...anchor, quote, comment, thread: [] }) : null;
+        composer.addComment(quote, comment, id);
         draft.focus();
       },
       // Side questions go to omp's `btw`: answered from the session's context, never added to it.
@@ -709,6 +750,7 @@ function createPane(body, ctx, daemon) {
         cancel: (id) => void (session && daemon.rpc(session, { type: 'btw_cancel', recordId: id }).catch(() => {})),
       },
     });
+    const marks = attachAnnotationMarks({ transcript, onOpen: (annotation, range) => selectionPopup.open(annotation, range) });
     node.append(toolbar, strip, loginStrip, banner, topWrap, transcript, jumpWrap, dialogs, running, scheduled, planLine, suggestions.root, composer.root);
     const highlight = attachDragHighlight({ host: node, transcript, enabled: () => settings.get().animatedSelection });
     const offHighlight = settings.subscribe(() => highlight.refresh());
@@ -1536,6 +1578,7 @@ function createPane(body, ctx, daemon) {
       transcript.classList.toggle('is-streaming', state.streaming);
       drawRewind();
       pinToBottom();
+      marks.draw(daemon.annotations(ompId()) ?? []);
     }
 
     function drawDialogs() {
@@ -1857,6 +1900,7 @@ function createPane(body, ctx, daemon) {
         resizes.disconnect();
         composer.destroy();
         selectionPopup.destroy();
+        marks.destroy();
         offHighlight();
         highlight.destroy();
         offPullDrag();
@@ -1893,6 +1937,7 @@ function createPane(body, ctx, daemon) {
       offForks();
       offSchedule();
       offPlans();
+      offAnnotations();
       document.removeEventListener('pointerdown', pressed, { capture: true });
       document.removeEventListener('keydown', pressed, { capture: true });
       document.removeEventListener('focusin', focused, { capture: true });

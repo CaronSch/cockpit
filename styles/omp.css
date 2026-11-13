@@ -1805,6 +1805,21 @@ div.omp-compaction::after,
   background: var(--color-hover);
 }
 
+/* Text the user commented on (the accent) or asked about (the code colour, as the pull request
+   window's questions), highlighted (omp/annotation-marks.js): a quiet tint and an underline, so
+   the reply still reads as written. A click opens its box again. */
+::highlight(omp-annotation-comment) {
+  background-color: color-mix(in oklch, var(--color-accent) 18%, transparent);
+  text-decoration: underline 1.5px color-mix(in oklch, var(--color-accent) 75%, transparent);
+  text-underline-offset: 3px;
+}
+
+::highlight(omp-annotation-ask) {
+  background-color: color-mix(in oklch, var(--color-code) 14%, transparent);
+  text-decoration: underline 1.5px color-mix(in oklch, var(--color-code) 70%, transparent);
+  text-underline-offset: 3px;
+}
+
 /* The box for a comment or question, in the transcript under what was selected: set like the
    message box, the transcript's width. */
 .omp-quote-panel {
@@ -1840,6 +1855,15 @@ div.omp-compaction::after,
 }
 
 .omp-quote-actions > .btn:first-child {
+  margin-inline-end: auto;
+}
+
+/* A reopened question's Remove sits beside Close, Ask alone at the right. */
+.omp-quote-actions:has(> .omp-quote-remove) > .btn:first-child {
+  margin-inline-end: 0;
+}
+
+.omp-quote-actions > .omp-quote-remove {
   margin-inline-end: auto;
 }
 

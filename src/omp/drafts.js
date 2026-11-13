@@ -12,8 +12,11 @@ const PREFIX = 'cockpit.draft:';
 
 /** @param {any} c @returns {c is KeptCard} */
 const isCard = (c) =>
-  (c?.kind === 'comment' && typeof c.quote === 'string' && typeof c.comment === 'string') ||
+  (c?.kind === 'comment' && typeof c.quote === 'string' && typeof c.comment === 'string' && (c.annotation === null || typeof c.annotation === 'string')) ||
   (c?.kind === 'file' && typeof c.name === 'string' && typeof c.size === 'number' && typeof c.path === 'string');
+
+/** A comment card kept before comments had annotations has none. @param {any} c */
+const upgraded = (c) => (c?.kind === 'comment' && c.annotation === undefined ? { ...c, annotation: null } : c);
 
 /**
  * The message left unsent in conversation `key`; an empty one if none (or unreadable). An
@@ -25,7 +28,7 @@ export function readDraft(key) {
   if (raw === null) return { text: '', cards: [] };
   try {
     const kept = JSON.parse(raw);
-    if (typeof kept?.text === 'string' && Array.isArray(kept.cards)) return { text: kept.text, cards: kept.cards.filter(isCard) };
+    if (typeof kept?.text === 'string' && Array.isArray(kept.cards)) return { text: kept.text, cards: kept.cards.map(upgraded).filter(isCard) };
   } catch {
     // Bare text: see above.
   }

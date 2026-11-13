@@ -35,6 +35,13 @@
  *                                      changed first (see `plans.js`; agents keep them with their `plan` tool)
  *   GET    /api/plans/:ompId           → { plan: Plan | null }: the conversation's plan, null for none; 404
  *                                      for an id that is not one
+ *   GET    /api/annotations/:ompId     → { annotations: Annotation[] }: the comments and questions left on
+ *                                      the conversation's replies, oldest first (see `annotations.js`)
+ *   POST   /api/annotations/:ompId     NewAnnotation → 201 { annotation: Annotation }: one kept, with its id
+ *   PATCH  /api/annotations/:ompId/:id { comment } | { thread } → { annotation: Annotation }: a comment's
+ *                                      text or a question's thread changed; 400 for anything else
+ *   DELETE /api/annotations/:ompId/:id → 204: forgotten. All are 404 for an id that is not one, the
+ *                                      last two for an annotation the conversation does not have
  *   PUT    /api/settings               Partial<DaemonSettings> → DaemonSettings: the daemon's settings
  *                                      changed (see `settings.js`); 400 for anything but known keys
  *                                      with values they may take
@@ -154,9 +161,9 @@
  * events up to it that follow are a replay), how many events that replay holds (`replay`, so a
  * page can draw once it has them all), session list, unread conversations, forks, settings, Bugbot watches,
  * scheduled prompts, the Setup window's login, UI version, awake sessions' activity, Phone access, the
- * terminals running and the connection's own `stream` id. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `plan`, `settings`,
+ * terminals running and the connection's own `stream` id. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `plan`, `annotations`, `settings`,
  * `bugbot`, `schedule`, `login`, `activity`, `remote`, `terminals` and `terminal` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
- * GET /api/history, GET /api/decisions/:ompId and GET /api/plans/:ompId instead, its `hello` carries the rest, and it
+ * GET /api/history, GET /api/decisions/:ompId, GET /api/plans/:ompId and GET /api/annotations/:ompId instead, its `hello` carries the rest, and it
  * watches its terminals again (their scrollback is their replay).
  */
 /** @import { GridNode } from '../src/layout/grid-model.js' */
@@ -167,6 +174,7 @@
 /** @import { LoginState } from './setup.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
 /** @import { Plan } from './plans.js' */
+/** @import { Annotation } from './annotations.js' */
 
 /** @typedef {'starting' | 'ready' | 'exited' | 'failed'} SessionStatus */
 
@@ -292,6 +300,8 @@
 
 /** Sent to every page after a conversation's plan changed (its text, a decision, its todo list), with the whole plan (null: moved away by a rewind). @typedef {{ kind: 'plan', ompId: string, plan: Plan | null }} PlanEvent */
 
+/** Sent to every page after a conversation's annotations changed (one added, edited or deleted, or moved away by a rewind), with all of them. @typedef {{ kind: 'annotations', ompId: string, annotations: Annotation[] }} AnnotationsEvent */
+
 /** Sent to every page after the daemon's settings changed, with all of them. @typedef {{ kind: 'settings', settings: DaemonSettings }} SettingsEvent */
 
 /** Sent to every page after a Bugbot watch started or changed, with all of them. @typedef {{ kind: 'bugbot', watches: BugbotWatch[] }} BugbotEvent */
@@ -314,7 +324,7 @@
  * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
  */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | PlanEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

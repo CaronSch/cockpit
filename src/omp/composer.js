@@ -23,8 +23,13 @@ import { composeMessage, shellCommand } from './message.js';
  * (a failed upload removes the card).
  * @typedef {{ kind: 'file', name: string, size: number, preview: string | null, path: string | null, stored: Promise<void> }} FileCard
  */
-/** One card above the draft. @typedef {({ kind: 'comment' } & QuoteComment) | FileCard} Card */
-/** A card as kept with an unsent message (omp/drafts.js): a comment, or a stored file. @typedef {({ kind: 'comment' } & QuoteComment) | { kind: 'file', name: string, size: number, path: string }} KeptCard */
+/**
+ * A comment card: its comment on a quoted part of the transcript, and the annotation that keeps
+ * the quote highlighted (daemon/annotations.js), if there is one.
+ * @typedef {{ kind: 'comment', annotation: string | null } & QuoteComment} CommentCard
+ */
+/** One card above the draft. @typedef {CommentCard | FileCard} Card */
+/** A card as kept with an unsent message (omp/drafts.js): a comment, or a stored file. @typedef {CommentCard | { kind: 'file', name: string, size: number, path: string }} KeptCard */
 /** What the box holds worth keeping: its text and its cards. @typedef {{ text: string, cards: KeptCard[] }} Kept */
 
 /** The draft never grows past this share of the pane, nor shrinks its cap below MIN_MAX_PX. */
@@ -50,13 +55,15 @@ const size = (bytes) =>
  *   shellDir: () => { label: string, path: string },
  *   preview: (card: FileCard) => void,
  *   onChange?: () => void,
+ *   onAnnotation?: (id: string, comment: string | null) => void,
  * }} options `pane`: caps the draft's height and takes dropped files; `upload` stores a file
  * and answers with its path; `onError` hears about a file that could not be attached;
  * `shellDir` names the directory a shell command runs in, for shell mode's marker; `preview`
  * shows an attached file when its card is clicked; `onChange` hears whenever what the box keeps
- * (`kept`) may have changed.
+ * (`kept`) may have changed; `onAnnotation` hears the user edit an annotated comment's card (its
+ * new comment) or remove it (null).
  */
-export function createComposer({ pane, upload, onError, shellDir, preview, onChange = () => {} }) {
+export function createComposer({ pane, upload, onError, shellDir, preview, onChange = () => {}, onAnnotation = () => {} }) {
   const root = el('div', 'omp-composer');
   const cards = el('div', 'omp-cards');
   cards.hidden = true;
@@ -188,7 +195,10 @@ export function createComposer({ pane, upload, onError, shellDir, preview, onCha
   function cardView(card) {
     const view = el('div', `omp-card is-${card.kind}`);
     const main = button('omp-card-main');
-    const removeBtn = button('omp-card-remove', '', () => remove(card));
+    const removeBtn = button('omp-card-remove', '', () => {
+      if (card.kind === 'comment' && card.annotation) onAnnotation(card.annotation, null);
+      remove(card);
+    });
     removeBtn.append(crossIcon());
     if (card.kind === 'comment') {
       main.append(el('span', 'omp-card-quote', `“${excerpt(card.quote)}”`), el('span', 'omp-card-text', excerpt(card.comment)));
@@ -197,7 +207,13 @@ export function createComposer({ pane, upload, onError, shellDir, preview, onCha
           label: 'Edit comment',
           quote: card.quote,
           value: card.comment,
-          onSave: (value) => (value.trim() ? replace(card, { ...card, comment: value.trim() }) : remove(card)),
+          onSave: (value) => {
+            const comment = value.trim();
+            if (comment === card.comment) return;
+            if (card.annotation) onAnnotation(card.annotation, comment || null);
+            if (comment) replace(card, { ...card, comment });
+            else remove(card);
+          },
         }),
       );
       removeBtn.setAttribute('aria-label', 'Remove comment');
@@ -299,7 +315,7 @@ export function createComposer({ pane, upload, onError, shellDir, preview, onCha
         text: draft.value,
         cards: items.flatMap((c) =>
           /** @type {KeptCard[]} */ (
-            c.kind === 'comment' ? [{ kind: 'comment', quote: c.quote, comment: c.comment }] : c.path ? [{ kind: 'file', name: c.name, size: c.size, path: c.path }] : []
+            c.kind === 'comment' ? [{ kind: 'comment', quote: c.quote, comment: c.comment, annotation: c.annotation }] : c.path ? [{ kind: 'file', name: c.name, size: c.size, path: c.path }] : []
           ),
         ),
       };
@@ -321,10 +337,24 @@ export function createComposer({ pane, upload, onError, shellDir, preview, onCha
       draft.setRangeText(text, start, end, 'end');
       changed();
     },
-    /** Adds a comment on `quote` to go with the next message. @param {string} quote @param {string} comment */
-    addComment(quote, comment) {
-      items = [...items, { kind: 'comment', quote, comment }];
+    /**
+     * Adds a comment on `quote` to go with the next message; `annotation` keeps the quote highlighted.
+     * @param {string} quote @param {string} comment @param {string | null} annotation
+     */
+    addComment(quote, comment, annotation) {
+      items = [...items, { kind: 'comment', quote, comment, annotation }];
       drawCards();
+    },
+    /**
+     * Annotation `id`'s comment was changed in the transcript: its card, if it is still here,
+     * shows `comment`, or goes with it (null).
+     * @param {string} id @param {string | null} comment
+     */
+    annotationChanged(id, comment) {
+      const card = items.find((c) => c.kind === 'comment' && c.annotation === id);
+      if (!card || card.kind !== 'comment') return;
+      if (comment === null) remove(card);
+      else replace(card, { ...card, comment });
     },
     /** Settles once every file attached so far is stored (or has failed and been dropped). */
     async settled() {

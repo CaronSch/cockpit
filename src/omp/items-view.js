@@ -53,6 +53,8 @@ export function renderItem(item, ctx) {
     case 'assistant': {
       // What the agent said on its way shows softer than its response (visibility.js).
       const node = el('div', `omp-msg omp-assistant${isNarration(item) ? ' is-narration' : ''}`);
+      // Names the message for the annotations on its text (annotation-marks.js); every piece of it carries it.
+      if (item.at !== null) node.dataset.at = String(item.at);
       item.blocks.forEach((block, i) => node.append(renderBlock(block, `${item.key}:${i}`, ctx)));
       if (!item.ended && item.blocks.length === 0) node.append(statusLine('muted', '…'));
       if (item.errorMessage) node.append(statusLine('error', item.errorMessage));
