@@ -25,6 +25,7 @@ import { createPlans } from '../daemon/plans.js';
 import { createAnnotations } from '../daemon/annotations.js';
 import { askAgent } from '../daemon/ask.js';
 import { createSetup } from '../daemon/setup.js';
+import { APPEND_SYSTEM_PROMPT } from '../daemon/omp-session.js';
 import { createTerminals } from '../daemon/terminals.js';
 import { createUpdates } from '../daemon/updates.js';
 /** @import { RemoteState, RpcResponse, StreamEvent, SessionEvent, SessionMeta } from '../daemon/wire.js' */
@@ -207,7 +208,13 @@ beforeAll(async () => {
     on: () => settings.all().decisionReview,
     ask: (turn) => askReviewer(turn, { ompPath: FAKE_OMP }),
   });
-  hub = createHub({ ompPath: FAKE_OMP, unread, onRewoundId: (from, to) => void forks.moved(from, to), onTurnEnded: decisions.turnEnded, hostTools: scheduleTools(() => schedule) });
+  hub = createHub({
+    ompPath: FAKE_OMP,
+    unread,
+    onRewoundId: (from, to) => void forks.moved(from, to),
+    onTurnEnded: decisions.turnEnded,
+    launchWith: () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {}, hostTools: scheduleTools(() => schedule) }),
+  });
   forker = createForker({ hub, forks, scratchDir: join(cwd, 'state', 'fork-sources'), nameFork: (prompt, title) => nameFork(prompt, title, { ompPath: FAKE_OMP }) });
   const history = createHistory({ root: join(cwd, 'omp-sessions'), archive: join(cwd, 'state', 'archive', 'sessions') });
   github = createGithub({ ghPath: FAKE_GH });

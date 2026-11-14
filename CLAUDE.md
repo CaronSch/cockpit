@@ -337,7 +337,7 @@ What runs today:
   browser's own highlight hidden under it. Snapping (`src/ui/word-snap.js`) leaves a
   selection inside one word alone and takes a long token (a path, a URL) by segment.
   Below those, the daemon's own switches, the same for every browser: *Compact idle
-  conversations* (on), *Review decisions* (off) and *I have ADHD* (off). With *Review
+  conversations* (on), *Review decisions* (off), *Plans* (on, below) and *I have ADHD* (off). With *Review
   decisions* on, every turn an agent
   hands back is read by a one-shot omp (`omp -p` on omp's `smol` role, thinking off, no tools
   or session, in a temporary directory), which reads that turn only (its prompts, the agent's
@@ -361,7 +361,7 @@ What runs today:
   visible one) nor the cmux window a daemon started from cmux would pass on; *Your Chrome* sets
   `PI_BROWSER_RELAY=1`; *As omp is set up* sets nothing (`daemon/browser.js`). A running
   conversation takes a change up as it does the ADHD switch: the hub compares how each omp was
-  launched (`launchWith`: its prompt and environment) with how one would be now.
+  launched (`launchWith`: its prompt, environment and the daemon's tools it was given) with how one would be now.
 - The Setup window (the `setup` widget): what a machine starting afresh needs before a first
   agent, checked by the daemon whenever the window asks (`GET /api/setup`, `daemon/setup.js`):
   omp runs (`omp --version`), omp has models from a provider it is signed in to (`omp models
@@ -462,7 +462,10 @@ What runs today:
   shows it; on a scheduled prompt it edits its prompt and time in place (`PATCH
   /api/schedule/:id`; saved or moved, it is no longer missed). Only a failure is written under
   the axis.
-- Plans and the Plan window (the `plan` widget). For a large task an agent keeps a running plan
+- Plans and the Plan window (the `plan` widget), while Config's *Plans* switch is on (the daemon's
+  `plans` setting; off, an omp launched then is neither asked to keep a plan nor given the tool, a
+  running one takes the change up as it does the ADHD switch, and agent windows show no Plan line).
+  For a large task an agent keeps a running plan
   its user can watch, as omp's own TUI shows its todo list: the system prompt asks it to lay out the
   steps with omp's `todo` tool and the goal and approach with the daemon's `plan` tool (`new`), then
   to record each decision it takes without its user with `decide` (what and why) and `revise` the

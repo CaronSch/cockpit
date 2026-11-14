@@ -40,7 +40,7 @@ const SETTINGS = [
   },
 ];
 
-/** The daemon's settings that are switches. @typedef {'idleCompaction' | 'decisionReview' | 'adhd'} DaemonSwitch */
+/** The daemon's settings that are switches. @typedef {'idleCompaction' | 'decisionReview' | 'plans' | 'adhd'} DaemonSwitch */
 /** @typedef {{ key: DaemonSwitch, label: string, detail: string }} DaemonSetting */
 
 /** The daemon's switches, in the order the menu lists them. @type {readonly DaemonSetting[]} */
@@ -54,6 +54,11 @@ export const DAEMON_SETTINGS = [
     key: 'decisionReview',
     label: 'Review decisions',
     detail: 'List the decisions an agent took without you, under each reply',
+  },
+  {
+    key: 'plans',
+    label: 'Plans',
+    detail: 'Agents keep a plan you can follow for a large task',
   },
   {
     key: 'adhd',

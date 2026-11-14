@@ -207,6 +207,8 @@ function createPane(body, ctx, daemon) {
   const offUnread = daemon.onUnread(() => schedule());
   // Decision reviews (daemon/decisions.js) arrive after the turn, for any conversation.
   const offDecisions = daemon.onDecisions(() => schedule());
+  // The daemon's settings: plans switched off hide the Plan line.
+  const offDaemonSettings = daemon.onSettings(() => schedule());
   // Forks started or moved (daemon/forks.js): the Forks count, and which windows are related.
   const offForks = daemon.onForks(() => schedule());
   // Prompts agents scheduled (daemon/schedule.js): the Scheduled line, for this conversation's.
@@ -1661,9 +1663,12 @@ function createPane(body, ctx, daemon) {
       scheduled.hidden = tasks.length === 0;
     }
 
-    /** This conversation's plan, if its agent keeps one: its title, how far its steps are, and the one under way. */
+    /**
+     * This conversation's plan, if its agent keeps one: its title, how far its steps are, and the
+     * one under way. None while plans are switched off (Config), even one kept before.
+     */
     function drawPlan() {
-      const plan = daemon.plan(ompId());
+      const plan = daemon.settings()?.plans === false ? null : daemon.plan(ompId());
       const progress = plan ? todoProgress(plan.todo) : null;
       const shown = plan ? { title: plan.title, done: progress?.done ?? 0, total: progress?.total ?? 0, current: progress?.current ?? null } : null;
       const key = JSON.stringify(shown);
@@ -1934,6 +1939,7 @@ function createPane(body, ctx, daemon) {
       offReset();
       offUnread();
       offDecisions();
+      offDaemonSettings();
       offForks();
       offSchedule();
       offPlans();

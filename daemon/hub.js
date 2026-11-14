@@ -30,12 +30,12 @@
  * Each time a session's todo list changes (omp/todos.js: a `todo` result, `get_state`'s), `onTodo`
  * hears it with the conversation's id, so its plan (plans.js) shows the agent's steps.
  *
- * Each omp starts with what `launchWith` says then: what it appends to its system prompt and what
- * it adds to its environment, which the daemon's settings change (adhd.js, browser.js) and omp
+ * Each omp starts with what `launchWith` says then: what it appends to its system prompt, what
+ * it adds to its environment and which of the daemon's own tools it is given (`hostTools`,
+ * omp-session.js), which the daemon's settings change (plans.js, adhd.js, browser.js) and omp
  * keeps for the life of the process. A session started otherwise goes to sleep as soon as it is
  * idle (when the settings change, when its turn ends, or at the next sweep), so the next message
- * wakes its conversation as an omp launched now would run it. Every omp is given the daemon's
- * own tools (`hostTools`, omp-session.js), however it was launched.
+ * wakes its conversation as an omp launched now would run it.
  */
 import { randomBytes } from 'node:crypto';
 import { daemonNow } from './clock.js';
@@ -94,13 +94,13 @@ const sameActivity = (a, b) => a.working === b.working && a.asking === b.asking 
  *   ompPath: string, unread: Pick<UnreadStore, 'awaited'>, now?: () => number, launch?: typeof launchOmp,
  *   sleepAfterMs?: number, idleCompaction?: IdleCompactionOptions & { on(): boolean } | null, onRewound?: (file: string, next: string | null) => void,
  *   onRewoundId?: (from: string, to: string) => void, onTurnEnded?: (transcript: Transcript) => void,
- *   onTodo?: (ompId: string, phases: TodoPhase[]) => void, launchWith?: () => LaunchWith, hostTools?: HostTools,
+ *   onTodo?: (ompId: string, phases: TodoPhase[]) => void, launchWith?: () => LaunchWith,
  * }} options `idleCompaction`: compacts while `on()` (the user's setting); none when null.
  *   `onTurnEnded` hears each time a session's agent hands its turn back, with the session as its events tell it.
  *   `launchWith` is how an omp launched now runs.
  * @returns {Hub}
  */
-export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, onTodo = () => {}, launchWith = () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {} }), hostTools = NO_HOST_TOOLS }) {
+export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp, sleepAfterMs = SLEEP_AFTER_MS, idleCompaction = null, onRewound = () => {}, onRewoundId = () => {}, onTurnEnded = () => {}, onTodo = () => {}, launchWith = () => ({ appendSystemPrompt: APPEND_SYSTEM_PROMPT, env: {}, hostTools: NO_HOST_TOOLS }) }) {
   const bootId = randomBytes(6).toString('hex');
   /** @type {SessionEvent[]} */
   let log = [];
@@ -172,8 +172,8 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
   const metas = () => [...sessions.values()].map((s) => s.meta());
   /** Awake with nothing under way. @param {OmpSession} session @param {Transcript} transcript */
   const idleNow = (session, transcript) => sleepsNow({ meta: session.meta(), transcript, usedAt: 0 }, 0, 0);
-  /** How an omp launched with `launch` runs, as one value to compare. @param {LaunchWith} launch */
-  const launchKey = (launch) => JSON.stringify([launch.appendSystemPrompt, Object.entries(launch.env).sort()]);
+  /** How an omp launched with `launch` runs, as one value to compare (its tools by name). @param {LaunchWith} launch */
+  const launchKey = (launch) => JSON.stringify([launch.appendSystemPrompt, Object.entries(launch.env).sort(), launch.hostTools.tools.map((t) => t.name)]);
   /** How each session's omp was launched (`launchKey`), by session. @type {Map<string, string>} */
   const launchedWith = new Map();
   /**
@@ -212,7 +212,7 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
       activity.set(id, { transcript: createTranscript(), usedAt: now(), compaction: createIdleCompaction() });
       const how = launchWith();
       launchedWith.set(id, launchKey(how));
-      const session = launch({ id, cwd, resume, fork, ompPath, now, ...how, hostTools, emit: (body) => emit(id, body) });
+      const session = launch({ id, cwd, resume, fork, ompPath, now, ...how, emit: (body) => emit(id, body) });
       sessions.set(id, session);
       return session.meta();
     },

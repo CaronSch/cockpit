@@ -15,20 +15,22 @@ const VERSION = 1;
 /**
  * `idleCompaction`: compact long conversations left idle (idle-compaction.js); `decisionReview`:
  * after every turn, list the decisions the agent took without its user (decisions.js); `adhd`:
- * agents shape their replies for a reader with ADHD (adhd.js); `browser`: which browser agents
+ * agents shape their replies for a reader with ADHD (adhd.js); `plans`: agents keep a plan for a
+ * large task, with the `plan` tool (plans.js); `browser`: which browser agents
  * drive (browser.js); `setupDone`: the user has been through Setup, so an empty screen no longer
  * opens it; `remote`: Phone access, the daemon also serving the owner's tailnet devices (remote.js).
- * @typedef {{ idleCompaction: boolean, decisionReview: boolean, adhd: boolean, browser: BrowserChoice, setupDone: boolean, remote: boolean }} DaemonSettings
+ * @typedef {{ idleCompaction: boolean, decisionReview: boolean, adhd: boolean, plans: boolean, browser: BrowserChoice, setupDone: boolean, remote: boolean }} DaemonSettings
  */
 
 /** @type {Readonly<DaemonSettings>} */
-const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, browser: 'isolated', setupDone: false, remote: false });
+const DEFAULT_SETTINGS = Object.freeze({ idleCompaction: true, decisionReview: false, adhd: false, plans: true, browser: 'isolated', setupDone: false, remote: false });
 
 /** Whether each setting may take a value. @type {Readonly<Record<keyof DaemonSettings, (value: unknown) => boolean>>} */
 const VALID = Object.freeze({
   idleCompaction: (value) => typeof value === 'boolean',
   decisionReview: (value) => typeof value === 'boolean',
   adhd: (value) => typeof value === 'boolean',
+  plans: (value) => typeof value === 'boolean',
   browser: (value) => BROWSER_CHOICES.includes(/** @type {BrowserChoice} */ (value)),
   setupDone: (value) => typeof value === 'boolean',
   remote: (value) => typeof value === 'boolean',

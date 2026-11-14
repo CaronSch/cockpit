@@ -5,7 +5,8 @@
  * agent writes the plan and its decisions with the `plan` tool the daemon gives every omp it
  * launches (omp's RPC host tools: omp-session.js `HostTools`); the steps are its omp todo list,
  * which the daemon follows from the session's events (hub.js `onTodo`) rather than asking the
- * agent to say them twice.
+ * agent to say them twice. The Config menu's switch (settings.js `plans`) turns the whole of it
+ * off: an omp launched then is neither asked to keep a plan nor given the tool.
  *
  * A conversation has one plan at a time, named by omp's conversation id: a new one replaces the
  * last. Plans are kept per conversation in the state directory, so they outlive windows, sleep
@@ -250,11 +251,18 @@ export function createPlans({ dir, now = Date.now }) {
   };
 }
 
+/** What every agent is asked, while plans are on (after the workbench's own prompt: omp-session.js `APPEND_SYSTEM_PROMPT`). */
+const PLANS_PROMPT =
+  'For a large task (several steps or files), keep a running plan the user can watch live beside the conversation: before starting, lay out the steps with the todo tool and the goal and approach with the plan tool (`new`). As you work, mark each step as it starts and ends, record every decision you take without the user with plan `decide` (what and why), and `revise` the plan when the approach changes. Then carry on as you otherwise would; the plan is for the user to follow along, not a checkpoint to wait at.';
+
+/** `prompt` with the ask to keep a plan after it, while plans are on. @param {string} prompt @param {boolean} on */
+export const withPlans = (prompt, on) => (on ? `${prompt}\n\n${PLANS_PROMPT}` : prompt);
+
 /** @typedef {ReturnType<typeof createPlans>} Plans */
 
 /**
- * The daemon's tools for the omps it launches (hub.js `hostTools`): the plan tool, run by the
- * plans `get` gives.
+ * The daemon's tools for the omps it launches while plans are on (main.js `launchWith`): the plan
+ * tool, run by the plans `get` gives.
  * @param {() => Plans} get @returns {HostTools}
  */
 export const planTools = (get) => ({
