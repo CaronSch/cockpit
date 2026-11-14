@@ -118,6 +118,7 @@ import { isContinueDirective } from './message.js';
  *   lastError: string | null,
  *   cost: number,
  *   editorText: { seq: number, text: string } | null,
+ *   titleAsked: boolean,
  *   openUrl: { url: string, launchUrl: string | null, instructions: string | null } | null,
  *   loggedIn: Map<string, boolean> | null,
  *   rewinds: number,
@@ -177,6 +178,7 @@ export function createTranscript() {
     lastError: null,
     cost: 0,
     editorText: null,
+    titleAsked: false,
     openUrl: null,
     loggedIn: null,
     rewinds: 0,
@@ -401,8 +403,14 @@ function applyFrame(state, frame, at) {
       return;
     case 'command_output': {
       // One line ("Session renamed to …", whoever ran the command) is a quiet note; longer
-      // output is a slash command's answer to read, shown open.
+      // output is a slash command's answer to read, shown open. The answer to the daemon's own
+      // request for a title (omp-session.js: a name, or that a prompt such as "hi" gave nothing
+      // to name it by) is omp's business, not the user's: folded away as omp's hidden notes are.
       const output = withoutIcons(String(frame.text ?? ''));
+      if (state.titleAsked) {
+        state.titleAsked = false;
+        return upsertNote(state, null, 'title', '', output, true);
+      }
       return output.includes('\n') ? note(state, 'info', 'command', '', output) : note(state, 'muted', 'command', output);
     }
     case 'session_info_update':
@@ -435,6 +443,9 @@ function applyFrame(state, frame, at) {
       return unrecognised(state, type || 'frame without type', frame);
   }
 }
+
+/** The id prefix of the daemon's own requests for a title (daemon/omp-session.js), whose answer is folded away. */
+export const TITLE_REQUEST = 'title_';
 
 /** What the transcript says while the daemon compacts the session while it is idle, and once it did. */
 export const IDLE_COMPACTING = 'Compacting while idle, before the prompt cache expires…';
@@ -580,6 +591,8 @@ function applyUiRequest(state, frame) {
 
 /** @param {Transcript} state @param {Record<string, any>} command */
 function applySent(state, command) {
+  // The daemon's own request for a title (omp-session.js): its answer is the next command output.
+  if (command?.type === 'prompt') state.titleAsked = typeof command.id === 'string' && command.id.startsWith(TITLE_REQUEST);
   if (command?.type === 'bash') {
     push(state, {
       kind: 'bash',

@@ -202,9 +202,12 @@ What runs today:
   show different sessions side by side, or the same one; the window's top
   bar names its conversation (omp's session title, or the first prompt while it
   has none, saved with the window, so it still shows once the session has ended).
-  Sessions the daemon runs get a title during their first turn: once the first
-  prompt is in a session omp has not named, the daemon sends `/rename` once and omp
-  generates one while the agent works; untitled ones show their first prompt. A slash command's one-line output (such as that rename's) is a quiet
+  Sessions the daemon runs get a title as soon as a prompt gives one: once a prompt is in a
+  session omp has not named, the daemon sends `/rename` and omp generates one while the agent
+  works; omp declines a prompt with nothing to name it by ("hi", "test"), so the daemon asks again
+  with each prompt until it is named. Its request has an id of its own (`TITLE_REQUEST`) and omp's
+  answer to it is folded away with omp's other notes; untitled ones show their first prompt. A
+  slash command's one-line output (such as a `/rename` the user typed) is a quiet
   note; output of several lines shows open. omp's info notices (such as the tools it
   mounted, `xdev`) and the messages omp does not display (reminders to the model, such as
   `eval-state-context`) fold into the stretch of work they come in (`compactWork`), their text
