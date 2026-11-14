@@ -31,7 +31,7 @@ import { JournalRefused, createHistory } from './history.js';
 import { loadBugbot, BUGBOT_POLL_MS } from './bugbot.js';
 import { loadSchedule, scheduleTools } from './schedule.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
-import { createPlans, planTools } from './plans.js';
+import { createPlans, planTools, withPlans } from './plans.js';
 import { createAnnotations } from './annotations.js';
 import { askAgent } from './ask.js';
 import { createDelivery } from './deliver.js';
@@ -126,17 +126,18 @@ const hub = createHub({
   },
   onTurnEnded: decisions.turnEnded,
   onTodo: (ompId, phases) => void plans.todo(ompId, phases).catch((err) => console.error(`[daemon] could not follow the todo list of conversation ${ompId}:`, err)),
-  // "I have ADHD" adds its rules to every agent's system prompt; the browser choice, its environment.
-  // An agent's shell also knows which daemon it runs under, so `bun run restart` reaches it.
-  launchWith: () => ({
-    appendSystemPrompt: withAdhdRules(APPEND_SYSTEM_PROMPT, settings.all().adhd),
-    env: { ...browserEnv(settings.all().browser), COCKPIT_PORT: String(port), COCKPIT_STATE_DIR: stateDir },
-  }),
-  // Every agent may schedule prompts for its own conversation and keep a plan for it.
-  hostTools: allHostTools(
-    scheduleTools(() => schedule),
-    planTools(() => plans),
-  ),
+  // Plans ask every agent to keep one and give it the tool, while on; "I have ADHD" adds its rules
+  // to every agent's system prompt; the browser choice, its environment. An agent's shell also
+  // knows which daemon it runs under, so `bun run restart` reaches it. Every agent may schedule
+  // prompts for its own conversation.
+  launchWith: () => {
+    const { plans: planning, adhd, browser } = settings.all();
+    return {
+      appendSystemPrompt: withAdhdRules(withPlans(APPEND_SYSTEM_PROMPT, planning), adhd),
+      env: { ...browserEnv(browser), COCKPIT_PORT: String(port), COCKPIT_STATE_DIR: stateDir },
+      hostTools: planning ? allHostTools(scheduleTools(() => schedule), planTools(() => plans)) : scheduleTools(() => schedule),
+    };
+  },
 });
 // Switched, a setting reaches a conversation as it next wakes: idle ones go to sleep now.
 settings.subscribe(() => hub.launchChanged());
