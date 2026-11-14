@@ -2,10 +2,13 @@
  * One omp process in RPC mode: launch, protocol setup, command/response correlation and
  * lifecycle, with everything it does reported as session events.
  *
- * It also asks once for a title. omp names sessions by itself only in its TUI, so once the
- * first prompt of a session with no name is in its conversation, the daemon sends `/rename`
- * with no title, as a user would: omp's title model names the conversation in the
- * background while the agent works on the turn. (Sent any earlier, omp has nothing to name.)
+ * It also asks for a title. omp names sessions by itself only in its TUI, so once a prompt of
+ * a session with no name is in its conversation, the daemon sends `/rename` with no title, as a
+ * user would: omp's title model names the conversation in the background while the agent works
+ * on the turn. (Sent any earlier, omp has nothing to name.) omp declines a prompt with nothing
+ * to name it by ("hi", "test"), so the daemon asks again with each prompt until it is named. Its
+ * request carries an id of its own (`TITLE_REQUEST`), so windows fold away omp's answer to it,
+ * which the user did not ask for (omp/transcript.js).
  * A fork is not asked: it has its source's name, and omp's title model reads a conversation's
  * opening request, which a fork shares with its source; forks.js names it from its own first
  * prompt instead. A bare continue (`.`, omp/message.js) names nothing: the title waits for a
@@ -19,7 +22,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { conversationOf } from './conversation.js';
 import { isContinueDirective } from '../src/omp/message.js';
-import { contentText } from '../src/omp/transcript.js';
+import { TITLE_REQUEST, contentText } from '../src/omp/transcript.js';
 import { createFrameDecoder } from './frame-decoder.js';
 /** @import { RpcResponse, SessionEvent, SessionMeta } from './wire.js' */
 
@@ -159,7 +162,6 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   /** @type {PromiseWithResolvers<void>} */
   const closed = Promise.withResolvers();
   let named = false;
-  let titleAsked = false;
   /** The id of the history asked for at setup, once asked. @type {string | null} */
   let historyId = null;
 
@@ -248,9 +250,8 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
       if (frame.data?.sessionName) named = true;
     }
     if (frame.type === 'session_info_update' && frame.title) named = true;
-    if (frame.type === 'message_end' && frame.message?.role === 'user' && !titleAsked && !isContinueDirective(contentText(frame.message.content))) {
-      titleAsked = true;
-      if (!named && !fork) send(RENAME).response.catch(() => {});
+    if (frame.type === 'message_end' && frame.message?.role === 'user' && !named && !fork && !isContinueDirective(contentText(frame.message.content))) {
+      send(RENAME, TITLE_REQUEST).response.catch(() => {});
     }
     if (frame.type === 'response' && typeof frame.id === 'string') {
       const waiter = pending.get(frame.id);
@@ -288,9 +289,13 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
     child?.stdin.flush();
   }
 
-  /** @param {Record<string, unknown>} command @returns {{ id: string, response: Promise<RpcResponse> }} */
-  function send(command) {
-    const frame = { ...command, id: `ac_${++counter}` };
+  /**
+   * Sends `command` to omp, its id `<prefix><n>` (`ac_` for most, `TITLE_REQUEST` for the
+   * daemon's own title requests).
+   * @param {Record<string, unknown>} command @param {string} [prefix] @returns {{ id: string, response: Promise<RpcResponse> }}
+   */
+  function send(command, prefix = 'ac_') {
+    const frame = { ...command, id: `${prefix}${++counter}` };
     if (finished) return { id: frame.id, response: Promise.reject(new SessionNotRunning(`session is ${meta.status}`)) };
     /** @type {PromiseWithResolvers<RpcResponse>} */
     const response = Promise.withResolvers();
