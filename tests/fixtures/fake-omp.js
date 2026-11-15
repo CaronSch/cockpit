@@ -1,15 +1,18 @@
 #!/usr/bin/env bun
 /**
  * Scripted stand-in for `omp --mode rpc-ui`, for daemon and browser tests: it speaks omp's
- * JSONL protocol with frame shapes recorded from omp 18.12.3, and answers prompts by keyword.
+ * JSONL protocol with frame shapes recorded from omp 18.19.0, and answers prompts by keyword.
  *
- * - default: streams "You said: <prompt>" (assistant message_start arrives pre-filled, as omp's does)
+ * - default: streams "You said: <prompt>" (assistant message_start arrives holding the first
+ *   piece already streamed, as omp's does; each block's `*_start` then starts it afresh)
  * - omp's continue directive (src/omp/message.js): replies "Carrying on where I left off."
  *   without reading it for the keywords below (it says "ask", "interrupted" and "notice")
  * - run in a folder whose name has "slow-start": takes 1.5 s to come up
  * - starts with "say:": replies with the rest of the prompt, verbatim (a diagram, a chart…)
  * - contains "tool": a bash tool call with live output, then a reply
- * - contains "ask": an `ask` dialog; the reply names the chosen option
+ * - contains "ask": an `ask` tool call, its form walked as omp 18.19 walks one without a form
+ *   surface: a `select` of the options and "Other (type your own)", which asks on with an
+ *   `input`; the reply names the answer, and a cancelled dialog aborts the turn
  * - contains "approve": a `confirm` dialog, as omp asks to approve a command; the reply says
  *   whether it was approved, denied or cancelled
  * - contains "spawn": a `task` call starting subagents Alpha and Beta in the background, which
@@ -30,7 +33,8 @@
  *   reply is aborted before it says anything (no content), as omp journals one
  * - contains "long": the reply's usage is that of a 250K-token conversation read from a
  *   one-hour prompt cache entry (`cttl.ephemeral1h`), as Anthropic's are reported
- * - `compact`: answers with a summary in omp 18.12.6's `CompactionResult` shape (from its source)
+ * - `compact`: answers with a summary in omp 18.12.6's `CompactionResult` shape (from its source),
+ *   between `manual_compaction_start` and `manual_compaction_end`, as omp 18.19 announces one
  * - contains "style": says whether its system prompt carries the rules "I have ADHD" adds
  *   (daemon/adhd.js): "Writing in ADHD mode." or "Writing as usual."
  * - `schedule <JSON>`, `plan <JSON>`: calls the host's `schedule` or `plan` tool (the daemon's, given
@@ -198,7 +202,7 @@ let sessionId = (resumed && sourceHeader?.id) || randomUUID();
 let startedAt = (resumed && sourceHeader?.timestamp) || new Date().toISOString();
 let sessionFile = resumed ?? join(tmpdir(), 'fake-omp-sessions', `${sessionId}.jsonl`);
 const cwd = (resumed && sourceHeader?.cwd) || process.cwd();
-/** The journal this session continues from another (a fork's source, or the one before a rewind). */
+/** The journal this session continues from another: a fork's source by its id, the one before a rewind by its path, as omp's headers name them. */
 let parentSession = forkedFrom ? (sourceHeader?.id ?? null) : null;
 
 /** @type {Record<string, any>[]} */
@@ -252,21 +256,23 @@ function record(message) {
  * @param {Record<string, any>} [used] the request's usage
  */
 function streamAssistant(text, thinking = null, ending = { stopReason: 'stop' }, used = usage) {
-  const content = [...(thinking === null ? [] : [{ type: 'thinking', thinking }]), { type: 'text', text }];
+  /** @type {Array<{ type: 'thinking', thinking: string } | { type: 'text', text: string }>} */
+  const content = [...(thinking === null ? [] : [{ type: /** @type {const} */ ('thinking'), thinking }]), { type: /** @type {const} */ ('text'), text }];
   const final = { role: 'assistant', content, provider: model.provider, model: model.id, usage: used, ...ending, timestamp: Date.now() };
   const messageId = record(final);
-  out({ type: 'message_start', message: final, messageId }); // pre-filled, like real omp
+  const pieces = (/** @type {string} */ body) => body.match(/.{1,6}/gs) ?? [];
+  const bodyOf = (/** @type {(typeof content)[number]} */ block) => (block.type === 'thinking' ? block.thinking : block.text);
+  // omp sends message_start once the first piece has streamed, holding that piece alone.
+  const opening = { ...content[0], [content[0].type]: pieces(bodyOf(content[0]))[0] ?? '' };
+  out({ type: 'message_start', message: { role: 'assistant', content: [opening], provider: model.provider, model: model.id, usage: used, stopReason: 'stop', timestamp: final.timestamp }, messageId });
   /** @param {Record<string, any>} event */
   const update = (event) => out({ type: 'message_update', assistantMessageEvent: event, message: { role: 'assistant' }, messageId });
-  const at = content.length - 1;
-  if (thinking !== null) {
-    update({ type: 'thinking_start', contentIndex: 0 });
-    update({ type: 'thinking_delta', contentIndex: 0, delta: thinking });
-    update({ type: 'thinking_end', contentIndex: 0, content: thinking });
-  }
-  update({ type: 'text_start', contentIndex: at });
-  for (const piece of text.match(/.{1,6}/gs) ?? []) update({ type: 'text_delta', contentIndex: at, delta: piece });
-  update({ type: 'text_end', contentIndex: at, content: text });
+  content.forEach((block, contentIndex) => {
+    // Under the daemon's `delta` filter, a block's start carries it opened (empty), its end its other fields.
+    update({ type: `${block.type}_start`, contentIndex, block: { ...block, [block.type]: '' } });
+    for (const delta of pieces(bodyOf(block))) update({ type: `${block.type}_delta`, contentIndex, delta });
+    update({ type: `${block.type}_end`, contentIndex, content: bodyOf(block), block: { type: block.type } });
+  });
   out({ type: 'message_end', message: final, messageId });
 }
 
@@ -285,9 +291,13 @@ function startTool(name, args, intent) {
   const call = { type: 'toolCall', id: toolCallId, name, arguments: args, intent };
   const assistant = { role: 'assistant', content: [call], provider: model.provider, model: model.id, usage, stopReason: 'toolUse', timestamp: Date.now() };
   const messageId = record(assistant);
-  out({ type: 'message_start', message: assistant, messageId });
-  out({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_start', contentIndex: 0 }, message: { role: 'assistant' }, messageId });
-  out({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_end', contentIndex: 0, toolCall: call }, message: { role: 'assistant' }, messageId });
+  const opened = { type: 'toolCall', id: toolCallId, name, arguments: {} };
+  out({ type: 'message_start', message: { ...assistant, content: [opened], stopReason: 'stop' }, messageId });
+  /** @param {Record<string, any>} event */
+  const update = (event) => out({ type: 'message_update', assistantMessageEvent: { ...event, contentIndex: 0 }, message: { role: 'assistant' }, messageId });
+  update({ type: 'toolcall_start', block: opened });
+  update({ type: 'toolcall_delta', delta: JSON.stringify(args) });
+  update({ type: 'toolcall_end', toolCall: call });
   out({ type: 'message_end', message: assistant, messageId });
   out({ type: 'tool_execution_start', toolCallId, toolName: name, args, intent: call.intent });
   return toolCallId;
@@ -385,16 +395,43 @@ function todoCall() {
   runTool('todo', { op: 'start', task: 'Write the fix' }, 'Writing the fix', { content: [{ type: 'text', text: 'Fix: 1/3 done' }], details: { op: 'start', phases: todoPhases } });
 }
 
-/** @returns {Promise<Record<string, any>>} */
-function askDialog() {
-  const id = `ui-${Date.now()}`;
-  out({
-    type: 'extension_ui_request',
-    id,
-    method: 'ask',
-    questions: [{ id: 'db', question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite', description: 'file based' }], recommended: 1 }],
-  });
+let dialogCount = 0;
+/** A dialog omp asks the client for; the client's answer. @param {Record<string, any>} request @returns {Promise<Record<string, any>>} */
+function dialog(request) {
+  const id = `ui-${++dialogCount}`;
+  out({ type: 'extension_ui_request', id, ...request });
   return new Promise((resolve) => dialogs.set(id, resolve));
+}
+
+/** A reply aborted before it said anything, as omp journals one. */
+function abortedReply() {
+  const aborted = { role: 'assistant', content: [], provider: model.provider, model: model.id, usage, stopReason: 'aborted', errorMessage: 'Interrupted by user', timestamp: Date.now() };
+  const messageId = record(aborted);
+  out({ type: 'message_start', message: aborted, messageId });
+  out({ type: 'message_end', message: aborted, messageId });
+}
+
+const OTHER = 'Other (type your own)';
+const ASK_FORM = '<form><fieldset><legend>Which database?</legend><label><input type="radio" name="database" value="Postgres" checked> Postgres</label><label><input type="radio" name="database" value="SQLite"> SQLite</label></fieldset></form>';
+
+/**
+ * The `ask` tool, its form's one field asked as omp 18.19 asks one without a form surface: a
+ * `select` of its options and Other, which asks on with an `input`. The answer, or null once a
+ * dialog is cancelled, which fails the call (and omp aborts the turn).
+ * @returns {Promise<string | null>}
+ */
+async function askTool() {
+  const toolCallId = startTool('ask', { html: ASK_FORM }, 'Choosing a database');
+  const picked = await dialog({ method: 'select', title: 'Which database?', options: ['Postgres', 'SQLite', OTHER] });
+  const typed = picked.value === OTHER && !picked.cancelled ? await dialog({ method: 'input', title: 'Which database?' }) : null;
+  if (picked.cancelled || typed?.cancelled) {
+    endTool(toolCallId, 'ask', { content: [{ type: 'text', text: 'Ask tool was cancelled by the user' }], details: {} }, true);
+    return null;
+  }
+  const answer = String(typed ? typed.value : picked.value);
+  const text = `User answers:\n${JSON.stringify({ database: answer }, null, 2)}`;
+  endTool(toolCallId, 'ask', { content: [{ type: 'text', text }], details: { answers: [{ name: 'database', question: 'Which database?', answer: typed ? `Other: ${answer}` : answer }] } }, false);
+  return answer;
 }
 
 /** @param {string | undefined} id @param {string} text */
@@ -435,20 +472,17 @@ async function runPrompt(id, text) {
   } else if (text.startsWith('say:')) {
     streamAssistant(text.slice('say:'.length).trim());
   } else if (/ask/.test(text)) {
-    const answer = await askDialog();
-    const picked = answer.cancelled ? 'nothing (cancelled)' : (answer.answers?.[0]?.selectedOptions?.[0] ?? answer.answers?.[0]?.customInput);
-    streamAssistant(`You picked **${picked}**.`);
+    const answer = await askTool();
+    if (answer === null) {
+      abortedReply();
+      return endTurn(id, firstMessage, 'aborted');
+    }
+    streamAssistant(`You picked **${answer}**.`);
   } else if (/approve/.test(text)) {
-    const id = `ui-${Date.now()}-c`;
-    out({ type: 'extension_ui_request', id, method: 'confirm', title: 'Allow this command?', message: 'rm -rf build' });
-    /** @type {Record<string, any>} */
-    const answer = await new Promise((resolve) => dialogs.set(id, resolve));
+    const answer = await dialog({ method: 'confirm', title: 'Allow this command?', message: 'rm -rf build' });
     streamAssistant(answer.cancelled ? 'Approval cancelled.' : answer.confirmed ? 'Approved: going ahead.' : 'Denied: not running it.');
   } else if (/interrupt/.test(text) && /early/.test(text)) {
-    const aborted = { role: 'assistant', content: [], provider: model.provider, model: model.id, usage, stopReason: 'aborted', errorMessage: 'Interrupted by user', timestamp: Date.now() };
-    const messageId = record(aborted);
-    out({ type: 'message_start', message: aborted, messageId });
-    out({ type: 'message_end', message: aborted, messageId });
+    abortedReply();
   } else if (/interrupt/.test(text)) {
     streamAssistant('I was about to', null, { stopReason: 'aborted', errorMessage: 'Interrupted by user' });
   } else if (/wide/.test(text) && /table/.test(text)) {
@@ -547,7 +581,7 @@ function finishSideQuestion(patch) {
 
 // omp in a folder named for it is slow to come up, as a real one with a long history can be.
 if (/slow-start/.test(process.cwd())) await Bun.sleep(1500);
-out({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
+out({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864, supportsBashExcludeFromContext: true });
 out({ type: 'extension_ui_request', id: 'ui-start-w', method: 'setWidget', widgetKey: 'autoresearch' });
 out({ type: 'advisor_cost_changed' });
 out({
@@ -629,7 +663,7 @@ lines.on('line', (line) => {
       const text = String(messages[at].content?.[0]?.text ?? '');
       messages.splice(at);
       // A new journal beside the old one, which keeps the path before the rewind.
-      parentSession = sessionId;
+      parentSession = sessionFile;
       sessionId = randomUUID();
       startedAt = new Date().toISOString();
       sessionFile = join(dirname(sessionFile), `${startedAt.replace(/[:.]/g, '-')}_${sessionId}.jsonl`);
@@ -669,8 +703,12 @@ lines.on('line', (line) => {
       if (cancelled) finishSideQuestion({ status: 'cancelled' });
       return ok(id, type, { cancelled });
     }
-    case 'compact':
-      return ok(id, type, { summary: 'The user and the agent talked at length.', shortSummary: 'A long talk', firstKeptEntryId: entryId(messages.length - 1), tokensBefore: longUsage.totalTokens });
+    case 'compact': {
+      const result = { summary: 'The user and the agent talked at length.', shortSummary: 'A long talk', firstKeptEntryId: entryId(messages.length - 1), tokensBefore: longUsage.totalTokens };
+      out({ type: 'manual_compaction_start' });
+      out({ type: 'manual_compaction_end', result, aborted: false });
+      return ok(id, type, result);
+    }
     case 'abort_and_restore_queue':
       out({ type: 'queue_update', steering: [], followUp: [], liveSteered: 0 });
       return ok(id, type, { steering: [], followUp: [] });
