@@ -322,11 +322,13 @@ function createSessionsWindow(body, ctx, daemon) {
     if (state && SAID.has(state)) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', STATE_LABELS[state]));
     const work = workOf(c);
     if (work) main.querySelector('.sessions-meta')?.append(' ', el('span', 'sessions-state', `${work} running`));
+    // Mark read/unread first, the one used most; archive in the middle, away from the row's
+    // leading edge where a stray click would take a conversation out of the list.
     const actions = el('div', 'sessions-actions');
-    if (archived) actions.append(iconAction('sessions-restore', unarchiveIcon(), 'Restore'));
-    else if (archivable(c)) actions.append(iconAction('sessions-archive', archiveIcon(), 'Archive'));
     // As a mail client: a closed envelope marks it unread, an open one marks an unread one read.
     if (c.meta?.ompId || c.id) actions.append(unread ? iconAction('sessions-mark', mailOpenIcon(), 'Mark as read') : iconAction('sessions-mark', mailIcon(), 'Mark as unread'));
+    if (archived) actions.append(iconAction('sessions-restore', unarchiveIcon(), 'Restore'));
+    else if (archivable(c)) actions.append(iconAction('sessions-archive', archiveIcon(), 'Archive'));
     // Over the row's right end, not beside its text: hidden, they take none of its width.
     const tools = el('div', 'sessions-tools');
     tools.append(actions, ...(c.meta?.ompId || c.id ? [pinButton(pinned)] : []));
