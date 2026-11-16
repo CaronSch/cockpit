@@ -3,7 +3,7 @@
  * question in plain words to a one-shot omp that reads the user's conversations and answers it,
  * naming the conversations that do.
  *
- * The agent is `omp -p` with read-only tools (read, grep, find) and no session, rules, skills or
+ * The agent is `omp -p` with read-only tools (read, grep, glob) and no session, rules, skills or
  * extensions, in a temporary directory holding `index.tsv`: one line per conversation, live and
  * archived (journal path, title, directory, last active, first prompt), from history.js. It
  * greps and reads the journals it needs, then answers in a few sentences and names each
@@ -66,7 +66,7 @@ export async function askAgent(question, { ompPath, history, timeoutMs = ASK_TIM
   try {
     await writeFile(join(dir, 'index.tsv'), indexOf(sessions));
     const proc = Bun.spawn(
-      [ompPath, '-p', '--no-session', '--no-skills', '--no-rules', '--no-extensions', '--no-lsp', '--no-title', '--tools', 'read,grep,find', '--auto-approve', '--thinking', 'low', '--system-prompt', ASK_SYSTEM_PROMPT, question],
+      [ompPath, '-p', '--no-session', '--no-skills', '--no-rules', '--no-extensions', '--no-lsp', '--no-title', '--tools', 'read,grep,glob', '--auto-approve', '--thinking', 'low', '--system-prompt', ASK_SYSTEM_PROMPT, question],
       { cwd: dir, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', timeout: timeoutMs },
     );
     const [output, errors, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
