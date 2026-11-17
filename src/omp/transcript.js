@@ -13,7 +13,7 @@
  */
 import { json } from '../ui/format.js';
 import { todoPhases } from './todos.js';
-import { isContinueDirective } from './message.js';
+import { btwAsked, isContinueDirective } from './message.js';
 /** @import { SessionEvent, SessionMeta } from '../../daemon/wire.js' */
 /** @import { TodoPhase } from './todos.js' */
 
@@ -64,7 +64,10 @@ import { isContinueDirective } from './message.js';
  * }} BashItem
  * @typedef {ItemBase & { kind: 'note', level: NoteLevel, source: string, text: string, detail: string | null, hidden: boolean }} NoteItem
  * @typedef {ItemBase & { kind: 'unrecognised', label: string, raw: string }} UnrecognisedItem
- * @typedef {UserItem | AssistantItem | ToolItem | BashItem | NoteItem | UnrecognisedItem} Item
+ * A side question asked with `/btw`, with omp's answer as it streams: outside the conversation,
+ * which neither the question nor the answer joins (omp/message.js `btwQuestion`).
+ * @typedef {ItemBase & { kind: 'side', question: string } & SideAnswer} SideItem
+ * @typedef {UserItem | AssistantItem | ToolItem | BashItem | NoteItem | UnrecognisedItem | SideItem} Item
  */
 
 /**
@@ -418,16 +421,21 @@ function applyFrame(state, frame, at) {
     case 'session_info_update':
       if (typeof frame.title === 'string') state.session.name = withoutIcons(frame.title) || null;
       return;
-    // Side questions: each topic's answers, one per turn, go to `sideAnswers`, never into the chat.
+    // Side questions: each topic's answers, one per turn, go to `sideAnswers`, never into the
+    // chat. One asked with `/btw` (not about a quote: Ask shows those in its own box) is also an
+    // item of the transcript, where it was asked, with its answer.
     case 'btw_record': {
       const record = frame.record;
       if (typeof record?.id !== 'string') return unrecognised(state, type, frame);
       // omp's record is the topic's first turn, its follow-ups after it.
       const turns = [record, ...(Array.isArray(record.followUps) ? record.followUps : [])];
-      state.sideAnswers.set(
-        record.id,
-        turns.map((turn) => ({ answer: String(turn.answer ?? ''), status: turn.status, error: typeof turn.error === 'string' ? turn.error : null })),
-      );
+      const answers = turns.map((turn) => ({ answer: String(turn.answer ?? ''), status: turn.status, error: typeof turn.error === 'string' ? turn.error : null }));
+      state.sideAnswers.set(record.id, answers);
+      const question = btwAsked(String(record.question ?? ''));
+      if (question !== null) {
+        const item = upsert(state, `btw:${record.id}`, () => ({ kind: 'side', question, ...answers[0] }));
+        if (item.kind === 'side') touch(Object.assign(item, answers[0]));
+      }
       return;
     }
     case 'btw_delta': {
@@ -435,6 +443,10 @@ function applyFrame(state, frame, at) {
       const answer = state.sideAnswers.get(frame.recordId)?.at(-1);
       if (answer) answer.answer += String(frame.delta ?? '');
       else state.sideAnswers.set(frame.recordId, [{ answer: String(frame.delta ?? ''), status: 'running', error: null }]);
+      // A `/btw` item shows its topic's first turn (it has no follow-ups: only Ask's topics do).
+      const item = state.index.get(`btw:${frame.recordId}`);
+      const first = state.sideAnswers.get(frame.recordId)?.[0];
+      if (item?.kind === 'side' && first) touch(Object.assign(item, first));
       return;
     }
     case 'rpc_frame_error':

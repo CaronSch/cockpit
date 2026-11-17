@@ -1,7 +1,7 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
 import { IDLE_COMPACTED, IDLE_COMPACTING, addNote, applyEvent, askAnswers, conversationName, createTranscript, needsLogin, seedConversation } from '../src/omp/transcript.js';
-import { CONTINUE_DIRECTIVE } from '../src/omp/message.js';
+import { CONTINUE_DIRECTIVE, composeAsk, composeSideQuestion } from '../src/omp/message.js';
 import { sentPrompts } from '../src/omp/prompt-history.js';
 import { branchEntry, rewindPoint } from '../src/omp/rewind.js';
 /** @import { SessionEvent } from '../daemon/wire.js' */
@@ -346,7 +346,7 @@ describe('derived state', () => {
   });
 
   test('a side question’s answer builds up beside the chat and never enters it', () => {
-    const record = { id: 'b1', leafId: null, question: 'why?', answer: '', status: 'running', createdAt: 1, updatedAt: 1 };
+    const record = { id: 'b1', leafId: null, question: composeAsk('the parser', 'why?'), answer: '', status: 'running', createdAt: 1, updatedAt: 1 };
     const state = run([
       frame({ type: 'btw_record', record }),
       frame({ type: 'btw_delta', recordId: 'b1', delta: 'Because ' }),
@@ -358,8 +358,17 @@ describe('derived state', () => {
     assert.deepEqual(kinds(state), []);
   });
 
+  test('a /btw question is an item of the transcript, its answer streaming in; one about a quote is not', () => {
+    const record = { id: 'b2', leafId: null, question: composeSideQuestion('what does it return?'), answer: '', status: 'running', createdAt: 1, updatedAt: 1 };
+    const state = run([frame({ type: 'btw_record', record }), frame({ type: 'btw_delta', recordId: 'b2', delta: 'A string' })]);
+    const side = (/** @type {import('../src/omp/transcript.js').Transcript} */ s) => s.items.flatMap((i) => (i.kind === 'side' ? [[i.question, i.answer, i.status]] : []));
+    assert.deepEqual(side(state), [['what does it return?', 'A string', 'running']]);
+    applyEvent(state, frame({ type: 'btw_record', record: { ...record, answer: 'A string.', status: 'complete' } }));
+    assert.deepEqual(side(state), [['what does it return?', 'A string.', 'complete']]);
+  });
+
   test('a follow-up adds a turn to its topic, streams into it, and can fail or be cancelled', () => {
-    const first = { id: 'b1', leafId: null, question: 'why?', answer: 'Because.', status: 'complete', createdAt: 1, updatedAt: 1 };
+    const first = { id: 'b1', leafId: null, question: composeAsk('the parser', 'why?'), answer: 'Because.', status: 'complete', createdAt: 1, updatedAt: 1 };
     const turn = (/** @type {Record<string, unknown>} */ patch) => ({ question: 'and?', answer: '', status: 'running', createdAt: 2, updatedAt: 2, ...patch });
     const state = run([
       frame({ type: 'btw_record', record: first }),

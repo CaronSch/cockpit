@@ -38,7 +38,7 @@ import { addNote, applyEvent, conversationName, createTranscript, needsLogin, se
 import { renderItem, renderPending, renderResponseMark, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
-import { afreshCommand, composeAsk, composeFollowUp, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
+import { afreshCommand, btwQuestion, composeAsk, composeSideQuestion, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
 import { pickTip, renderWelcome } from '../omp/welcome.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachAnnotationMarks } from '../omp/annotation-marks.js';
@@ -99,7 +99,9 @@ const AFRESH_COMMANDS = [
   { name: 'new', aliases: [], hint: '', description: 'Start a new conversation here; this one stays in Sessions' },
   { name: 'archive', aliases: [], hint: '', description: 'Archive this conversation and start a new one here' },
 ];
-const OWN_COMMANDS = new Set(['fork', 'new', 'archive']);
+/** The workbench's own: a side question (`/btw` is omp's terminal UI's only). @type {SlashCommand} */
+const BTW_COMMAND = { name: 'btw', aliases: [], hint: '<question>', description: 'Ask a side question; the answer stays out of the conversation' };
+const OWN_COMMANDS = new Set(['fork', 'new', 'archive', 'btw']);
 
 /**
  * Whether the page is going away: its requests are cut off then, which says nothing of whether
@@ -737,7 +739,7 @@ function createPane(body, ctx, daemon) {
       // Side questions go to omp's `btw`: answered from the session's context, never added to it.
       ask: {
         async send(quote, question, topic) {
-          const command = topic === undefined ? { type: 'btw', question: composeAsk(quote, question) } : { type: 'btw', question: composeFollowUp(question), recordId: topic };
+          const command = topic === undefined ? { type: 'btw', question: composeAsk(quote, question) } : { type: 'btw', question: composeSideQuestion(question), recordId: topic };
           try {
             const res = await daemon.rpc(await wake(), command);
             const record = res.success ? res.data?.record : null;
@@ -1017,6 +1019,9 @@ function createPane(body, ctx, daemon) {
       // So are `/new` and `/archive`: a new conversation in this one's place.
       const afresh = afreshCommand(draft.value);
       if (afresh) return startAfresh(afresh);
+      // And `/btw <question>`: a side question, answered in the transcript, outside the conversation.
+      const aside = btwQuestion(draft.value);
+      if (aside !== null) return askAside(aside);
       // `/command` and `!shell` go as typed; comments and attachments wait for the next prompt.
       const command = isCommand(draft.value);
       // A bare `!` names no command: leave it in the box rather than run nothing.
@@ -1081,6 +1086,32 @@ function createPane(body, ctx, daemon) {
       }
       outgoing.take();
       ctx.openTab('omp', { fork: file, cwd: cwd() || null, session: null, sessionFile: null, name: null, prompt: outgoing.message });
+    }
+
+    /**
+     * `/btw <question>`: asks omp's `btw` a side question, answered from the conversation's
+     * context without joining it; the question and its answer show where it was asked (the
+     * transcript's `side` item, from omp's `btw_record`). The command leaves the box; its cards
+     * wait for the next prompt. Asleep, the conversation wakes first.
+     * @param {string} question
+     */
+    async function askAside(question) {
+      hideSuggestions();
+      if (!question) {
+        addNote(state, 'error', 'btw', 'Ask what? Type the question after it, as in /btw what does this function return?');
+        return schedule();
+      }
+      const outgoing = composer.compose({ withCards: false });
+      const taken = outgoing.take();
+      try {
+        const res = await daemon.rpc(await wake(), { type: 'btw', question: composeSideQuestion(question) });
+        if (res.success) return;
+        addNote(state, 'error', 'btw', `The agent did not take the question: ${res.error ?? 'refused'}`);
+      } catch (err) {
+        addNote(state, 'error', 'btw', `The agent did not take the question: ${errorMessage(err)}`);
+      }
+      if (!leaving) taken.restore();
+      schedule();
     }
 
     /**
@@ -1399,8 +1430,8 @@ function createPane(body, ctx, daemon) {
       const q = match[1].toLowerCase();
       const starts = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().startsWith(q));
       const contains = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().includes(q));
-      // `/fork`, `/new` and `/archive` are the workbench's own (send()): omp's are its terminal UI's only.
-      const all = [FORK_COMMAND, ...AFRESH_COMMANDS, ...state.commands.filter((c) => !OWN_COMMANDS.has(c.name))];
+      // `/fork`, `/btw`, `/new` and `/archive` are the workbench's own (send()): omp's are its terminal UI's only.
+      const all = [FORK_COMMAND, BTW_COMMAND, ...AFRESH_COMMANDS, ...state.commands.filter((c) => !OWN_COMMANDS.has(c.name))];
       const commands = [...all.filter(starts), ...all.filter((c) => !starts(c) && contains(c))].slice(0, MAX_SUGGESTIONS);
       suggestions.show(
         commands.map((c) => {

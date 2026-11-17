@@ -295,6 +295,10 @@ export function createComposer({ pane, upload, onError, shellDir, preview, onCha
       if (e.key === 'Escape') {
         e.stopPropagation();
         done();
+      } else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !matchMedia('(pointer: coarse)').matches) {
+        // As in the message box: Enter saves, Shift+Enter is a new line (a phone's Enter is one).
+        e.preventDefault();
+        save.click();
       }
     });
     box.addEventListener('input', () => autosize(box, { max: maxHeight() }));
