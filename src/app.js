@@ -1,8 +1,8 @@
 /**
  * Cockpit controller: owns the layout atom and wires rendering, interaction and widgets together.
  *
- * The layout is this window's screen of its workspace (workspace/screen.js), which the daemon
- * keeps; the app starts once the screen is claimed and loaded.
+ * The layout is the workspace this window shows (workspace/shown.js), which the daemon keeps;
+ * the app starts once it is loaded, and swaps the layout when the window shows another.
  */
 import { activateTab, addTab, applyDrop, branch, findLeaf, insertBeside, listLeaves, moveLeaf, removeLeaf, setLeafParams } from './layout/grid-model.js';
 import { computeLayout } from './layout/compute-layout.js';
@@ -14,7 +14,7 @@ import { createTabStrips, panelId, tabId } from './render/tab-strip.js';
 import { attachSashController } from './interaction/sash-controller.js';
 import { createDragController } from './interaction/drag-controller.js';
 import { createPalette } from './ui/palette.js';
-import { createScreenSwitcher } from './ui/screen-switcher.js';
+import { createWorkspaceSwitcher } from './ui/workspace-switcher.js';
 import { createUpdateNotice } from './ui/update-notice.js';
 import { createNotifier } from './sessions/notify.js';
 import { sessionLinks } from './sessions/links.js';
@@ -24,14 +24,16 @@ import { createSpotlight } from './ui/spotlight.js';
 import { conversationMatch } from './sessions/running.js';
 import { button, el } from './ui/dom.js';
 import { crossIcon, gripIcon, plusIcon } from './ui/icons.js';
+import { errorMessage } from './ui/format.js';
 import { getDaemon } from './daemon/client.js';
-import { openScreen } from './workspace/screen.js';
-import { describeWindows } from './workspace/model.js';
+import { openWorkspace } from './workspace/shown.js';
+import { describeWindows, stepFrom } from './workspace/model.js';
 import { WIDGETS, newWidgetLeaf } from './widgets/registry.js';
 /** @import { Leaf, LeafParams, Tree } from './layout/grid-model.js' */
 /** @import { ScreenWindows, TabMatch, WidgetContext } from './widgets/registry.js' */
 /** @import { Layout, Rect } from './layout/compute-layout.js' */
 /** @import { Palette } from './ui/palette.js' */
+/** @import { Workspace } from '../daemon/wire.js' */
 /** @import { GridApi } from './interaction/drag-controller.js' */
 /** @import { TabFace } from './render/tab-strip.js' */
 
@@ -91,8 +93,8 @@ export async function createApp(root) {
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const daemon = getDaemon();
-  const opened = await openScreen({ daemon });
-  const layoutAtom = createAtom(opened.ok ? opened.screen.tree() : null);
+  const opened = await openWorkspace({ daemon });
+  const layoutAtom = createAtom(opened.ok ? opened.shown.tree() : null);
 
   // ── which windows there are, which was used last, which is pointed at (ctx.screen) ──
   /** When each window was last used (pressed or focused), in order of use. @type {Map<string, number>} */
@@ -394,7 +396,55 @@ export async function createApp(root) {
     onDragStateChange: (/** @type {boolean} */ dragging) => palette?.setDragging(dragging),
   };
 
-  if (opened.ok) layoutAtom.subscribe((/** @type {Tree} */ tree) => opened.screen.update(tree));
+  if (opened.ok) layoutAtom.subscribe((/** @type {Tree} */ tree) => opened.shown.update(tree));
+
+  const SLIDE_EASING = 'cubic-bezier(0.2, 0, 0, 1)';
+  /**
+   * Shows another workspace's layout in place of this one's, sliding in from the side it lies
+   * on (`step`: how many places along the list it is), as macOS desktops do.
+   * @param {Tree} tree @param {number} step
+   */
+  function slideTo(tree, step) {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    pendingAnimate = false;
+    layoutAtom.set(tree);
+    draw(tree, false);
+    if (reducedMotion.matches || step === 0) return;
+    gridEl.animate([{ transform: `translateX(${Math.sign(step) * 48}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 200, easing: SLIDE_EASING });
+  }
+  /** There is no workspace that way (`step`): the grid gives a little, and comes back. @param {number} step */
+  function nudge(step) {
+    if (reducedMotion.matches) return;
+    gridEl.animate([{ transform: 'none' }, { transform: `translateX(${step < 0 ? 14 : -14}px)` }, { transform: 'none' }], { duration: 220, easing: SLIDE_EASING });
+  }
+  if (opened.ok) {
+    opened.shown.onTree((tree, change) => (change.how === 'switch' ? slideTo(tree, change.step) : api.commitTree(tree, { animate: true })));
+    // ⌃⌥← and ⌃⌥→ show the workspace before or after this one, ⌃⌥1–9 one by its place: captured
+    // first, so they work from a terminal or a text box too.
+    window.addEventListener(
+      'keydown',
+      (event) => {
+        if (!event.ctrlKey || !event.altKey || event.metaKey || event.shiftKey || document.body.classList.contains('is-dragging')) return;
+        const { shown } = opened;
+        const ids = shown.list().map((w) => w.id);
+        /** @type {string | null} */
+        let target;
+        let step = 0;
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+          step = event.key === 'ArrowLeft' ? -1 : 1;
+          target = stepFrom(ids, shown.id(), step);
+        } else if (/^Digit[1-9]$/.test(event.code)) {
+          target = ids[Number(event.code.slice(5)) - 1] ?? null;
+        } else return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (target) void shown.switchTo(target);
+        else if (step !== 0 && !event.repeat) nudge(step);
+      },
+      { capture: true },
+    );
+  }
 
   new ResizeObserver(([entry]) => {
     bounds = { x: 0, y: 0, w: Math.floor(entry.contentRect.width), h: Math.floor(entry.contentRect.height) };
@@ -585,9 +635,35 @@ export async function createApp(root) {
     onAdd: addWidget,
   });
 
-  query(root, '.topbar-actions').prepend(
-    createScreenSwitcher({ opened, describe: (tree) => describeWindows(tree, titleOf) }).root,
-  );
+  const switcher = createWorkspaceSwitcher({ opened, describe: (tree) => describeWindows(tree, titleOf) });
+  query(root, '.topbar-actions').prepend(switcher.root);
+  if (opened.ok) {
+    const { shown } = opened;
+    /** The workspace a drag would drop on now. @type {Workspace | null} */
+    let dropTo = null;
+    // A window dragged onto a workspace in the switcher's menu moves there (a new one opens there).
+    api.outside = {
+      at(source, x, y) {
+        dropTo = switcher.dropAt(x, y);
+        return dropTo && `${source.kind === 'move' ? 'Move to' : 'Open in'} ${dropTo.name}`;
+      },
+      drop(source) {
+        const to = dropTo;
+        const leaf = source.kind === 'move' ? findLeaf(layoutAtom.get(), source.id) : source.leaf;
+        if (!to || !leaf) return;
+        switcher.close();
+        shown.moveWindow(leaf, to.id).then(
+          // Gone from here without being closed: its widget ends nothing (a terminal's shell runs on there).
+          () => source.kind === 'move' && api.commitTree(removeLeaf(layoutAtom.get(), leaf.id), { animate: true }),
+          (err) => switcher.report(`Could not move it to ${to.name}: ${errorMessage(err)}`),
+        );
+      },
+      end() {
+        dropTo = null;
+        switcher.dropAt(-1, -1);
+      },
+    };
+  }
   query(root, '.topbar-actions').prepend(createZoomControl().root);
   query(root, '.topbar-actions').prepend(createSpotlight({ daemon, show: (params) => showInTab('omp', params, conversationMatch(params)) }).root);
   // Desktop notifications follow every awake session; Config turns them on or off. A window

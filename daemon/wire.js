@@ -94,10 +94,13 @@
  *   GET    /api/scratchpads/:id/assets/:name → the file (images inline, anything else as a download)
  *   POST   /api/attachments            raw file body, `x-file-name` header (URI-encoded)
  *                                      → 201 { path }: where omp can read it, for an `@"<path>"` mention
- *   GET    /api/workspaces/:name       → Workspace (no screens for a workspace never saved)
- *   PUT    /api/workspaces/:name/screens/:id { tree, base } → { rev }, or 409 { error, current: Screen | null }
- *                                      when the screen is no longer at rev `base` (null: not stored);
- *                                      a null `tree` deletes the screen (`rev` comes back null)
+ *   GET    /api/workspaces             → { workspaces: Workspace[] }, in order (also in `hello`, and `workspaces` events)
+ *   POST   /api/workspaces { name? }   → 201 Workspace: a new, empty one after the others
+ *   PATCH  /api/workspaces/:id { name } → 204
+ *   PUT    /api/workspaces/:id { tree, base } → { rev }, or 409 { error, current: Workspace | null }
+ *                                      when the workspace is no longer at rev `base`
+ *   DELETE /api/workspaces/:id         → 204 (its windows with it: their shells end); 409 for the last one
+ *   POST   /api/workspaces/:id/windows { leaf } → 204: a window moved there from another workspace
  *   POST   /api/deliver                { target: ConversationTarget, message } → 202 { session }: the
  *                                      message sent to the conversation as a prompt, woken first if
  *                                      it is asleep, queued after the turn if its agent works (see
@@ -260,7 +263,7 @@
  * `update` whether Cockpit's checkout is behind the newest `main` (`updates.js`).
  * `terminals` are the terminals running (`terminals.js`); `stream` names this connection, for
  * watching a terminal on it (PUT /api/terminals/:id/watchers/:stream).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState, update: UpdateState | null, terminals: TerminalInfo[], stream: string }} HelloEvent
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState, update: UpdateState | null, terminals: TerminalInfo[], workspaces: Workspace[], stream: string }} HelloEvent
  */
 
 /**
@@ -302,6 +305,7 @@
 /** Sent to every page after a conversation was marked read or unread, with all the marks. @typedef {{ kind: 'unread', unread: Unread }} UnreadEvent */
 
 /** Sent to every page after a conversation was pinned or unpinned, with all the pins. @typedef {{ kind: 'pins', pinned: Pinned }} PinsEvent */
+/** Sent to every page after any workspace changed (its layout, name, a new or deleted one), with all of them. @typedef {{ kind: 'workspaces', workspaces: Workspace[] }} WorkspacesEvent */
 
 /** Sent to every page after a fork was started, titled or moved (a rewind), with every fork. @typedef {{ kind: 'forks', forks: Forks }} ForksEvent */
 
@@ -334,7 +338,7 @@
  * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
  */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | AsidesEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | WorkspacesEvent | ForksEvent | DecisionsEvent | AsidesEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle
@@ -358,11 +362,10 @@
  */
 
 /**
- * One browser window's share of a workspace: its layout, and `rev`, which counts its saves
- * (see `workspace.js`).
- * @typedef {{ id: string, rev: number, tree: GridNode }} Screen
+ * A workspace: a named layout of windows, and `rev`, which counts its layout's saves (see
+ * `workspace.js`); `tree` is null while it holds no windows.
+ * @typedef {{ id: string, name: string, rev: number, tree: GridNode | null }} Workspace
  */
-/** Screens in the order they were created. @typedef {{ screens: Screen[] }} Workspace */
 
 /**
  * omp's reply to one command (see omp's rpc docs). `success: false` is a normal answer,

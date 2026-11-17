@@ -1,63 +1,82 @@
 /**
- * Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names
- * and ids, which screen a new window claims, and how a screen is described.
+ * Workspaces, kept free of the DOM and shared with the daemon: valid ids and names, the name a
+ * new one gets, which one a step to the left or right goes to, how one is described, and
+ * another window's save of one taken up without disturbing the windows it left as they were.
  *
- * A workspace is everything one user lays out across their browser windows; each window is
- * one of its screens, like an extra monitor, with a layout tree of its own.
+ * A workspace is a named layout of windows, as a macOS desktop is: a browser window shows one
+ * at a time and switches between them, and two browser windows may show the same one.
  */
 import { listLeaves } from '../layout/grid-model.js';
 /** @import { GridNode, Leaf, Tree } from '../layout/grid-model.js' */
 
-export const DEFAULT_WORKSPACE = 'main';
-/** A workspace name becomes a file name: lowercase only, since macOS disks ignore case. */
-export const WORKSPACE_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
-export const SCREEN_ID = /^s_[0-9a-f]{8}$/;
+export const WORKSPACE_ID = /^ws_[0-9a-f]{8}$/;
+/** The longest name a workspace may have. */
+const NAME_MAX = 40;
 
-export const newScreenId = () => `s_${crypto.randomUUID().slice(0, 8)}`;
+export const newWorkspaceId = () => `ws_${crypto.randomUUID().slice(0, 8)}`;
 
 /**
- * The workspace a page's query string names (`?workspace=<name>`), `main` when it names none,
- * or null when the name is not a valid one.
+ * `name` as a workspace's name, trimmed, or null when it cannot be one (empty, too long, or
+ * holding control characters).
+ * @param {unknown} name @returns {string | null}
+ */
+export function workspaceName(name) {
+  if (typeof name !== 'string') return null;
+  const trimmed = name.trim();
+  return trimmed.length > 0 && trimmed.length <= NAME_MAX && !/[\u0000-\u001f\u007f]/.test(trimmed) ? trimmed : null;
+}
+
+/** The first "Workspace N" none of `taken` is called. @param {readonly string[]} taken */
+export function nextWorkspaceName(taken) {
+  const names = new Set(taken);
+  let n = 1;
+  while (names.has(`Workspace ${n}`)) n++;
+  return `Workspace ${n}`;
+}
+
+/**
+ * The workspace a page's query string names (`?workspace=<id>`), or null when it names none.
  * @param {string} search @returns {string | null}
  */
 export function workspaceFrom(search) {
-  const name = new URLSearchParams(search).get('workspace');
-  if (name === null) return DEFAULT_WORKSPACE;
-  return WORKSPACE_NAME.test(name) ? name : null;
+  const id = new URLSearchParams(search).get('workspace');
+  return id !== null && WORKSPACE_ID.test(id) ? id : null;
 }
 
-/** The Web Lock a window holds while it shows a screen. @param {string} workspace @param {string} id */
-export const lockName = (workspace, id) => `cockpit:${workspace}:${id}`;
+/**
+ * The workspace `step` places from `id` in `ids` (−1: the one before), or null past either
+ * end: as on macOS, stepping does not wrap around.
+ * @param {readonly string[]} ids @param {string} id @param {number} step @returns {string | null}
+ */
+export function stepFrom(ids, id, step) {
+  const at = ids.indexOf(id);
+  return at < 0 ? null : (ids[at + step] ?? null);
+}
 
 /**
- * The screens a window tries to claim, in order: the one this tab showed before (a reload
- * keeps its screen), then every saved screen in creation order (a browser restart brings its
- * windows back). If all are taken, the window starts a new screen.
- * @param {string | null} remembered @param {readonly string[]} saved @returns {string[]}
+ * `next`, a layout another browser window saved, with every window whose settings did not
+ * change keeping its settings object from `prev` (the layout shown), so only the windows that
+ * changed hear of it (registry.js `paramsChanged`).
+ * @param {Tree} prev @param {Tree} next @returns {Tree}
  */
-export const claimOrder = (remembered, saved) =>
-  remembered ? [remembered, ...saved.filter((id) => id !== remembered)] : [...saved];
-
-/**
- * A copy of a layout for a new screen: the same windows with the same settings, each with an
- * id of its own (as the registry gives a new window).
- * @param {Tree} tree @param {() => string} [newId] @returns {Tree}
- */
-export function copyLayout(tree, newId = () => `w_${crypto.randomUUID().slice(0, 8)}`) {
+export function keepUnchanged(prev, next) {
+  const before = new Map(listLeaves(prev).map((l) => [l.id, l]));
   /** @param {Leaf} leaf @returns {Leaf} */
-  const copyLeaf = (leaf) => ({ ...leaf, id: newId(), ...(leaf.params ? { params: { ...leaf.params } } : {}) });
-  /** @param {GridNode} node @returns {GridNode} */
-  const copy = (node) => {
-    if (node.kind === 'leaf') return copyLeaf(node);
-    if (node.kind === 'branch') return { ...node, children: node.children.map(copy), sizes: [...node.sizes] };
-    const tabs = node.tabs.map(copyLeaf);
-    return { ...node, tabs, active: tabs[node.tabs.findIndex((t) => t.id === node.active)].id };
+  const keep = (leaf) => {
+    const old = before.get(leaf.id);
+    return old && old.widget === leaf.widget && JSON.stringify(old.params ?? null) === JSON.stringify(leaf.params ?? null) ? old : leaf;
   };
-  return tree && copy(tree);
+  /** @param {GridNode} node @returns {GridNode} */
+  const walk = (node) => {
+    if (node.kind === 'leaf') return keep(node);
+    if (node.kind === 'branch') return { ...node, children: node.children.map(walk) };
+    return { ...node, tabs: node.tabs.map(keep) };
+  };
+  return next && walk(next);
 }
 
 /**
- * What a screen holds, e.g. "2 Agent, 1 Notes", kinds in the order they first appear.
+ * What a workspace holds, e.g. "2 Agent, 1 Notes", kinds in the order they first appear.
  * @param {Tree} tree @param {(widget: string) => string} titleOf @returns {string}
  */
 export function describeWindows(tree, titleOf) {

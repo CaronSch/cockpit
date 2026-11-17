@@ -3,7 +3,7 @@
  * then Back, for a phone reaching the daemon over its owner's tailnet (daemon/remote.js).
  *
  * It mounts the workbench's own Sessions and Agent widgets, one at a time, with a context of its
- * own instead of the grid's: no grid, workspace, screens or Web Locks, since over plain HTTP the
+ * own instead of the grid's: no grid or workspace, since over plain HTTP the
  * page is no secure context. Opening a conversation pushes a history entry holding its params,
  * so the back gesture returns to the list and a reload reopens the conversation. The page's
  * daemon client is scoped: it streams the events of the conversations opened here only. Read and

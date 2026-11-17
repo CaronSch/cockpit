@@ -58,14 +58,13 @@ export function openContextMenu(anchor, items, at) {
     if (!document.activeElement || document.activeElement === document.body) returnTo?.focus({ preventScroll: true });
   });
   document.body.append(menu);
+  // Shown from its anchor (the row right-clicked), so a menu that row is in stays open under it.
+  menu.showPopover({ source: anchor });
   if (at) {
-    menu.showPopover();
     // At the pointer, kept inside the viewport.
     const { width, height } = menu.getBoundingClientRect();
     menu.style.left = `${Math.max(0, Math.min(at.x, innerWidth - width))}px`;
     menu.style.top = `${Math.max(0, Math.min(at.y, innerHeight - height))}px`;
-  } else {
-    menu.showPopover({ source: anchor });
   }
   entries[0]?.focus();
 }

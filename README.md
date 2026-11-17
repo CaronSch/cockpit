@@ -40,17 +40,14 @@ every browser:
 - *Phone access* (off): see **Phone** below.
 - *Accounts*: signs omp in to a model provider, or with another account (`omp login`).
 
-**Screens.** Each browser window is a screen of your workspace, like an extra
-monitor: open a second window and it starts empty, with its own panes. Layouts
-are kept by the daemon (`~/.cockpit/workspaces/`), so they survive a browser
-restart: windows opened again get their screens back, and a reload keeps the
-window's screen. The switcher in the top bar (**Screen 2 of 3**) lists every
-screen and what it holds; a screen open in no window can be opened in this one
-(**Open here**, without stopping its agents) or deleted (its agents keep running too), and **New screen** opens a copy of this one, the same windows showing the same things, in a new tab. Add
-`?workspace=<name>` to the address for a separate workspace (lowercase letters,
-digits and dashes; the default is `main`). Windows at two different addresses at
-once (say `127.0.0.1` and `localhost`) do not see which screens the other has
-open.
+**Workspaces.** A workspace is a named layout of windows, like a macOS desktop. The switcher in
+the top bar names the one shown; point at it and it lists them all, with what each holds. Click
+one to show it in this window instead (its agents keep running), **New workspace** adds one, and
+a right-click renames or deletes one. **⌃⌥←** and **⌃⌥→** step to the workspace before or after,
+**⌃⌥1**–**⌃⌥9** jump to one, from anywhere (a terminal too). Drag a window onto the switcher and
+drop it on a workspace to move it there. Layouts are kept by the daemon
+(`~/.cockpit/workspaces.json`), so they survive a browser restart; a reload shows the same
+workspace, and two browser windows may show the same one, kept in step.
 
 **Updates.** Every hour the daemon checks GitHub for a newer `main`. When there is one, the top bar
 shows **Update**: it fast-forwards the checkout the daemon runs from, restarts the daemon (agents

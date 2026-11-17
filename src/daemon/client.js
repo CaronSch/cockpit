@@ -35,8 +35,8 @@
  * meanwhile together, so it arrives in order.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, Screen, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, UpdateState, Workspace } from '../../daemon/wire.js' */
-/** @import { Tree } from '../layout/grid-model.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, UpdateState, Workspace } from '../../daemon/wire.js' */
+/** @import { Leaf, Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
 /** @import { Forks } from '../../daemon/forks.js' */
@@ -47,7 +47,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { Annotation, AnnotationPatch, NewAnnotation } from '../../daemon/annotations.js' */
 /** @import { LoginState, SetupStatus } from '../../daemon/setup.js' */
 /** @typedef {{ ok: true, rev: string } | { ok: false, current: Scratchpad }} ScratchpadSave */
-/** @typedef {{ ok: true, rev: number | null } | { ok: false, current: Screen | null }} ScreenSave */
+/** @typedef {{ ok: true, rev: number } | { ok: false, current: Workspace | null }} WorkspaceSave */
 
 /** @typedef {'connecting' | 'open' | 'down' | 'unauthorized'} ConnectionStatus */
 
@@ -111,8 +111,14 @@ export class DaemonError extends Error {
  *   uploadScratchpadFile(id: string, file: Blob, name: string): Promise<string>,
  *   uploadAttachment(file: Blob, name: string): Promise<string>,
  *   onScratchpad(fn: (id: string, pad: Scratchpad) => void): () => void,
- *   workspace(name: string): Promise<Workspace>,
- *   saveScreen(workspace: string, id: string, tree: Tree, base: number | null, options?: { keepalive?: boolean }): Promise<ScreenSave>,
+ *   workspaces(): readonly Workspace[] | null,
+ *   onWorkspaces(fn: () => void): () => void,
+ *   loadWorkspaces(): Promise<readonly Workspace[]>,
+ *   createWorkspace(name?: string): Promise<Workspace>,
+ *   renameWorkspace(id: string, name: string): Promise<void>,
+ *   deleteWorkspace(id: string): Promise<void>,
+ *   saveWorkspace(id: string, tree: Tree, base: number, options?: { keepalive?: boolean }): Promise<WorkspaceSave>,
+ *   moveWindow(workspace: string, leaf: Leaf): Promise<void>,
  *   config(): Promise<DaemonConfig>,
  *   createSession(options: { cwd: string, resume?: string, fork?: string, prompt?: string }): Promise<SessionMeta>,
  *   seen(session: string): Promise<void>,
@@ -237,6 +243,15 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
   const setPins = (ids) => {
     pinned = new Set(ids);
     for (const fn of pinsListeners) fn();
+  };
+  /** Every workspace, as the daemon last said; null until it has. @type {readonly Workspace[] | null} */
+  let workspaces = null;
+  /** @type {Set<() => void>} */
+  const workspacesListeners = new Set();
+  /** @param {readonly Workspace[]} all */
+  const setWorkspaces = (all) => {
+    workspaces = all;
+    for (const fn of workspacesListeners) fn();
   };
   /** @type {Forks} */
   let forks = {};
@@ -423,6 +438,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     sessionsChanged();
     setUnread(hello.unread);
     setPins(hello.pinned);
+    // A daemon from before workspaces were named layouts says nothing: keep what was loaded.
+    if (hello.workspaces) setWorkspaces(hello.workspaces);
     setForks(hello.forks);
     setSettings(hello.settings);
     setWatches(hello.bugbot);
@@ -459,6 +476,7 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     }
     if (event.kind === 'unread') return setUnread(event.unread);
     if (event.kind === 'pins') return setPins(event.pinned);
+    if (event.kind === 'workspaces') return setWorkspaces(event.workspaces);
     if (event.kind === 'forks') return setForks(event.forks);
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'bugbot') return setWatches(event.watches);
@@ -610,7 +628,7 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
 
   const sessionPath = (/** @type {string} */ session) => `/api/sessions/${encodeURIComponent(session)}`;
   const padPath = (/** @type {string} */ id) => `/api/scratchpads/${encodeURIComponent(id)}`;
-  const workspacePath = (/** @type {string} */ name) => `/api/workspaces/${encodeURIComponent(name)}`;
+  const workspacePath = (/** @type {string} */ id) => `/api/workspaces/${encodeURIComponent(id)}`;
   const unreadPath = (/** @type {string} */ ompId) => `/api/unread/${encodeURIComponent(ompId)}`;
   const annotationsPath = (/** @type {string} */ ompId) => `/api/annotations/${encodeURIComponent(ompId)}`;
 
@@ -842,10 +860,29 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
       scratchpadListeners.add(fn);
       return () => scratchpadListeners.delete(fn);
     },
-    workspace: (name) => request(workspacePath(name)),
-    async saveScreen(workspace, id, tree, base, { keepalive = false } = {}) {
-      const result = await save(`${workspacePath(workspace)}/screens/${encodeURIComponent(id)}`, { tree, base }, keepalive);
+    workspaces: () => workspaces,
+    onWorkspaces(fn) {
+      workspacesListeners.add(fn);
+      return () => workspacesListeners.delete(fn);
+    },
+    async loadWorkspaces() {
+      const { workspaces: all } = await request('/api/workspaces');
+      setWorkspaces(all);
+      return all;
+    },
+    createWorkspace: (name) => request('/api/workspaces', { method: 'POST', body: JSON.stringify(name === undefined ? {} : { name }) }),
+    async renameWorkspace(id, name) {
+      await request(workspacePath(id), { method: 'PATCH', body: JSON.stringify({ name }) });
+    },
+    async deleteWorkspace(id) {
+      await request(workspacePath(id), { method: 'DELETE' });
+    },
+    async saveWorkspace(id, tree, base, { keepalive = false } = {}) {
+      const result = await save(workspacePath(id), { tree, base }, keepalive);
       return 'conflict' in result ? { ok: false, current: result.conflict } : { ok: true, rev: result.answer.rev };
+    },
+    async moveWindow(workspace, leaf) {
+      await request(`${workspacePath(workspace)}/windows`, { method: 'POST', body: JSON.stringify({ leaf }) });
     },
     onUiChange(fn) {
       uiListeners.add(fn);
