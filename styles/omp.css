@@ -1206,13 +1206,13 @@ div.omp-compaction::after,
 }
 
 /* A `/btw` side question and its answer (items-view.js): set apart from the conversation, which
-   neither joins, by a rule in the code colour (as Ask's highlights) and a quieter answer. */
+   neither joins, by a rule in the questions' colour (as Ask's highlights) and a quieter answer. */
 .omp-side {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-1) 0 var(--space-1) var(--space-3);
-  border-left: 2px solid color-mix(in oklch, var(--color-code) 60%, transparent);
+  border-left: 2px solid color-mix(in oklch, var(--color-ask) 60%, transparent);
 }
 
 .omp-side-head {
@@ -1223,7 +1223,7 @@ div.omp-compaction::after,
 
 .omp-side-label {
   flex: none;
-  color: var(--color-code);
+  color: var(--color-ask);
   font: 500 var(--text-xs) / 1.4 var(--font-code);
 }
 
@@ -1492,10 +1492,35 @@ div.omp-compaction::after,
   border-radius: 8px;
 }
 
-/* A prompt scheduled for this conversation: when it runs, then the prompt. */
+/* A prompt scheduled for this conversation: when it runs, the prompt, and an × that removes it. */
 .omp-chip.is-scheduled {
   max-width: min(100%, 48ch);
-  padding-right: 8px;
+  padding-right: 3px;
+}
+
+.omp-chip-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  corner-shape: round;
+  background: transparent;
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.omp-chip-remove:hover:enabled {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.omp-chip-remove .stroke-icon {
+  width: 8px;
+  height: 8px;
 }
 
 .omp-chip.is-scheduled .omp-chip-kind {
@@ -1846,8 +1871,8 @@ div.omp-compaction::after,
 }
 
 ::highlight(omp-annotation-ask) {
-  background-color: color-mix(in oklch, var(--color-code) 14%, transparent);
-  text-decoration: underline 1.5px color-mix(in oklch, var(--color-code) 70%, transparent);
+  background-color: color-mix(in oklch, var(--color-ask) 14%, transparent);
+  text-decoration: underline 1.5px color-mix(in oklch, var(--color-ask) 75%, transparent);
   text-underline-offset: 3px;
 }
 
@@ -1945,6 +1970,11 @@ div.omp-compaction::after,
 
 .omp-ask-error {
   color: var(--color-danger);
+}
+
+/* A question's thread quotes in the questions' colour, as its highlight does. */
+.omp-quote-panel:has(.omp-ask-thread) .omp-quote-preview {
+  border-left-color: var(--color-ask);
 }
 
 .omp-quote-preview {

@@ -15,7 +15,7 @@
  * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), forks.json
  * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), schedule.json
  * (the prompts agents scheduled), decisions/
- * (each conversation's decision reviews), plans/ (each conversation's plan), fork-sources/ (journals forked mid-turn, cut to their last response, while
+ * (each conversation's decision reviews), plans/ (each conversation's plan), asides/ (each conversation's `/btw` side questions), fork-sources/ (journals forked mid-turn, cut to their last response, while
  * their fork starts), scratchpads/, attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
@@ -33,6 +33,7 @@ import { loadSchedule, scheduleTools } from './schedule.js';
 import { askReviewer, createDecisionReviews } from './decisions.js';
 import { createPlans, planTools, withPlans } from './plans.js';
 import { createAnnotations } from './annotations.js';
+import { createAsides } from './asides.js';
 import { askAgent } from './ask.js';
 import { createDelivery } from './deliver.js';
 import { createGithub } from './github.js';
@@ -100,6 +101,7 @@ const decisions = createDecisionReviews({
 });
 const plans = createPlans({ dir: join(stateDir, 'plans') });
 const annotations = createAnnotations({ dir: join(stateDir, 'annotations') });
+const asides = createAsides({ dir: join(stateDir, 'asides') });
 const hub = createHub({
   ompPath,
   unread,
@@ -118,11 +120,12 @@ const hub = createHub({
       if (!(err instanceof JournalRefused && err.status === 400)) console.error(`[daemon] could not archive the journal a rewind left (${file}):`, err);
     });
   },
-  // A rewound conversation goes on under a new id: its forks are still its forks, its plan its plan, its annotations its annotations.
+  // A rewound conversation goes on under a new id: its forks are still its forks, its plan its plan, its annotations and side questions its own.
   onRewoundId: (from, to) => {
     void forks.moved(from, to);
     void plans.moved(from, to).catch((err) => console.error(`[daemon] could not move the plan of conversation ${from}:`, err));
     void annotations.moved(from, to).catch((err) => console.error(`[daemon] could not move the annotations of conversation ${from}:`, err));
+    void asides.moved(from, to).catch((err) => console.error(`[daemon] could not move the side questions of conversation ${from}:`, err));
   },
   onTurnEnded: decisions.turnEnded,
   onTodo: (ompId, phases) => void plans.todo(ompId, phases).catch((err) => console.error(`[daemon] could not follow the todo list of conversation ${ompId}:`, err)),
@@ -141,6 +144,12 @@ const hub = createHub({
 });
 // Switched, a setting reaches a conversation as it next wakes: idle ones go to sleep now.
 settings.subscribe(() => hub.launchChanged());
+// omp keeps a `/btw` answer only while its session runs: each is saved as it ends (asides.js).
+hub.subscribe((event) => {
+  if (event.kind !== 'frame' || /** @type {Record<string, any>} */ (event.frame).type !== 'btw_record') return;
+  const ompId = hub.get(event.session)?.meta().ompId;
+  if (ompId) void asides.heard(ompId, /** @type {Record<string, any>} */ (event.frame).record).catch((err) => console.error(`[daemon] could not keep a side question of conversation ${ompId}:`, err));
+});
 const forker = createForker({ hub, forks, scratchDir: join(stateDir, 'fork-sources'), nameFork: (prompt, sourceTitle) => nameFork(prompt, sourceTitle, { ompPath }) });
 const delivery = createDelivery({ hub, isArchived: (file) => history.isArchived(file) });
 const bugbotPoll = Number(process.env.COCKPIT_BUGBOT_POLL_MS);
@@ -181,6 +190,7 @@ const daemon = createDaemon({
   decisions,
   plans,
   annotations,
+  asides,
   settings,
   github,
   delivery,

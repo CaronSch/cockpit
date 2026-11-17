@@ -31,6 +31,8 @@
  *   DELETE /api/pins/:ompId            → 204: it is not (see `pins.js`); both 404 for an id that is not one
  *   GET    /api/decisions/:ompId       → { reviews: Reviews }: the conversation's decision reviews, those
  *                                      under way included (see `decisions.js`); 404 for an id that is not one
+ *   GET    /api/asides/:ompId          → { asides: Aside[] }: the conversation's `/btw` side questions, kept
+ *                                      once answered (see `asides.js`); 404 for an id that is not one
  *   GET    /api/plans                  → { plans: PlanSummary[] }: every conversation's plan, most recently
  *                                      changed first (see `plans.js`; agents keep them with their `plan` tool)
  *   GET    /api/plans/:ompId           → { plan: Plan | null }: the conversation's plan, null for none; 404
@@ -169,6 +171,7 @@
 /** @import { DaemonSettings } from './settings.js' */
 /** @import { LoginState } from './setup.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
+/** @import { Aside } from './asides.js' */
 /** @import { Plan } from './plans.js' */
 /** @import { Annotation } from './annotations.js' */
 
@@ -303,6 +306,7 @@
 /** Sent to every page after a fork was started, titled or moved (a rewind), with every fork. @typedef {{ kind: 'forks', forks: Forks }} ForksEvent */
 
 /** Sent to every page after a conversation's decision reviews changed (one started or ended), with all of them. @typedef {{ kind: 'decisions', ompId: string, reviews: Reviews }} DecisionsEvent */
+/** Sent to every page after a conversation's kept `/btw` side questions changed, with all of them. @typedef {{ kind: 'asides', ompId: string, asides: Aside[] }} AsidesEvent */
 
 /** Sent to every page after a conversation's plan changed (its text, a decision, its todo list), with the whole plan (null: moved away by a rewind). @typedef {{ kind: 'plan', ompId: string, plan: Plan | null }} PlanEvent */
 
@@ -330,7 +334,7 @@
  * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
  */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | ForksEvent | DecisionsEvent | AsidesEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

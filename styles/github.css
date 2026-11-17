@@ -392,7 +392,7 @@
 
 /* A question's quote bar in its own colour (the bar: omp.css, as the message box's comments). */
 .gh-note-card.is-question {
-  --quote-bar: var(--color-code);
+  --quote-bar: var(--color-ask);
 }
 
 .gh-note-body {

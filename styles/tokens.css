@@ -35,6 +35,9 @@
   /* Code in agent replies: soft periwinkle on a faint chip, apart from the accent's links. */
   --color-code: oklch(80% 0.1 268);
   --color-code-bg: oklch(100% 0 0 / 0.06);
+  /* Side questions (Ask on reply text, `/btw`): a teal clear of the accent's indigo, so a
+     question's highlight never reads as a comment's. */
+  --color-ask: oklch(78% 0.12 190);
   --color-selection: color-mix(in oklch, var(--color-accent) 32%, transparent);
   /* Related windows (an agent conversation and its forks, app.js): one colour per family on
      screen, in hues clear of the accent, danger and code colours. */

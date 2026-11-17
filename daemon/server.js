@@ -46,6 +46,7 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { DecisionReviews } from './decisions.js' */
 /** @import { Plan, Plans } from './plans.js' */
 /** @import { Annotation, Annotations } from './annotations.js' */
+/** @import { Aside, Asides } from './asides.js' */
 /** @import { LoginState, Setup } from './setup.js' */
 /** @import { Terminals } from './terminals.js' */
 /** @import { Reviews } from '../src/omp/decisions.js' */
@@ -259,14 +260,14 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, annotations: Annotations, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, updates: Updates, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, annotations: Annotations, asides: Asides, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, updates: Updates, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, plans, annotations, settings, github, delivery, bugbot, schedule, setup, remote, terminals, ask, restart, updates, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, plans, annotations, asides, settings, github, delivery, bugbot, schedule, setup, remote, terminals, ask, restart, updates, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -308,7 +309,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
-        // No id: scratchpad, history, unread, pins, forks, decisions, plan, annotations, settings, bugbot, schedule, login, activity, remote, update and terminal events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, forks, decisions, plan, annotations, asides, settings, bugbot, schedule, login, activity, remote, update and terminal events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
@@ -319,6 +320,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         const offDecisions = decisions.subscribe((/** @type {string} */ ompId, /** @type {Reviews} */ reviews) =>
           write(`data: ${JSON.stringify({ kind: 'decisions', ompId, reviews })}\n\n`),
         );
+        const offAsides = asides.subscribe((/** @type {string} */ ompId, /** @type {Aside[]} */ all) => write(`data: ${JSON.stringify({ kind: 'asides', ompId, asides: all })}\n\n`));
         const offPlans = plans.subscribe((/** @type {string} */ ompId, /** @type {Plan | null} */ plan) => write(`data: ${JSON.stringify({ kind: 'plan', ompId, plan })}\n\n`));
         const offAnnotations = annotations.subscribe((/** @type {string} */ ompId, /** @type {Annotation[]} */ all) =>
           write(`data: ${JSON.stringify({ kind: 'annotations', ompId, annotations: all })}\n\n`),
@@ -346,6 +348,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           offPins();
           offForks();
           offDecisions();
+          offAsides();
           offPlans();
           offAnnotations();
           offSettings();
@@ -527,6 +530,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           },
         }),
         '/api/decisions/:id': api({ GET: async (req) => json({ reviews: await decisions.reviews(ompIdOf(req)) }) }),
+        '/api/asides/:id': api({ GET: async (req) => json({ asides: await asides.list(ompIdOf(req)) }) }),
         '/api/plans': api({ GET: async () => json({ plans: await plans.list() }) }),
         '/api/plans/:id': api({ GET: async (req) => json({ plan: await plans.plan(ompIdOf(req)) }) }),
         '/api/annotations/:id': api({

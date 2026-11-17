@@ -219,9 +219,11 @@ What runs today:
   never sent to omp) opens one as a new tab beside it with that prompt. `/btw <question>` (the
   workbench's too; omp's is its terminal UI's) asks omp's `btw` a side question, answered from the
   conversation's context without joining it: the question and its answer, streaming, show where
-  it was asked as a card set apart in the code colour (a `side` item of the transcript, from omp's
-  `btw_record`; in *Only prompts and responses* too), in every window showing the conversation
-  while it is awake (omp keeps no answers once its session ends). Dragging
+  it was asked as a card set apart in the questions' teal (a `side` item of the transcript, from omp's
+  `btw_record`; in *Only prompts and responses* too), in every window showing the conversation;
+  omp keeps no answers once its session ends, so the daemon keeps each one as it ends
+  (`daemon/asides.js`, `~/.cockpit/asides/<ompId>.json`, `asides` events, moved with a rewind) and
+  windows put them back where they were asked after a reload or sleep (`addAsides`). Dragging
   **Send** (the message box's small up-arrow button) onto the grid starts one in a new window placed where it is dropped, with
   the message in the box (the box empties once the fork is placed; a click still sends here).
   Forking while the agent works copies the conversation as of its last completed response.
@@ -269,7 +271,7 @@ What runs today:
   naming the job or, for a subagent, its agent: omp runs a revival as a job of its own, `<agent>-2`), which
   run on after the turn and keep the session awake; Sessions counts them per row. A Scheduled
   line under it lists the prompts scheduled for the conversation (its agent's `schedule` tool,
-  below), each with when it runs; a missed one says so. A Plan line under that shows the conversation's
+  below), each with when it runs, and an × that removes it (it never runs, and nothing wakes the agent); a missed one says so. A Plan line under that shows the conversation's
   plan while its agent keeps one (below): how many of its steps are done, its title and the step under
   way; a click shows it in a Plan window as a tab of the agent window (or brings forward the one
   showing it), a drag places one where it is dropped. A Markdown table in a reply has a Copy button (on
@@ -283,7 +285,7 @@ What runs today:
   follow-up questions continue the same topic, one at a time (every question asks
   for an answer of at most three sentences). The text a comment or a question is on stays
   highlighted, as in Google Docs, in every agent window showing the conversation (comments in
-  the accent, questions in the code colour; the CSS Custom Highlight API, `src/omp/annotation-marks.js`):
+  the accent, questions in a teal of their own, `--color-ask`; the CSS Custom Highlight API, `src/omp/annotation-marks.js`):
   each is kept as an annotation from the moment it is posted, sent or not (`daemon/annotations.js`,
   `~/.cockpit/annotations/<ompId>.json`, every page hears changes as `annotations` events; moved with a
   rewind), naming its reply by the message's timestamp and the passage by its text and which
@@ -801,7 +803,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/layout/snap.js` — Magnetic sash behaviour: detents pull the sash onto aligned positions, then minimum sizes clamp the result.
 - `src/main.js` — Bootstrap: starts the app and shows a visible error if it cannot.
 - `src/omp/activity.js` — Which omp events make a session "unread": the agent's final response, when it hands the turn back to the user, or a question it stops to ask them.
-- `src/omp/annotation-marks.js` — Highlights on the parts of agent replies the user commented on or asked about (daemon/annotations.js), as in Google Docs: drawn with the CSS Custom Highlight API, so the transcript's DOM is never touched, comments in the accent and questions in the code colour, and a plain click on one opens it again (selection-popup.js `open`).
+- `src/omp/annotation-marks.js` — Highlights on the parts of agent replies the user commented on or asked about (daemon/annotations.js), as in Google Docs: drawn with the CSS Custom Highlight API, so the transcript's DOM is never touched, comments in the accent and questions in their own teal, and a plain click on one opens it again (selection-popup.js `open`).
 - `src/omp/code-copy.js` — A fenced code block as rendered Markdown shows it, with a Copy button in its top-right corner that copies the code itself (the fence's contents, not its language label).
 - `src/omp/cold.js` — When an agent window dims: its conversation has been quiet past the point at which idle compaction (daemon/idle-compaction.js) compacts a long one, 54 minutes after the last model request, so its prompt cache is about to expire and the next message reads the conversation in full.
 - `src/omp/composer.js` — The agent pane's message box: a draft that starts one line high and grows with its text up to half the pane, cards for what goes with the next message (comments on quoted transcript text, files), and the Send button.
@@ -879,6 +881,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
 - `daemon/annotations.js` — Annotations: the comments and questions the user left on parts of an agent's replies, as in Google Docs, so the text they are on stays highlighted in every agent window showing the conversation and a click on it shows them again (src/omp/annotation-marks.js).
+- `daemon/asides.js` — Side questions asked with `/btw`, kept: omp keeps a side question's answer only while its session runs, so the daemon saves each one omp reports done (its `btw_record`), and an agent window shows it where it was asked after a reload, sleep or restart too (omp/transcript.js `addAsides`).
 - `daemon/ask.js` — Asking an agent where something was said: Spotlight's Ask (src/ui/spotlight.js) hands a question in plain words to a one-shot omp that reads the user's conversations and answers it, naming the conversations that do.
 - `daemon/attachments.js` — Files attached to omp prompts: stored where omp can read them, one folder per day, so a prompt can mention them as `@"<path>"` and omp attaches them itself (images to the model, text inlined; see omp's file mentions).
 - `daemon/browser.js` — Which browser agents drive (settings.js `browser`, picked in Setup or Config): a separate one of omp's own by default, so an agent testing a page never takes over the tab its user is reading.
