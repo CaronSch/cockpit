@@ -130,6 +130,7 @@ import { btwAsked, isContinueDirective } from './message.js';
  *   index: Map<string, Item>,
  *   toolOwner: Map<string, string>,
  *   failedRequests: Set<string>,
+ *   idleCompacting: boolean,
  *   counted: Set<string>,
  *   nextKey: number,
  * }} Transcript
@@ -151,8 +152,6 @@ const KNOWN_UNRENDERED = new Set([
   'cache_warming_end',
   'host_tool_call', // omp asks the daemon to run its tool (daemon/schedule.js); the call's own tool frames show it
   'host_tool_cancel',
-  'manual_compaction_start', // a `compact`: the daemon's idle compaction notes it as it is sent and answered
-  'manual_compaction_end',
 ]);
 
 /** How a message reached a subagent that was not running, and so set it going again. */
@@ -192,6 +191,7 @@ export function createTranscript() {
     index: new Map(),
     toolOwner: new Map(),
     failedRequests: new Set(),
+    idleCompacting: false,
     counted: new Set(),
     nextKey: 0,
   };
@@ -370,7 +370,13 @@ function applyFrame(state, frame, at) {
     }
     case 'auto_compaction_start':
       return note(state, 'muted', 'compaction', `Compacting context (${frame.reason ?? 'auto'}, ${frame.action ?? 'compact'})…`);
-    case 'auto_compaction_end': {
+    case 'manual_compaction_start':
+      // A `/compact` the user typed. The daemon's idle compaction sends `compact` itself and says
+      // so as it is sent and answered (applySent, applyResponse), so its frames show nothing more.
+      return state.idleCompacting ? undefined : note(state, 'muted', 'compaction', 'Compacting context…');
+    case 'auto_compaction_end':
+    case 'manual_compaction_end': {
+      if (type === 'manual_compaction_end' && state.idleCompacting) return;
       if (frame.skipped) return note(state, 'muted', 'compaction', 'Compaction skipped');
       if (frame.aborted) return note(state, 'warning', 'compaction', 'Compaction aborted');
       if (frame.errorMessage) return note(state, 'error', 'compaction', `Compaction failed: ${frame.errorMessage}`);
@@ -498,6 +504,7 @@ function applyResponse(state, frame) {
     if (id) state.failedRequests.add(id);
     if (command === 'bash' && finishBash(state, id, null, String(frame.error ?? 'failed'))) return;
     if (command === 'login') state.openUrl = null;
+    if (command === 'compact') state.idleCompacting = false;
     return note(state, 'error', command, `${command} failed: ${frame.error ?? 'unknown error'}`);
   }
   switch (command) {
@@ -529,7 +536,8 @@ function applyResponse(state, frame) {
       return note(state, 'info', 'login', `Logged in${frame.data?.providerId ? ` to ${frame.data.providerId}` : ''}`);
     case 'compact':
       // Only the daemon's idle compaction sends `compact` (daemon/idle-compaction.js); a user's
-      // `/compact` is a prompt, reported by omp's own frames.
+      // `/compact` is a prompt, reported by omp's own `manual_compaction_*` frames.
+      state.idleCompacting = false;
       return note(state, 'muted', 'compaction', IDLE_COMPACTED, typeof frame.data?.summary === 'string' ? frame.data.summary : null);
     default:
       // Other successful replies are consumed by whoever sent the command.
@@ -652,6 +660,7 @@ function applySent(state, command) {
     note(state, 'muted', 'login', `Logging in to ${String(command.providerId ?? 'a provider')}…`);
   } else if (command?.type === 'compact') {
     // Likewise a compaction, which only the daemon's idle compaction sends (see applyResponse).
+    state.idleCompacting = true;
     note(state, 'muted', 'compaction', IDLE_COMPACTING);
   }
   // Every other command shows up through omp's own frames (messages, responses).

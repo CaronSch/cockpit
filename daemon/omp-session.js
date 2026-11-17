@@ -81,10 +81,11 @@ const HISTORY_COMMAND = Object.freeze({ type: 'get_messages' });
 const STATE_CHANGING_COMMANDS = new Set(['set_model', 'cycle_model', 'set_thinking_level', 'cycle_thinking_level', 'login', 'new_session', 'switch_session', 'fork', 'branch', 'compact']);
 
 /**
- * Frames after which `get_state` reports something else: a turn's end (context use, todos),
- * the model or thinking level changing, and omp emptying the todo list (`todo_auto_clear`).
+ * Frames after which `get_state` reports something else: a turn's end (context use, todos), a
+ * compaction's end (context use: a `/compact` the user typed ends no turn), the model or thinking
+ * level changing, and omp emptying the todo list (`todo_auto_clear`).
  */
-const STATE_CHANGING_FRAMES = new Set(['agent_end', 'model_changed', 'thinking_level_changed', 'config_update', 'todo_auto_clear']);
+const STATE_CHANGING_FRAMES = new Set(['agent_end', 'auto_compaction_end', 'manual_compaction_end', 'model_changed', 'thinking_level_changed', 'config_update', 'todo_auto_clear']);
 
 /** @param {Record<string, any>} frame */
 const changesState = (frame) =>
