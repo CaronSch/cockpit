@@ -171,9 +171,10 @@ What runs today:
   a running turn, and carry on a conversation whatever became of its omp (asleep,
   a daemon restart). Compaction draws a line across the transcript, in every view (*Only
   prompts and responses* too), with what happened in its middle and the summary a click away:
-  omp's own near its context's limit ("Compacting context…", "Context compacted") and the
-  daemon's while idle ("Compacting while idle…", "Compacted while idle, before the prompt cache
-  expired"). Past that cutoff (54 minutes after
+  omp's own near its context's limit or on a `/compact` the user types ("Compacting context…",
+  "Context compacted") and the daemon's while idle ("Compacting while idle…", "Compacted while
+  idle, before the prompt cache expired"); the toolbar's context use is read again once one ends.
+  Past that cutoff (54 minutes after
   the last request, or the user's last prompt), any conversation, however long and whether
   compaction is on or not, dims its window until it is used again (anything in it focused) or
   works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). What the agent says on its way

@@ -266,13 +266,31 @@ describe('notes', () => {
   });
 
   test('a compaction the daemon runs while idle is a note while it runs, then one carrying its summary', () => {
+    const result = { summary: 'All of it, briefly.', firstKeptEntryId: 'e1', tokensBefore: 250_000 };
     const state = run([
       sent({ type: 'compact', id: 'ac_9' }),
-      frame({ type: 'response', id: 'ac_9', command: 'compact', success: true, data: { summary: 'All of it, briefly.', firstKeptEntryId: 'e1', tokensBefore: 250_000 } }),
+      // omp announces every compaction it is asked for; the daemon's notes already say it.
+      frame({ type: 'manual_compaction_start' }),
+      frame({ type: 'manual_compaction_end', result, aborted: false }),
+      frame({ type: 'response', id: 'ac_9', command: 'compact', success: true, data: result }),
     ]);
+    assert.equal(state.items.length, 2);
     const [running, done] = state.items;
     assert.ok(running.kind === 'note' && running.text === IDLE_COMPACTING);
     assert.ok(done.kind === 'note' && done.text === IDLE_COMPACTED && done.detail === 'All of it, briefly.');
+  });
+
+  test('a /compact the user typed is a note while it runs, then one carrying its summary', () => {
+    const state = run([
+      sent({ type: 'prompt', message: '/compact', id: 'ac_10' }),
+      frame({ type: 'manual_compaction_start' }),
+      frame({ type: 'manual_compaction_end', result: { summary: 'Long', shortSummary: 'Short' }, aborted: false }),
+    ]);
+    const notes = state.items.filter((i) => i.kind === 'note');
+    assert.deepEqual(
+      notes.map((n) => [n.text, n.detail]),
+      [['Compacting context…', null], ['Context compacted', 'Short']],
+    );
   });
 
   test('the pane can add its own notes', () => {
