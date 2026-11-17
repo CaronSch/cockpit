@@ -30,11 +30,12 @@
  * suggests them too (omp/pr-suggest.js).
  */
 import { button, el, setText, svg } from '../ui/dom.js';
+import { crossIcon } from '../ui/icons.js';
 import { orbit } from '../ui/orbit.js';
 import { showImage } from '../ui/image-viewer.js';
 import { errorMessage, tildeHome } from '../ui/format.js';
 import { DaemonError, getDaemon } from '../daemon/client.js';
-import { addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
+import { addAsides, addNote, applyEvent, conversationName, createTranscript, needsLogin, seedConversation } from '../omp/transcript.js';
 import { renderItem, renderPending, renderResponseMark, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
@@ -209,6 +210,8 @@ function createPane(body, ctx, daemon) {
   const offUnread = daemon.onUnread(() => schedule());
   // Decision reviews (daemon/decisions.js) arrive after the turn, for any conversation.
   const offDecisions = daemon.onDecisions(() => schedule());
+  // Kept `/btw` side questions (daemon/asides.js), shown where they were asked after a reload or sleep.
+  const offAsides = daemon.onAsides(() => schedule());
   // The daemon's settings: plans switched off hide the Plan line.
   const offDaemonSettings = daemon.onSettings(() => schedule());
   // Forks started or moved (daemon/forks.js): the Forks count, and which windows are related.
@@ -1529,6 +1532,7 @@ function createPane(body, ctx, daemon) {
 
     function drawTranscript() {
       rewindBar.remove(); // items are placed by index; drawRewind puts it back
+      addAsides(state, daemon.asides(ompId()) ?? []);
       const { onlyResponses } = settings.get();
       const view = onlyResponses ? 'responses' : 'work';
       if (view !== drawnView) {
@@ -1670,7 +1674,7 @@ function createPane(body, ctx, daemon) {
 
     /**
      * The prompts scheduled for this conversation (its agent's `schedule` tool), soonest first,
-     * each with when it runs; the whole prompt shows on pointing at one.
+     * each with when it runs and an × that removes it: it never runs, and nothing wakes the agent.
      */
     function drawScheduled() {
       const at = Date.now();
@@ -1687,7 +1691,17 @@ function createPane(body, ctx, daemon) {
         ...tasks.map((t, i) => {
           const { when, missed, failed } = shown[i];
           const c = el('span', `omp-chip is-scheduled${missed ? ' is-missed' : ''}${failed ? ' is-failed' : ''}`);
-          c.append(el('span', 'omp-chip-kind', missed ? `missed · ${when}` : when), el('span', 'omp-chip-text', t.prompt));
+          const remove = button('omp-chip-remove', '', () => {
+            remove.disabled = true;
+            daemon.unschedule(t.id).catch((err) => {
+              remove.disabled = false;
+              addNote(state, 'error', 'schedule', `Could not remove the scheduled prompt: ${errorMessage(err)}`);
+              schedule();
+            });
+          });
+          remove.append(crossIcon());
+          remove.setAttribute('aria-label', `Remove the prompt scheduled for ${when}`);
+          c.append(el('span', 'omp-chip-kind', missed ? `missed · ${when}` : when), el('span', 'omp-chip-text', t.prompt), remove);
           return c;
         }),
       );
@@ -1970,6 +1984,7 @@ function createPane(body, ctx, daemon) {
       offReset();
       offUnread();
       offDecisions();
+      offAsides();
       offDaemonSettings();
       offForks();
       offSchedule();

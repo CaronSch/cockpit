@@ -23,6 +23,7 @@ import { loadSchedule, scheduleTools } from '../daemon/schedule.js';
 import { askReviewer, createDecisionReviews } from '../daemon/decisions.js';
 import { createPlans } from '../daemon/plans.js';
 import { createAnnotations } from '../daemon/annotations.js';
+import { createAsides } from '../daemon/asides.js';
 import { askAgent } from '../daemon/ask.js';
 import { createSetup } from '../daemon/setup.js';
 import { APPEND_SYSTEM_PROMPT } from '../daemon/omp-session.js';
@@ -195,7 +196,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'plan' && e.kind !== 'annotations' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.kind !== 'update' && e.kind !== 'terminals' && e.kind !== 'terminal' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'asides' && e.kind !== 'plan' && e.kind !== 'annotations' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.kind !== 'update' && e.kind !== 'terminals' && e.kind !== 'terminal' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -244,6 +245,7 @@ beforeAll(async () => {
     decisions,
     plans: createPlans({ dir: join(cwd, 'state', 'plans') }),
     annotations: createAnnotations({ dir: join(cwd, 'state', 'annotations') }),
+    asides: createAsides({ dir: join(cwd, 'state', 'asides') }),
     settings,
     history,
     github,

@@ -16,6 +16,7 @@ import { todoPhases } from './todos.js';
 import { btwAsked, isContinueDirective } from './message.js';
 /** @import { SessionEvent, SessionMeta } from '../../daemon/wire.js' */
 /** @import { TodoPhase } from './todos.js' */
+/** @import { Aside } from '../../daemon/asides.js' */
 
 /**
  * One block of an assistant message, in content order.
@@ -237,6 +238,30 @@ export function applyEvent(state, event) {
  */
 export function addNote(state, level, source, text) {
   note(state, level, source, text);
+}
+
+/**
+ * Puts kept `/btw` side questions (daemon/asides.js) the transcript does not show yet where they
+ * were asked: after the last prompt or reply before them. One the transcript shows already (asked
+ * while its window was open, from omp's own `btw_record`) is left as it is.
+ * @param {Transcript} state @param {readonly Aside[]} asides
+ */
+export function addAsides(state, asides) {
+  for (const aside of asides) {
+    const key = `btw:${aside.id}`;
+    if (state.index.has(key)) continue;
+    /** @type {Item} */
+    const item = { kind: 'side', key, rev: 0, question: aside.question, answer: aside.answer, status: aside.status, error: aside.error };
+    let at = state.items.length;
+    while (at > 0) {
+      const before = state.items[at - 1];
+      const time = before.kind === 'user' || before.kind === 'assistant' ? before.at : null;
+      if (time !== null && time <= aside.createdAt) break;
+      at--;
+    }
+    state.items.splice(at, 0, item);
+    state.index.set(key, item);
+  }
 }
 
 /**

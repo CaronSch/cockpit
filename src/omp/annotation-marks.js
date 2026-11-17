@@ -1,7 +1,7 @@
 /**
  * Highlights on the parts of agent replies the user commented on or asked about
  * (daemon/annotations.js), as in Google Docs: drawn with the CSS Custom Highlight API, so the
- * transcript's DOM is never touched, comments in the accent and questions in the code colour,
+ * transcript's DOM is never touched, comments in the accent and questions in their own teal,
  * and a plain click on one opens it again (selection-popup.js `open`).
  *
  * An annotation names its reply by the message's `at` (items-view.js tags each rendered piece of

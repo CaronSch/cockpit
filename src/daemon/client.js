@@ -42,6 +42,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { Forks } from '../../daemon/forks.js' */
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @import { Reviews } from '../omp/decisions.js' */
+/** @import { Aside } from '../../daemon/asides.js' */
 /** @import { Plan, PlanSummary } from '../../daemon/plans.js' */
 /** @import { Annotation, AnnotationPatch, NewAnnotation } from '../../daemon/annotations.js' */
 /** @import { LoginState, SetupStatus } from '../../daemon/setup.js' */
@@ -85,6 +86,8 @@ export class DaemonError extends Error {
  *   onForks(fn: () => void): () => void,
  *   decisions(ompId: string | null): Reviews | null,
  *   onDecisions(fn: () => void): () => void,
+ *   asides(ompId: string | null): Aside[] | null,
+ *   onAsides(fn: () => void): () => void,
  *   plan(ompId: string | null): Plan | null | undefined,
  *   onPlans(fn: () => void): () => void,
  *   plans(): Promise<PlanSummary[]>,
@@ -289,6 +292,15 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
   const decisionsChanged = () => {
     for (const fn of decisionsListeners) fn();
   };
+  /** The kept `/btw` side questions of the conversations asked about, by omp id. @type {Map<string, Aside[]>} */
+  const asides = new Map();
+  /** Conversations whose side questions are being asked for. @type {Set<string>} */
+  const askingAsides = new Set();
+  /** @type {Set<() => void>} */
+  const asidesListeners = new Set();
+  const asidesChanged = () => {
+    for (const fn of asidesListeners) fn();
+  };
   /** The plans of the conversations asked about, by omp id (null: none). @type {Map<string, Plan | null>} */
   const plans = new Map();
   /** Conversations whose plans are being asked for. @type {Set<string>} */
@@ -424,6 +436,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     // Changes made while this page was away were not heard: ask again.
     decisions.clear();
     decisionsChanged();
+    asides.clear();
+    asidesChanged();
     plans.clear();
     plansChanged();
     annotations.clear();
@@ -465,6 +479,10 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (event.kind === 'decisions') {
       decisions.set(event.ompId, event.reviews);
       return decisionsChanged();
+    }
+    if (event.kind === 'asides') {
+      asides.set(event.ompId, event.asides);
+      return asidesChanged();
     }
     if (event.kind === 'plan') {
       plans.set(event.ompId, event.plan);
@@ -711,6 +729,26 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     onDecisions(fn) {
       decisionsListeners.add(fn);
       return () => decisionsListeners.delete(fn);
+    },
+    /** Conversation `ompId`'s kept `/btw` side questions; null until the daemon has said (asking it, if no one has). */
+    asides(ompId) {
+      if (ompId === null) return null;
+      const known = asides.get(ompId);
+      if (known || askingAsides.has(ompId) || status !== 'open') return known ?? null;
+      askingAsides.add(ompId);
+      request(`/api/asides/${encodeURIComponent(ompId)}`)
+        // News heard meanwhile is newer than this answer. One that failed is not asked again until a reconnect.
+        .then((body) => !asides.has(ompId) && asides.set(ompId, body.asides))
+        .catch(() => !asides.has(ompId) && asides.set(ompId, []))
+        .finally(() => {
+          askingAsides.delete(ompId);
+          asidesChanged();
+        });
+      return null;
+    },
+    onAsides(fn) {
+      asidesListeners.add(fn);
+      return () => asidesListeners.delete(fn);
     },
     /** Conversation `ompId`'s plan (null: it has none); undefined until the daemon has said (asking it, if no one has). */
     plan(ompId) {
