@@ -106,15 +106,16 @@ Planned capabilities:
   not in the layout: anything that must outlive a window, a browser profile or
   a port change (the scratchpad's notes) is a file in the state directory
   (`~/.cockpit`). Closing a window must never delete it.
-- **Layouts live with the daemon too.** Each browser window is one **screen** of
-  a **workspace**, like an extra monitor: its own layout tree, kept in
-  `~/.cockpit/workspaces/<name>.json` (`daemon/workspace.js`). The page's
-  `?workspace=<name>` picks the workspace (default `main`). A window holds a Web
-  Lock on its screen for as long as it is open, so two windows never show one
-  screen; a reload keeps the tab's screen, and a new window takes the first saved
-  screen no window shows, else a new one (`src/workspace/screen.js`). A screen is
-  stored once it holds a window and deleted when it holds none. A page that
-  cannot use the daemon (signed out) keeps its layout in memory only, and says so.
+- **Layouts live with the daemon too.** A **workspace** is a named layout of windows, as a
+  macOS desktop is, kept in order in `~/.cockpit/workspaces.json` (`daemon/workspace.js`; the
+  per-window "screens" kept before became one workspace each, once). Each browser window shows
+  one workspace at a time and switches between them in place (`src/workspace/shown.js`); the
+  address keeps the one shown (`?workspace=<id>`), so a reload or a duplicated tab shows it
+  again, and a new tab shows the one this browser showed last. Two browser windows may show
+  the same workspace: every page hears each save (`workspaces` events), and a window takes up
+  another's change once it has nothing of its own to save (a save made from an older layout is
+  refused, and gives way). An empty workspace is kept until deleted; the last one never is. A
+  page that cannot use the daemon (signed out) keeps its layout in memory only, and says so.
 - **Telemetry provenance**: every recorded fact carries its source: `harness`
   (omp said so), `proxy` (seen on the wire), or `os` (seen by the kernel or the
   filesystem). The UI shows the source. The gap between what an agent claims it
@@ -144,11 +145,16 @@ What runs today:
   splits it out); arrows, Home and End move between tabs and show them, Delete closes one.
   The windows behind stay mounted, hidden and inert, so nothing in them ends or forgets
   its scroll; a stack closed down to one window is a plain window again, and the narrow
-  column shows every tab as a window of its own. Each browser window is a screen of its
-  workspace, saved by the daemon; the top bar's switcher says which screen this
-  window is, lists every screen with what it holds and where it is open, and opens
-  one that is open nowhere in this window (a reload, so its agents keep running)
-  or deletes it (asking first; the agents it showed keep running). Corners
+  column shows every tab as a window of its own. The top bar's workspace switcher (open while
+  pointed at, `src/ui/workspace-switcher.js`) names the workspace shown and lists every one with
+  what it holds; a click shows one in this window in place of the one shown (its windows
+  unmounted, which ends nothing), **New workspace** adds one and shows it, and a right-click
+  renames or deletes one (asking first if it holds windows; its windows close, agents keep
+  running, a terminal's shell ends with its window). ⌃⌥← and ⌃⌥→ show the workspace before or
+  after (sliding in from that side, as swiping between macOS desktops does; at either end the
+  grid gives a little), ⌃⌥1–9 one by its place, from anywhere, a terminal included. A window
+  dragged onto the switcher opens its menu, and dropped on a workspace there moves to it (its
+  widget ends nothing: a terminal's shell runs on there), placed along its right edge. Corners
   are squircles where the browser draws `corner-shape`. A tab running older UI code than the daemon serves shows a
   **Reload** button among the top bar's own (the files' version: `daemon/ui-files.js`).
 - The daemon and the Agent window (the `omp` widget; "Agent" to the user, omp underneath): start omp in a directory (the Directory field
@@ -492,7 +498,7 @@ What runs today:
   plan before, a click away), all live. From the palette it lists every plan, most recently
   changed first (`GET /api/plans`), to pick one; **All plans** goes back to the list. The phone
   shows the Plan line but opens no Plan window.
-- Nothing pops up on hover but the top bar's Config and + Widget menus (`src/ui/hover-menu.js`:
+- Nothing pops up on hover but the top bar's Config, workspace and + Widget menus (`src/ui/hover-menu.js`:
   open while pointed at, pinned by a click): no tooltips (no `title` attributes), and no other
   menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
 - Notes windows (the `scratchpad` widget): the pad's text fills the window, as a page; each new
@@ -573,7 +579,7 @@ What runs today:
   sign-in QR code (`GET /api/remote`, loopback only, drawn by `uqr`), the URL and whose devices
   get in. On the tailnet `/` goes to `/phone` (`phone.html`, `src/phone.js`,
   `styles/phone.css`): the Sessions widget, then one Agent widget full screen, with a context
-  of the page's own (no grid, workspace, screens or Web Locks: plain HTTP is no secure context),
+  of the page's own (no grid or workspace: plain HTTP is no secure context),
   a top bar with Back, the conversation's name, **Show work** (the per-browser *Only prompts
   and responses*, on by default there) and the Agent window's Stop and ↑ ↓; it starts no agent, and
   hides what it has no use for (New, Forks, PRs, Archive, Pin, rewind, and Copy, which
@@ -854,7 +860,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/directory-form.js` — The form a window starts something in a directory from (an agent, a shell): a Directory field that suggests folders as the path is typed, a start button, and under them the directories of the latest conversations, each a click from starting there.
 - `src/ui/dom.js` — Element construction helpers: elements, SVG elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
-- `src/ui/hover-menu.js` — Top bar menus that open while the pointer rests on their button (Config, + Widget): the menu follows the pointer, closing a moment after it leaves, and a click on the button or in the menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
+- `src/ui/hover-menu.js` — Top bar menus that open while the pointer rests on their button (Config, workspaces, + Widget): the menu follows the pointer, closing a moment after it leaves, and a click on the button or in the menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
 - `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note), or on a diagram or chart an agent drew, shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
@@ -862,11 +868,11 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/orbit.js` — A light going round an element's outline while something it stands for is at work (a running shell or subagent): an SVG outline the size of its element whose dash moves along it, at an even pace whatever the element's shape, since the outline's length is set to 100 and the dash moves by its offset.
 - `src/ui/palette.js` — "Add widget" palette.
 - `src/ui/prefs.js` — Per-browser preferences in localStorage.
-- `src/ui/screen-switcher.js` — The screen switcher in the top bar: which screen of its workspace this window shows, and a menu of every screen, with what it holds and where it is open, to open one here or delete it, or to open a copy of this one in a new tab.
 - `src/ui/settings.js` — App-wide settings, picked in the top bar's Config menu and kept per browser.
 - `src/ui/spotlight.js` — Spotlight: a floating search over every conversation, as macOS's.
 - `src/ui/update-notice.js` — The top bar's update notice: Update while Cockpit's checkout is behind the newest `main` on GitHub (daemon/updates.js), else Reload while the daemon serves other UI files than this page loaded (see daemon/ui-files.js), so a tab left open never runs stale code unknowingly.
 - `src/ui/word-snap.js` — Grows a selection out to whole words once it spans more than one, as Google Docs does, so a rough drag still quotes clean text, while a selection inside one word stays exactly as made.
+- `src/ui/workspace-switcher.js` — The workspace switcher in the top bar: the workspace this window shows, and a menu, open while the pointer rests on it (hover-menu.js), of every workspace with what it holds; a click on one shows it in this window instead.
 - `src/ui/zoom.js` — Text size for the whole app, picked in the top bar (− 100% +; the percentage resets it) and kept per browser.
 - `src/widgets/file.js` — A text file to read, and edit, beside the agents: Markdown, CSV, JSON, plain text or code (files/file-refs.js), through the daemon (`/api/text`).
 - `src/widgets/github.js` — A GitHub pull request to review beside the agent that works on it: its description and conversation, and its changes with the comments on their lines.
@@ -878,8 +884,8 @@ particular, move a capability into "Current state" when it ships.
 - `src/widgets/setup.js` — Setup: what this machine needs before a first agent can start, and the choices worth making first, in one window: omp installed, a model provider signed in (omp's own `omp login`, run by the daemon and shown here as it goes: daemon/setup.js), which browser agents drive, GitHub's CLI for pull request windows, the phone (optional: Phone access over Tailscale, offered once Tailscale runs here) and the daemon's switches.
 - `src/widgets/terminal.js` — A terminal: the user's login shell in a directory, shown as a terminal app shows it (xterm.js).
 - `src/widgets/timeline.js` — A timeline of the agents: on its left, idle conversations by how recently they were active (in order, not to scale), the latest beside now; at now, those whose agents are busy (starting, working, asking their user something, or running work in the background); on its right, the prompts agents scheduled for their conversations (daemon/schedule.js), each where it runs, on a log scale (timeline/scale.js) that reaches as far as the furthest one: the next hour spread out, the next month squeezed in.
-- `src/workspace/model.js` — Workspaces and their screens, kept free of the DOM and shared with the daemon: valid names and ids, which screen a new window claims, and how a screen is described.
-- `src/workspace/screen.js` — This window's screen of its workspace: claimed for as long as the window is open, loaded from the daemon, and saved back as its layout changes.
+- `src/workspace/model.js` — Workspaces, kept free of the DOM and shared with the daemon: valid ids and names, the name a new one gets, which one a step to the left or right goes to, how one is described, and another window's save of one taken up without disturbing the windows it left as they were.
+- `src/workspace/shown.js` — The workspace this browser window shows: picked as the page opens, switched from the top bar or the keyboard, saved back as its layout changes, and kept in step with other browser windows showing the same one.
 - `daemon/adhd.js` — "I have ADHD" (the Config menu's switch, settings.js `adhd`): agents shape every reply for a reader with ADHD, by the rules of i-have-adhd (https://github.com/ayghri/i-have-adhd, MIT): the next action first, steps numbered, the state restated, one concrete next step at the end, lists of five at most, no preamble, recap or closer.
 - `daemon/annotations.js` — Annotations: the comments and questions the user left on parts of an agent's replies, as in Google Docs, so the text they are on stays highlighted in every agent window showing the conversation and a click on it shows them again (src/omp/annotation-marks.js).
 - `daemon/asides.js` — Side questions asked with `/btw`, kept: omp keeps a side question's answer only while its session runs, so the daemon saves each one omp reports done (its `btw_record`), and an agent window shows it where it was asked after a reload, sleep or restart too (omp/transcript.js `addAsides`).
@@ -920,7 +926,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/unread.js` — Which omp conversations have news their user has not read: kept in one small file in the state directory, so a mark outlives windows, browsers, daemon restarts and the session itself (a stopped session is a past one, still unread).
 - `daemon/updates.js` — Updates to Cockpit itself: whether its own checkout is behind the newest `main` on GitHub, and taking that update from the workbench (the top bar's Update, src/ui/update-notice.js).
 - `daemon/wire.js` — Wire contract between the daemon and the browser: session metadata, stream events and HTTP payloads.
-- `daemon/workspace.js` — Workspaces: the screens of each one (a layout tree per browser window), kept by the daemon so a layout outlives a browser profile and an address change.
+- `daemon/workspace.js` — Workspaces: named layouts, each a tree of windows, which a browser window shows one at a time and switches between (src/workspace/shown.js), kept by the daemon so a layout outlives a browser profile and an address change.
 
 ### Registered widgets
 
@@ -947,6 +953,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/updates.test.js`
+`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/updates.test.js`, `tests/workspaces.test.js`
 
 <!-- END GENERATED -->

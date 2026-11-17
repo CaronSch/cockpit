@@ -7,7 +7,7 @@ import { createHistory } from '../daemon/history.js';
 import { createHub } from '../daemon/hub.js';
 import { createAttachments } from '../daemon/attachments.js';
 import { createScratchpads } from '../daemon/scratchpad.js';
-import { createWorkspaces } from '../daemon/workspace.js';
+import { loadWorkspaces } from '../daemon/workspace.js';
 import { createDaemon, createDaemonServer, loopbackListener } from '../daemon/server.js';
 import { createRemoteAccess } from '../daemon/remote.js';
 import { loadToken } from '../daemon/token.js';
@@ -196,7 +196,7 @@ async function rpc(id, command) {
 
 /** @param {StreamEvent[]} events @param {string} session @returns {SessionEvent[]} */
 const forSession = (events, session) =>
-  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'asides' && e.kind !== 'plan' && e.kind !== 'annotations' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.kind !== 'update' && e.kind !== 'terminals' && e.kind !== 'terminal' && e.session === session));
+  /** @type {SessionEvent[]} */ (events.filter((e) => e.kind !== 'hello' && e.kind !== 'scratchpad' && e.kind !== 'history' && e.kind !== 'unread' && e.kind !== 'pins' && e.kind !== 'workspaces' && e.kind !== 'forks' && e.kind !== 'decisions' && e.kind !== 'asides' && e.kind !== 'plan' && e.kind !== 'annotations' && e.kind !== 'settings' && e.kind !== 'bugbot' && e.kind !== 'schedule' && e.kind !== 'login' && e.kind !== 'activity' && e.kind !== 'remote' && e.kind !== 'update' && e.kind !== 'terminals' && e.kind !== 'terminal' && e.session === session));
 
 beforeAll(async () => {
   cwd = await mkdtemp(join(tmpdir(), 'ac-daemon-test-'));
@@ -261,7 +261,7 @@ beforeAll(async () => {
     updates: createUpdates({ root: cwd, restart: () => restarts++ }),
     scratchpads: createScratchpads({ dir: join(cwd, 'state', 'scratchpads') }),
     attachments: createAttachments({ dir: join(cwd, 'state', 'attachments') }),
-    workspaces: createWorkspaces({ dir: join(cwd, 'state', 'workspaces') }),
+    workspaces: await loadWorkspaces({ file: join(cwd, 'state', 'workspaces.json'), legacyDir: join(cwd, 'state', 'workspaces') }),
     token: TOKEN,
     root: ROOT,
     config: { defaultCwd: cwd, home: cwd, scratchpadDir: join(cwd, 'state', 'scratchpads'), idleCompactAfterMs: 60_000, version: '0.0.0' },

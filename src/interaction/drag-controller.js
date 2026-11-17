@@ -9,7 +9,8 @@
  * Dropped on a window's head (its title, or its stack's tab strip), a window joins that slot as a
  * tab where the pointer is between its tabs; dropped on its middle, as its last tab, unless the
  * window takes what is dropped there itself (`canDropInto`). A tab of a stack dragged along its
- * own strip moves within it, and dragged to an edge of its own slot, leaves it.
+ * own strip moves within it, and dragged to an edge of its own slot, leaves it. Outside the grid,
+ * a drop goes where `outside` says it can (a workspace in the top bar's menu, for one).
  */
 import { applyDrop, canDropInto, findSlot } from '../layout/grid-model.js';
 import { computeLayout } from '../layout/compute-layout.js';
@@ -32,6 +33,12 @@ import { computeDropZone, detectEdgeZone } from '../layout/drop-zone.js';
  * @property {(tree: Tree) => void} previewTree
  * @property {(tree: Tree, options?: { animate?: boolean }) => void} commitTree
  * @property {(dragging: boolean) => void} [onDragStateChange]
+ * @property {OutsideDrops} [outside]
+ */
+/**
+ * Where outside the grid a drag can be dropped: `at` says what dropping at a point does (the
+ * ghost's label), or null where it does nothing; `drop` does it.
+ * @typedef {{ at(source: DropSource, clientX: number, clientY: number): string | null, drop(source: DropSource): void, end(): void }} OutsideDrops
  */
 /** @typedef {{ activated: boolean, dropped: boolean }} DragEndResult */
 /** @typedef {{ label?: string, onEnd?: (result: DragEndResult) => void }} DragStartOptions */
@@ -54,6 +61,7 @@ import { computeDropZone, detectEdgeZone } from '../layout/drop-zone.js';
  * @property {boolean} active
  * @property {string | null} key
  * @property {DropOp | null} op
+ * @property {boolean} outside dropping now would go outside the grid (`GridApi.outside`)
  * @property {Tree} nextTree
  * @property {number} frame
  * @property {DOMRect} [gridRect] set once the drag activates
@@ -174,6 +182,20 @@ export function createDragController(app) {
     if (!ghost || !gridRect) return;
     ghost.style.transform = `translate3d(${clientX}px, ${clientY}px, 0)`;
 
+    const outside = app.outside?.at(s.source, clientX, clientY) ?? null;
+    if (outside !== null || s.outside) {
+      // Over a menu that opened after the ghost: raised again, above it in the top layer.
+      if (outside !== null && !s.outside) {
+        ghost.hidePopover();
+        ghost.showPopover();
+      }
+      s.outside = outside !== null;
+      ghost.textContent = outside ?? s.label;
+      if (s.outside) {
+        s.key = 'outside';
+        return clearTarget(s);
+      }
+    }
     const hit = hitTest(s, gridRect, clientX, clientY);
     if (hit === undefined) return;
     const where = hit?.target.kind === 'tab' ? `${hit.target.id}:${hit.target.index}` : hit?.target.kind === 'leaf' ? hit.target.id : '';
@@ -209,8 +231,10 @@ export function createDragController(app) {
     const ghost = document.createElement('div');
     s.ghost = ghost;
     ghost.className = 'drag-ghost';
+    ghost.popover = 'manual';
     ghost.textContent = s.label;
     document.body.append(ghost);
+    ghost.showPopover();
     document.body.classList.add('is-dragging');
     if (s.source.kind === 'move') app.frameElement(s.source.id)?.classList.add('is-drag-source');
     app.onDragStateChange?.(true);
@@ -248,8 +272,11 @@ export function createDragController(app) {
       app.onDragStateChange?.(false);
     }
 
-    const dropped = Boolean(commit && s.active && s.nextTree);
-    if (dropped) app.commitTree(s.nextTree, { animate: true });
+    const outside = Boolean(commit && s.active && s.outside);
+    if (outside) app.outside?.drop(s.source);
+    app.outside?.end();
+    const dropped = outside || Boolean(commit && s.active && s.nextTree);
+    if (dropped && !outside) app.commitTree(s.nextTree, { animate: true });
     s.onEnd?.({ activated: s.active, dropped });
   }
 
@@ -292,6 +319,7 @@ export function createDragController(app) {
       active: false,
       key: null,
       op: null,
+      outside: false,
       nextTree: null,
       frame: 0,
     };

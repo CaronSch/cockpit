@@ -294,21 +294,6 @@ needs (18.12.3's 2.1.280 was refused).
   Sessions listing takes over a second. *Response:* read only each file's head
   and a bounded tail, or persist the summaries across restarts.
 
-## When Cockpit is open at two addresses at the same time
-
-- **Windows at different addresses can hold the same screen.** A window claims
-  its screen with a Web Lock, and locks are per origin: a window at `127.0.0.1`
-  does not see the claims of one at `localhost` (or `cockpit.localhost`), so both
-  can open the same screen, and the switcher at one address can offer to open or
-  delete a screen that is open at the other (deleting it ends that window's
-  agents). Two windows saving one screen never lose a layout silently: the save
-  the daemon refuses moves its window onto a new screen (`src/workspace/screen.js`).
-  Only a change made in the last quarter second before such a window closes is
-  lost, since its final save cannot move anywhere. *Threshold detail:* the owner
-  keeps tabs open at two addresses. *Response:* have the daemon track which
-  screens are open (each page holds a claim on the event stream), replacing the
-  locks.
-
 ## When `~/.cockpit` passes 1 GB
 
 - **Attached files are never deleted.** Every file pasted or dropped on an omp

@@ -22,8 +22,8 @@ import { UpdateRefused } from './updates.js';
 import { REPO } from '../src/github/pr-refs.js';
 import { IMAGE_TYPES } from '../src/scratchpad/blocks.js';
 import { PAD_ID } from '../src/scratchpad/blocks.js';
-import { SCREEN_ID, WORKSPACE_NAME } from '../src/workspace/model.js';
-import { isValidTree } from '../src/layout/grid-model.js';
+import { WORKSPACE_ID, workspaceName } from '../src/workspace/model.js';
+import { isValidTree, listLeaves } from '../src/layout/grid-model.js';
 import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion } from './ui-files.js';
 /** @import { BunRequest, Server } from 'bun' */
 /** @import { BugbotWatch, ConversationTarget, DaemonConfig, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent, TerminalEvent, TerminalInfo, UpdateState } from './wire.js' */
@@ -34,7 +34,9 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** Asks an agent a question about the conversations (ask.js `askAgent`). @typedef {(question: string) => Promise<{ answer: string, sessions: PastSession[] }>} Ask */
 /** @typedef {ReturnType<typeof import('./scratchpad.js').createScratchpads>} Scratchpads */
 /** @typedef {ReturnType<typeof import('./attachments.js').createAttachments>} Attachments */
-/** @typedef {ReturnType<typeof import('./workspace.js').createWorkspaces>} Workspaces */
+/** @import { Workspaces } from './workspace.js' */
+/** @import { Workspace } from './wire.js' */
+/** @import { Leaf } from '../src/layout/grid-model.js' */
 /** @import { Unread, UnreadStore } from './unread.js' */
 /** @import { Pinned, PinsStore } from './pins.js' */
 /** @import { Forker, Forks, ForksStore } from './forks.js' */
@@ -303,19 +305,20 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           for (const [id, seq] of cursors) cursors.set(id, Math.max(seq, lastSeen));
           replay = [...hub.since(Math.min(...cursors.values()))].filter((event) => event.seq > (cursors.get(event.session) ?? Infinity));
         }
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), update: updates.state(), terminals: terminals.list(), stream: streamId })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), update: updates.state(), terminals: terminals.list(), workspaces: workspaces.all(), stream: streamId })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of replay) send(event);
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
-        // No id: scratchpad, history, unread, pins, forks, decisions, plan, annotations, asides, settings, bugbot, schedule, login, activity, remote, update and terminal events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, workspaces, forks, decisions, plan, annotations, asides, settings, bugbot, schedule, login, activity, remote, update and terminal events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
         const offHistory = history.watch(() => write(`data: ${JSON.stringify({ kind: 'history' })}\n\n`));
         const offUnread = unread.subscribe((/** @type {Unread} */ marks) => write(`data: ${JSON.stringify({ kind: 'unread', unread: marks })}\n\n`));
         const offPins = pins.subscribe((/** @type {Pinned} */ pinned) => write(`data: ${JSON.stringify({ kind: 'pins', pinned })}\n\n`));
+        const offWorkspaces = workspaces.subscribe((/** @type {readonly Workspace[]} */ all) => write(`data: ${JSON.stringify({ kind: 'workspaces', workspaces: all })}\n\n`));
         const offForks = forks.subscribe((/** @type {Forks} */ all) => write(`data: ${JSON.stringify({ kind: 'forks', forks: all })}\n\n`));
         const offDecisions = decisions.subscribe((/** @type {string} */ ompId, /** @type {Reviews} */ reviews) =>
           write(`data: ${JSON.stringify({ kind: 'decisions', ompId, reviews })}\n\n`),
@@ -346,6 +349,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           offHistory();
           offUnread();
           offPins();
+          offWorkspaces();
           offForks();
           offDecisions();
           offAsides();
@@ -389,8 +393,8 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
 
   /** @param {BunRequest} req */
   function workspaceOf(req) {
-    if (!WORKSPACE_NAME.test(req.params.name)) throw new HttpError(404, 'no such workspace');
-    return req.params.name;
+    if (!WORKSPACE_ID.test(req.params.id)) throw new HttpError(404, 'no such workspace');
+    return req.params.id;
   }
 
   /** @param {URL} url */
@@ -616,18 +620,53 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
         '/api/attachments': api({
           POST: async (req) => json({ path: await attachments.save(fileName(req), await req.bytes()) }, 201),
         }),
-        '/api/workspaces/:name': api({ GET: async (req) => json(await workspaces.read(workspaceOf(req))) }),
-        '/api/workspaces/:name/screens/:id': api({
+        '/api/workspaces': api({
+          GET: () => json({ workspaces: workspaces.all() }),
+          POST: async (req) => {
+            const body = (await readJson(req)) ?? {};
+            const name = body.name == null ? null : workspaceName(body.name);
+            if (body.name != null && name === null) throw new HttpError(400, 'a workspace name is 1 to 40 characters, none of them control characters');
+            return json(workspaces.create(name), 201);
+          },
+        }),
+        '/api/workspaces/:id': api({
+          PATCH: async (req) => {
+            const name = workspaceName((await readJson(req))?.name);
+            if (name === null) throw new HttpError(400, 'a workspace name is 1 to 40 characters, none of them control characters');
+            if (!workspaces.rename(workspaceOf(req), name)) throw new HttpError(404, 'no such workspace');
+            return noContent();
+          },
           PUT: async (req) => {
-            const name = workspaceOf(req);
-            if (!SCREEN_ID.test(req.params.id)) throw new HttpError(404, 'no such screen');
+            const id = workspaceOf(req);
             const { tree, base } = (await readJson(req)) ?? {};
-            if (!isValidTree(tree) || !(base === null || (Number.isInteger(base) && base > 0))) {
-              throw new HttpError(400, 'expected { tree: a layout or null, base: the rev it was made from, or null }');
+            if (!isValidTree(tree) || !(Number.isInteger(base) && base >= 0)) {
+              throw new HttpError(400, 'expected { tree: a layout or null, base: the rev it was made from }');
             }
-            const result = await workspaces.write(name, req.params.id, tree, base);
-            if (!result.ok) return json({ error: 'the screen changed since this layout was loaded', current: result.current }, 409);
+            const result = workspaces.save(id, tree, base);
+            if (!result.ok) return json({ error: 'the workspace changed since this layout was loaded', current: result.current }, 409);
             return json({ rev: result.rev });
+          },
+          DELETE: async (req) => {
+            const removed = workspaces.remove(workspaceOf(req));
+            if (removed === 'missing') throw new HttpError(404, 'no such workspace');
+            if (removed === 'last') throw new HttpError(409, 'the last workspace cannot be deleted');
+            // Its windows close with it, and a terminal's shell with its window, as when its user
+            // closes it (but for one another workspace shows too).
+            const shown = new Set(workspaces.all().flatMap((w) => listLeaves(w.tree).map((l) => l.params?.terminal)));
+            const ended = listLeaves(removed.tree).flatMap((l) => (l.widget === 'terminal' && typeof l.params?.terminal === 'string' && !shown.has(l.params.terminal) ? [l.params.terminal] : []));
+            await Promise.all(ended.map((id) => terminals.end(id).catch(() => {}))); // one that has ended already
+            return noContent();
+          },
+        }),
+        '/api/workspaces/:id/windows': api({
+          POST: async (req) => {
+            /** @type {any} parsed untrusted JSON */
+            const leaf = (await readJson(req))?.leaf;
+            if (leaf?.kind !== 'leaf' || !isValidTree(leaf)) throw new HttpError(400, 'expected { leaf: a window }');
+            const added = workspaces.addWindow(workspaceOf(req), /** @type {Leaf} */ (leaf));
+            if (added === 'missing') throw new HttpError(404, 'no such workspace');
+            if (added === 'there') throw new HttpError(409, 'that window is in this workspace already');
+            return noContent();
           },
         }),
         '/api/sessions': api({

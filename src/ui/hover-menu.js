@@ -1,5 +1,5 @@
 /**
- * Top bar menus that open while the pointer rests on their button (Config, + Widget): the menu
+ * Top bar menus that open while the pointer rests on their button (Config, workspaces, + Widget): the menu
  * follows the pointer, closing a moment after it leaves, and a click on the button or in the
  * menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
  * A touch screen, with no pointer resting anywhere, opens it by a tap as before.

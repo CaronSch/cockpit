@@ -16,7 +16,7 @@
  * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), schedule.json
  * (the prompts agents scheduled), decisions/
  * (each conversation's decision reviews), plans/ (each conversation's plan), asides/ (each conversation's `/btw` side questions), fork-sources/ (journals forked mid-turn, cut to their last response, while
- * their fork starts), scratchpads/, attachments/, workspaces/ and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
+ * their fork starts), scratchpads/, attachments/, workspaces.json (workspaces/ the screens it was migrated from) and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
  * COCKPIT_IDLE_COMPACT_MIN_TOKENS (from what size idle compaction applies, see
@@ -46,7 +46,7 @@ import { createAttachments } from './attachments.js';
 import { createScratchpads } from './scratchpad.js';
 import { createDaemon, loopbackListener } from './server.js';
 import { createRemoteAccess } from './remote.js';
-import { createWorkspaces } from './workspace.js';
+import { loadWorkspaces } from './workspace.js';
 import { loadToken } from './token.js';
 import { loadUnread } from './unread.js';
 import { loadPins } from './pins.js';
@@ -87,6 +87,7 @@ const unreadable = (err) => {
 };
 const unread = await loadUnread({ file: join(stateDir, 'unread.json') }).catch(unreadable);
 const pins = await loadPins({ file: join(stateDir, 'pins.json') }).catch(unreadable);
+const workspaces = await loadWorkspaces({ file: join(stateDir, 'workspaces.json'), legacyDir: join(stateDir, 'workspaces') }).catch(unreadable);
 const forks = await loadForks({ file: join(stateDir, 'forks.json') }).catch(unreadable);
 const settings = await loadSettings({ file: join(stateDir, 'settings.json') }).catch(unreadable);
 const history = createHistory({ root: ompSessions, archive: join(stateDir, 'archive', 'sessions') });
@@ -182,7 +183,7 @@ const daemon = createDaemon({
   history,
   scratchpads: createScratchpads({ dir: scratchpadDir }),
   attachments: createAttachments({ dir: join(stateDir, 'attachments') }),
-  workspaces: createWorkspaces({ dir: join(stateDir, 'workspaces') }),
+  workspaces,
   unread,
   pins,
   forks,
