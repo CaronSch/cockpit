@@ -216,8 +216,13 @@ What runs today:
   session of its own (omp's `--fork`: a new journal, the original runs on untouched),
   started by the daemon (`daemon/forks.js`) once omp has saved the conversation (a new
   session does once the model has replied). `/fork <prompt>` (the workbench's own command,
-  never sent to omp) opens one as a new tab beside it with that prompt;
-  dragging **Send** (the message box's small up-arrow button) onto the grid starts one in a new window placed where it is dropped, with
+  never sent to omp) opens one as a new tab beside it with that prompt. `/btw <question>` (the
+  workbench's too; omp's is its terminal UI's) asks omp's `btw` a side question, answered from the
+  conversation's context without joining it: the question and its answer, streaming, show where
+  it was asked as a card set apart in the code colour (a `side` item of the transcript, from omp's
+  `btw_record`; in *Only prompts and responses* too), in every window showing the conversation
+  while it is awake (omp keeps no answers once its session ends). Dragging
+  **Send** (the message box's small up-arrow button) onto the grid starts one in a new window placed where it is dropped, with
   the message in the box (the box empties once the fork is placed; a click still sends here).
   Forking while the agent works copies the conversation as of its last completed response.
   A fork is named by its first prompt, not its source's title (which omp copies): the daemon
@@ -272,7 +277,8 @@ What runs today:
   (not its language label), pinned to its corner while long lines scroll. Selected
   reply text shows Comment and Ask (following the selection as new output scrolls it); either opens a box in the transcript under the block the
   selection ends in (a paragraph, a whole list or table), set like the message box, with that
-  action alone, which Enter does too. A comment goes quoted with the next prompt; a
+  action alone, which Enter does too (as it saves a comment card edited in the message box;
+  Shift+Enter is a new line in each). A comment goes quoted with the next prompt; a
   question goes to omp's `btw`, whose answer streams into that box, outside the chat, where
   follow-up questions continue the same topic, one at a time (every question asks
   for an answer of at most three sentences). The text a comment or a question is on stays
@@ -810,7 +816,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/items-view.js` — DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes, unrecognised frames), a stretch of folded work (visibility.js `compactWork`), and a turn's decision review, built from text nodes only.
 - `src/omp/markdown-dom.js` — Renders the safe markdown tree from `markdown.js` as DOM nodes (text nodes only, never HTML).
 - `src/omp/markdown.js` — Safe markdown subset for agent text: parses into a small block/inline tree, never HTML.
-- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its place), and side questions about a quote.
+- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its place), and side questions: about a quote, or on their own (`/btw <question>`).
 - `src/omp/pr-suggest.js` — Pull request suggestions in the agent pane's message box: while the caret ends a `#` mention and the conversation's directory is in a GitHub repository, the suggestion list shows the pull requests it names, each with its title, and Tab, Enter or a click completes it as GitHub writes it (see `github/pr-mention.js`).
 - `src/omp/prompt-history.js` — Up and Down in the agent pane's message box step through what was sent in its conversation, as omp's own editor and a shell do: the user's prompts and `!` commands, newest first.
 - `src/omp/recent-dirs.js` — The directories an agent window's setup screen offers to start in: those of the user's conversations, most recently active first, so the few repositories they work in are a click away instead of typed again; kept free of the DOM so they can be tested.
