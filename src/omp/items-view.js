@@ -100,6 +100,21 @@ export function renderItem(item, ctx) {
     }
     case 'unrecognised':
       return collapsible(ctx, item.key, 'omp-unrecognised', [`unrecognised: ${item.label}`], () => [el('pre', 'omp-pre', item.raw)]);
+    case 'side': {
+      // A `/btw` question and its answer, apart from the conversation, which neither joins.
+      const node = el('div', `omp-side is-${item.status}`);
+      const head = el('div', 'omp-side-head');
+      head.append(...spinnerIf(item.status), el('span', 'omp-side-label', 'btw'), el('span', 'omp-side-question', item.question));
+      node.append(head);
+      if (item.answer) {
+        const answer = el('div', 'omp-md omp-side-answer');
+        answer.append(renderMarkdown(item.answer));
+        node.append(answer);
+      } else if (item.status === 'running') node.append(statusLine('muted', 'Thinking…'));
+      if (item.status === 'error') node.append(statusLine('error', item.error ?? 'The question failed.'));
+      else if (item.status === 'cancelled' || item.status === 'interrupted') node.append(statusLine('muted', item.answer ? 'Stopped.' : 'Stopped before it answered.'));
+      return node;
+    }
   }
 }
 

@@ -68,6 +68,10 @@ export function promptsAndResponses(items, streaming) {
       case 'note':
         if (item.level === 'error' || NOTE_SOURCES.has(item.source)) shown.push(item);
         break;
+      // A `/btw` is the user's own question and its answer.
+      case 'side':
+        shown.push(item);
+        break;
       case 'tool':
         break;
     }

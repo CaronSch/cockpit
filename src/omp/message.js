@@ -2,7 +2,7 @@
  * Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted
  * parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a
  * prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its
- * place), and side questions about a quote.
+ * place), and side questions: about a quote, or on their own (`/btw <question>`).
  *
  * A comment goes first as a Markdown quote of the text it is about, followed by the comment,
  * the way a reply quotes an email; the model and the transcript both read it naturally.
@@ -127,13 +127,39 @@ export function shellCommand(draft) {
  * "brief" answer; this one bounds it.
  */
 const ANSWER_BRIEFLY = 'Answer in at most three sentences, or a short list; no preamble.';
+/** How a side question about a quote opens (`composeAsk`), which a `/btw` question does not. */
+const ASK_OPENING = 'About this part of our conversation:';
 
 /**
  * A side question about `quote`, for omp's `btw`: answered from the session's context, kept
  * out of it.
  * @param {string} quote @param {string} question
  */
-export const composeAsk = (quote, question) => `About this part of our conversation:\n\n${asQuote(quote)}\n\n${question.trim()}\n\n${ANSWER_BRIEFLY}`;
+export const composeAsk = (quote, question) => `${ASK_OPENING}\n\n${asQuote(quote)}\n\n${question.trim()}\n\n${ANSWER_BRIEFLY}`;
 
-/** A follow-up in a side topic: omp replays the topic's earlier turns, quote included. @param {string} question */
-export const composeFollowUp = (question) => `${question.trim()}\n\n${ANSWER_BRIEFLY}`;
+/**
+ * A side question on its own (`/btw <question>`), or a follow-up in a side topic (omp replays the
+ * topic's earlier turns, quote included), for omp's `btw`. @param {string} question
+ */
+export const composeSideQuestion = (question) => `${question.trim()}\n\n${ANSWER_BRIEFLY}`;
+
+/**
+ * The question a `/btw` asked, from omp's record of it (its `question`), or null for a side
+ * question about a quote (Ask, which shows in its own box, not in the transcript).
+ * @param {string} asked
+ */
+export function btwAsked(asked) {
+  if (asked.startsWith(ASK_OPENING)) return null;
+  return asked.endsWith(`\n\n${ANSWER_BRIEFLY}`) ? asked.slice(0, -(ANSWER_BRIEFLY.length + 2)) : asked;
+}
+
+/**
+ * The question a `/btw <question>` draft asks ('' for a bare `/btw`), or null when the draft is
+ * not one. The workbench's own command, never sent to omp as typed (whose `/btw` is its terminal
+ * UI's): it goes as omp's `btw` request.
+ * @param {string} draft
+ */
+export function btwQuestion(draft) {
+  const match = /^\/btw(?:\s+([\s\S]*))?$/.exec(draft.trim());
+  return match ? (match[1] ?? '').trim() : null;
+}
