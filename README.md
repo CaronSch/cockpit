@@ -66,30 +66,30 @@ VPN** for Tailscale.
 
 ## Getting started
 
-### 1. Install the programs
+### 1. Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CaronSch/cockpit/main/install.sh | sh
+```
+
+[`install.sh`](install.sh) installs what is missing and changes nothing else, so running it again
+is safe:
 
 - **[Bun](https://bun.sh)** 1.3.14 or later, which runs the daemon and tests.
+- **[omp](https://omp.sh)**, the coding agent every Agent window runs, into `~/.local/bin`. It is
+  **not** a dependency of this repo: the daemon runs the `omp` on your `PATH`, else that one.
+- **Cockpit**, cloned into `~/cockpit` (`COCKPIT_DIR` picks another directory), then `bun install`.
+- **One set of global instructions**: an empty `~/.omp/agent/AGENTS.md` becomes the line
+  `@~/.claude/CLAUDE.md`, so omp follows the same file as Claude Code (created empty if there is
+  none). One with instructions of its own is left alone.
 
-  ```bash
-  curl -fsSL https://bun.sh/install | bash
-  ```
-
-- **omp**, the coding agent every Agent window runs. It is **not** a dependency of this
-  repo; the daemon runs the `omp` on your `PATH`.
-
-  ```bash
-  curl -fsSL https://omp.sh/install | sh   # or: brew install can1357/tap/omp
-  ```
-
-- Optional: GitHub's **[gh](https://cli.github.com)**, signed in (`gh auth login`), for pull
-  request windows. Without it, everything else works.
+Optional, for pull request windows: GitHub's **[gh](https://cli.github.com)**, signed in
+(`gh auth login`).
 
 ### 2. Start the daemon
 
 ```bash
-git clone https://github.com/CaronSch/cockpit && cd cockpit
-bun install   # dev tools and git hooks
-bun start     # daemon on http://cockpit.localhost:4777
+cd ~/cockpit && bun start   # daemon on http://cockpit.localhost:4777
 ```
 
 Open the URL `bun start` prints **once**. It carries an access token, which the browser
@@ -102,7 +102,7 @@ once more.
 On a machine that has not been set up, the first screen opens the **Setup** window. Each step
 says whether it is done; **Check again** after fixing one in a terminal.
 
-1. **omp**: found, and its version; if not, the command to install it.
+1. **omp**: found, and its version; if not, the installer's line again.
 2. **A model provider**: agents need one, and omp cannot start a session without one.
    **Sign in…** runs omp's own `omp login` from the window: pick a provider by number (Claude
    Pro/Max, ChatGPT, GitHub Copilot…), finish signing in in the browser tab it opens, and answer
@@ -126,7 +126,7 @@ is on (see **Phone** above); it refuses requests from other sites.
 | Option | Default |
 | --- | --- |
 | `--port <n>` / `COCKPIT_PORT` | `4777` |
-| `--omp <path>` / `COCKPIT_OMP` | `omp` on `PATH` |
+| `--omp <path>` / `COCKPIT_OMP` | `omp` on `PATH`, else `~/.local/bin/omp` |
 | `--cwd <dir>` / `COCKPIT_CWD` (the directory a new agent window suggests) | your home directory |
 | `COCKPIT_STATE_DIR` (token, settings, notes, attachments, workspaces) | `~/.cockpit` |
 | `COCKPIT_OMP_SESSIONS` (omp's session files) | `~/.omp/agent/sessions` |

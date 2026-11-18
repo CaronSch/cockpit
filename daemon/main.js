@@ -6,7 +6,8 @@
  *   bun daemon/main.js [--port 4777] [--omp <path to omp>] [--gh <path to gh>] [--cwd <dir>]
  *                      [--tailscale <path to tailscale>] [--remote-port <n>]
  *
- * omp defaults to the `omp` on PATH (install it from https://omp.sh), and the GitHub CLI to the
+ * omp defaults to the `omp` on PATH, else ~/.local/bin/omp, where omp's installer (https://omp.sh,
+ * run by install.sh) puts it without adding it to PATH; the GitHub CLI defaults to the
  * `gh` on PATH (https://cli.github.com; without it, pull requests are not offered). `--cwd` is the
  * directory a new agent window suggests, the home directory unless given. Phone access runs the
  * `tailscale` on PATH unless `--tailscale` says otherwise, and listens on the Mac's Tailscale
@@ -65,7 +66,9 @@ const { values } = parseArgs({
   options: { port: { type: 'string' }, omp: { type: 'string' }, gh: { type: 'string' }, cwd: { type: 'string' }, tailscale: { type: 'string' }, 'remote-port': { type: 'string' } },
 });
 const port = Number(values.port ?? process.env.COCKPIT_PORT ?? 4777);
-const ompOption = values.omp ?? process.env.COCKPIT_OMP ?? 'omp';
+// omp's installer puts omp in ~/.local/bin and only says how to add that to PATH: a daemon started
+// from a shell that never did still finds it.
+const ompOption = values.omp ?? process.env.COCKPIT_OMP ?? (Bun.which('omp') ? 'omp' : join(homedir(), '.local', 'bin', 'omp'));
 // A path (not a bare command name) must not depend on each session's cwd.
 const ompPath = ompOption.includes('/') ? resolve(ompOption) : ompOption;
 const ghOption = values.gh ?? process.env.COCKPIT_GH ?? 'gh';
@@ -228,7 +231,7 @@ console.log(`Open: http://cockpit.localhost:${port}/?token=${token}`);
 // Asked after the server is up: starting omp just to read its version takes most of a second.
 ompVersion(ompPath).then((version) =>
   console.log(
-    version ? `omp: ${version}` : `omp: not found at "${ompPath}": install it (https://omp.sh), then follow Setup in the workbench`,
+    version ? `omp: ${version}` : `omp: not found at "${ompPath}": run Cockpit's install.sh (it installs omp), then follow Setup in the workbench`,
   ),
 );
 // The agents a restart (`bun run restart`) cut short carry on.

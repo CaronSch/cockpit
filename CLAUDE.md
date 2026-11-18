@@ -59,8 +59,9 @@ Planned capabilities:
   Every omp is also given the daemon's own tools (omp's RPC host tools: `set_host_tools` as it is
   set up, `host_tool_call` answered with `host_tool_result`; `HostTools` in
   `daemon/omp-session.js`, several joined by `allHostTools`): the `schedule` tool (`daemon/schedule.js`) and the
-  `plan` tool (`daemon/plans.js`). omp is the `omp` on PATH unless `--omp`
-  says otherwise. Prefer Bun's own APIs where they make the code smaller.
+  `plan` tool (`daemon/plans.js`). omp is the `omp` on PATH, else `~/.local/bin/omp` (where omp's
+  installer puts it without adding it to PATH), unless `--omp` says otherwise. Prefer Bun's own
+  APIs where they make the code smaller.
   It also runs the Terminal windows' shells (`daemon/terminals.js`): the user's login shell in a
   pseudo-terminal of Bun's own (`Bun.spawn`'s `terminal`), owned like omp, never by a window.
   The workbench is self-contained: it shows agents it launched and does not attach
@@ -663,8 +664,8 @@ telemetry views, cmux-parity features beyond the above.
     `/vendor/xterm.mjs`, `/vendor/addon-fit.mjs` and `/vendor/xterm.css` (the import map in
     `index.html`), loaded only when a terminal window first opens. The pseudo-terminal itself
     needs no dependency: Bun has one (`Bun.spawn`'s `terminal`).
-- omp is not a dependency: the user installs it on its own (https://omp.sh) and
-  the daemon runs the `omp` on PATH. The version the fake omp in `tests/` was
+- omp is not a dependency: the user installs it on its own (https://omp.sh; `install.sh` runs
+  omp's installer) and the daemon runs the `omp` on PATH, else `~/.local/bin/omp`. The version the fake omp in `tests/` was
   recorded from is in `RISKS.md`; a newer installed omp means re-recording frames. GitHub's
   CLI `gh` (https://cli.github.com) is not one either: the daemon runs the `gh` on PATH, signed
   in as the user, and the tests drive `tests/fixtures/fake-gh.js` instead.
@@ -686,6 +687,10 @@ telemetry views, cmux-parity features beyond the above.
 - Several agent sessions may share this checkout. Make changes in a worktree
   (`git worktree add ../cockpit-<topic> -b <branch> main`), never by
   switching branches or stashing in the shared tree.
+- Install it: `curl -fsSL https://raw.githubusercontent.com/CaronSch/cockpit/main/install.sh | sh`
+  (`install.sh`: Bun and omp if missing, the checkout in `~/cockpit` or `COCKPIT_DIR`, `bun install`,
+  and an empty `~/.omp/agent/AGENTS.md` made the line `@~/.claude/CLAUDE.md`, so omp follows
+  Claude Code's global instructions; it changes nothing that is there already).
 - Run it: `bun install`, then `bun start`, then open the URL it prints once,
   `http://cockpit.localhost:4777/?token=…` (it carries the token; the browser
   keeps a cookie afterwards). Cookies and browser storage are per address, so a

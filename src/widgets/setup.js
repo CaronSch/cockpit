@@ -37,6 +37,9 @@ function step(title, about) {
   };
 }
 
+/** Cockpit's one-line installer (install.sh): Bun, omp and Cockpit itself. */
+const INSTALL_COMMAND = 'curl -fsSL https://raw.githubusercontent.com/CaronSch/cockpit/main/install.sh | sh';
+
 /** A command to run in a terminal, as it is typed. @param {string} command */
 const shell = (command) => el('code', 'setup-command', command);
 
@@ -59,8 +62,8 @@ export default {
     const root = el('div', 'setup');
     root.append(el('p', 'setup-lead', 'A few things before your first agent. Each step is checked here; Check again after fixing one in a terminal.'));
 
-    const omp = step('1. omp', 'The coding agent every Agent window runs. Cockpit runs the omp on your PATH (or the one --omp names).');
-    omp.todo.append(para('Install it, then Check again: ', shell('curl -fsSL https://omp.sh/install | sh')));
+    const omp = step('1. omp', 'The coding agent every Agent window runs. Cockpit’s installer installs it.');
+    omp.todo.append(para('Run the installer again, then Check again: ', shell(INSTALL_COMMAND)));
 
     const models = step('2. A model provider', 'Agents need a model to talk to. omp signs in to subscriptions (Claude Pro/Max, ChatGPT, GitHub Copilot…) in your browser.');
     // A login that ends may have signed in: see.
