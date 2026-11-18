@@ -8,8 +8,9 @@
  * the list's. Showing a conversation needs no omp: its window shows the journal until
  * something is sent.
  *
- * The window's top bar holds its controls: a workspace menu (the conversations a workspace's
- * agent windows show; with more than one workspace), a directory menu (narrowing runs here) and
+ * The window's top bar holds its controls: a workspace menu (with more than one workspace: the
+ * conversations started in one, daemon/origins.js, open or not; one from before that was kept
+ * counts as the workspace's whose windows show it), a directory menu (narrowing runs here) and
  * View, a menu of the sort order, its direction and the archived list. They are this window's own
  * settings, so two Sessions windows can show different slices. Searching is Spotlight's
  * (ui/spotlight.js). The list follows the daemon as journals change, so nothing refreshes it.
@@ -46,6 +47,7 @@ import { openContextMenu, opensContextMenu } from '../ui/context-menu.js';
 /** @import { DaemonClient } from '../daemon/client.js' */
 /** @import { PastSession, SessionMeta } from '../../daemon/wire.js' */
 /** @import { Listed, RunningState } from '../sessions/running.js' */
+/** @import { Workspace } from '../../daemon/wire.js' */
 /** @import { SortDir, SortKey } from '../sessions/order.js' */
 
 export default {
@@ -157,13 +159,28 @@ function createSessionsWindow(body, ctx, daemon) {
     return tildeHome(cwd, home);
   }
 
-  /** The conversations this window lists: archived ones on their own, else every one, awake or not. */
+  /** Every conversation this window may list: archived ones on their own, else every one, awake or not, in its directory. */
+  const candidates = () => listConversations(sessions, showArchived() ? [] : daemon.sessions(), { directory: directory() });
+
+  /**
+   * The conversations of `candidates` that belong to workspace `w`: those started there, and
+   * those with no workspace noted (started before origins were kept) that its windows show.
+   * @param {Listed[]} all @param {Workspace} w
+   */
+  function inWorkspace(all, w) {
+    const origins = daemon.origins();
+    const shown = conversationsIn(w.tree);
+    return all.filter((c) => {
+      const origin = origins[c.meta?.ompId ?? c.id];
+      return origin ? origin === w.id : shown.has(c.key);
+    });
+  }
+
+  /** The conversations this window lists: in its workspace, if it has one. */
   function listed() {
-    const all = listConversations(sessions, showArchived() ? [] : daemon.sessions(), { directory: directory() });
+    const all = candidates();
     const chosen = workspace();
-    if (!chosen) return all;
-    const keys = conversationsIn(chosen.tree);
-    return all.filter((c) => keys.has(c.key));
+    return chosen ? inWorkspace(all, chosen) : all;
   }
 
   /** What a row's conversation is called: its awake session's name, else its journal's. @param {Listed} c */
@@ -349,10 +366,11 @@ function createSessionsWindow(body, ctx, daemon) {
     return row;
   }
 
-  /** The workspace menu: every workspace, each with how many conversations it shows; hidden while there is only one. */
+  /** The workspace menu: every workspace, each with how many conversations it lists; hidden while there is only one. */
   function drawWorkspaces() {
     const all = daemon.workspaces() ?? [];
-    const options = all.map((w) => ({ value: w.id, text: `${w.name} (${conversationsIn(w.tree).size})` }));
+    const candidatesNow = candidates();
+    const options = all.map((w) => ({ value: w.id, text: `${w.name} (${inWorkspace(candidatesNow, w).length})` }));
     const signature = JSON.stringify(options);
     if (signature !== workspacesSignature) {
       workspacesSignature = signature;
@@ -396,7 +414,7 @@ function createSessionsWindow(body, ctx, daemon) {
     if (error) status.textContent = `Could not list sessions: ${error}`;
     else if (moveError) status.textContent = moveError;
     else if (!loaded) status.textContent = 'Loading sessions…';
-    else if (count === 0) status.textContent = workspace() && !directory() ? `No conversation is open in ${workspace()?.name}.` : directory() || workspace() ? 'No session matches.' : showArchived() ? 'No archived sessions.' : 'No sessions yet.';
+    else if (count === 0) status.textContent = workspace() && !directory() ? `No conversation was started in ${workspace()?.name} yet.` : directory() || workspace() ? 'No session matches.' : showArchived() ? 'No archived sessions.' : 'No sessions yet.';
     else status.textContent = '';
     status.hidden = status.textContent === '';
   }
@@ -540,8 +558,10 @@ function createSessionsWindow(body, ctx, daemon) {
   const offPins = daemon.onPins(scheduleDraw);
   const offSessions = daemon.onSessions(scheduleDraw);
   const offActivity = daemon.onActivity(scheduleDraw);
-  // A workspace's windows change what it shows; its name and the list of them, the menu.
+  // A workspace's windows change what it shows; its name and the list of them, the menu; where
+  // a conversation was started is noted once omp names it.
   const offWorkspaces = daemon.onWorkspaces(scheduleDraw);
+  const offOrigins = daemon.onOrigins(scheduleDraw);
   const offStatus = daemon.onStatus((s) => {
     if (s === 'open') void load();
   });
@@ -606,6 +626,7 @@ function createSessionsWindow(body, ctx, daemon) {
       offStatus();
       offActivity();
       offWorkspaces();
+      offOrigins();
       cancelAnimationFrame(frame);
       root.remove();
     },

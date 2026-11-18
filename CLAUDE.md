@@ -425,9 +425,12 @@ What runs today:
   outlines its windows, and pointing at an agent window lights its row (`ctx.screen`,
   `ctx.outline`; `src/sessions/links.js`). Waking a journal a session already
   holds gets that session: the daemon never starts a second omp on one. A
-  workspace menu (with more than one workspace: each with how many conversations its agent
-  windows show, tabs behind others too) narrows a window to the conversations one workspace
-  shows, and a directory menu (every directory with sessions, A→Z, with counts) to one
+  workspace menu (with more than one workspace, each with its count) narrows a window to the
+  conversations started in one workspace, open in a window or not: an agent window says which
+  workspace it is in as it starts a conversation or a fork, and the daemon keeps it by omp's id
+  (`daemon/origins.js`, `~/.cockpit/origins.json`, `origins` events, moved with a rewind); one
+  started before that was kept counts as the workspace's whose agent windows show it. A
+  directory menu (every directory with sessions, A→Z, with counts) narrows it to one
   directory, together with View's choices; like those, the choice is the window's own. An untitled session is listed by its first
   prompt. Row actions show on hover or focus. A fork is listed as a
   session of its own, under the title its first prompt gave it (until then, the one it copied from its source). **Archive** (a box with an arrow into it; **Restore**, an arrow out) moves a
@@ -915,6 +918,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/idle-compaction.js` — Idle compaction, as Claude Code does it: a long conversation left idle is compacted shortly before its prompt cache expires, while the summary request can still read the conversation from the cache, so coming back later sends a summary instead of the whole conversation at full price.
 - `daemon/main.js` — Daemon entry point (`bun start`): serves the workbench on loopback (and, with Phone access on, to the owner's tailnet devices: remote.js) and runs the omp processes and shells it shows.
 - `daemon/omp-session.js` — One omp process in RPC mode: launch, protocol setup, command/response correlation and lifecycle, with everything it does reported as session events.
+- `daemon/origins.js` — Which workspace each conversation was started in, so the Sessions window can list a workspace's conversations, open in one of its windows or not (src/widgets/sessions.js).
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
 - `daemon/plans.js` — Plans: for a large task, an agent keeps a plan its user watches live beside the conversation (the Plan window, src/widgets/plan.js, and the Plan line at the foot of the agent window): the goal and approach, the steps, and a log of the decisions it took along the way and why.
 - `daemon/remote.js` — Phone access (settings.js `remote`): while it is on, the daemon also serves the owner's own devices on their tailnet, through a second listener bound to the Mac's Tailscale IPv4 with the same routes as loopback (server.js), behind a whois gate.

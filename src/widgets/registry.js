@@ -51,6 +51,8 @@ import plan from './plan.js';
  * `ctx.setFamily(name)` says which family of related things the window shows (an agent
  * window: the conversation its forks came from); windows of one family shown together get the
  * same colour in their top bar. Null: none.
+ * `ctx.workspace` is the workspace the window is shown in now (an agent window starts its
+ * conversations there: daemon/origins.js); null where there is none (the phone, signed out).
  */
 /** @import { Leaf, LeafParams } from '../layout/grid-model.js' */
 /** @import { DragEndResult } from '../interaction/drag-controller.js' */
@@ -81,6 +83,7 @@ import plan from './plan.js';
  *   readonly screen: Pick<Atom<ScreenWindows>, 'get' | 'subscribe'>,
  *   outline(ids: readonly string[]): void,
  *   setFamily(family: string | null): void,
+ *   readonly workspace: string | null,
  * }} WidgetContext
  */
 /**

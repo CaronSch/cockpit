@@ -55,7 +55,7 @@
  *                                      none runs
  *   DELETE /api/setup/login            → 204: the running login, if any, ended
  *   GET    /api/sessions               → { sessions: SessionMeta[] }
- *   POST   /api/sessions               { cwd, resume? | fork?, prompt? } → 201 { session: SessionMeta }
+ *   POST   /api/sessions               { cwd, resume? | fork?, prompt?, workspace? } → 201 { session: SessionMeta }
  *                                      (`cwd` relative to home, `~/…` or absolute; `resume`
  *                                      continues a journal, `fork` starts a new session from a
  *                                      copy of one, as of its last completed response while its
@@ -63,7 +63,8 @@
  *                                      (see `forks.js`); either must be an existing file). Resuming
  *                                      a journal a running session writes answers 200 with that
  *                                      session instead: two omps never write one journal; an
- *                                      archived one is refused (409), as it is only to read
+ *                                      archived one is refused (409), as it is only to read. A new
+ *                                      one or a fork is noted as started in `workspace` (see `origins.js`)
  *   DELETE /api/sessions/:id           → 204: the session goes to sleep now (closes omp's stdin,
  *                                      kills it if it lingers), as it does by itself once idle
  *                                      and unused (see `sleep.js`), or when the daemon exits
@@ -170,6 +171,7 @@
 /** @import { GridNode } from '../src/layout/grid-model.js' */
 /** @import { Unread } from './unread.js' */
 /** @import { Pinned } from './pins.js' */
+/** @import { Origins } from './origins.js' */
 /** @import { Forks } from './forks.js' */
 /** @import { DaemonSettings } from './settings.js' */
 /** @import { LoginState } from './setup.js' */
@@ -263,7 +265,7 @@
  * `update` whether Cockpit's checkout is behind the newest `main` (`updates.js`).
  * `terminals` are the terminals running (`terminals.js`); `stream` names this connection, for
  * watching a terminal on it (PUT /api/terminals/:id/watchers/:stream).
- * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState, update: UpdateState | null, terminals: TerminalInfo[], workspaces: Workspace[], stream: string }} HelloEvent
+ * @typedef {{ kind: 'hello', bootId: string, seq: number, replay: number, sessions: SessionMeta[], unread: Unread, pinned: Pinned, forks: Forks, settings: DaemonSettings, bugbot: BugbotWatch[], schedule: ScheduledTask[], login: LoginState | null, ui: string, activity: Record<string, SessionActivity>, remote: RemoteState, update: UpdateState | null, terminals: TerminalInfo[], workspaces: Workspace[], origins: Origins, stream: string }} HelloEvent
  */
 
 /**
@@ -306,6 +308,7 @@
 
 /** Sent to every page after a conversation was pinned or unpinned, with all the pins. @typedef {{ kind: 'pins', pinned: Pinned }} PinsEvent */
 /** Sent to every page after any workspace changed (its layout, name, a new or deleted one), with all of them. @typedef {{ kind: 'workspaces', workspaces: Workspace[] }} WorkspacesEvent */
+/** Sent to every page after a conversation was noted as started in a workspace, with all of them. @typedef {{ kind: 'origins', origins: Origins }} OriginsEvent */
 
 /** Sent to every page after a fork was started, titled or moved (a rewind), with every fork. @typedef {{ kind: 'forks', forks: Forks }} ForksEvent */
 
@@ -338,7 +341,7 @@
  * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
  */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | WorkspacesEvent | ForksEvent | DecisionsEvent | AsidesEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | WorkspacesEvent | OriginsEvent | ForksEvent | DecisionsEvent | AsidesEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

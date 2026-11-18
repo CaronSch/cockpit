@@ -39,6 +39,7 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** @import { Leaf } from '../src/layout/grid-model.js' */
 /** @import { Unread, UnreadStore } from './unread.js' */
 /** @import { Pinned, PinsStore } from './pins.js' */
+/** @import { Origins, OriginsStore } from './origins.js' */
 /** @import { Forker, Forks, ForksStore } from './forks.js' */
 /** @import { DaemonSettings, SettingsStore } from './settings.js' */
 /** @import { Github } from './github.js' */
@@ -262,14 +263,14 @@ function errorResponse(err) {
 export const loopbackListener = (port) => ({ hostname: '127.0.0.1', port, hosts: LOOPBACK_HOSTS, admit: null, remote: false });
 
 /**
- * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, annotations: Annotations, asides: Asides, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, updates: Updates, token: string, root: string, config: DaemonConfig }} DaemonOptions
+ * @typedef {{ hub: Hub, history: History, scratchpads: Scratchpads, attachments: Attachments, workspaces: Workspaces, origins: OriginsStore, unread: UnreadStore, pins: PinsStore, forks: ForksStore, forker: Forker, decisions: DecisionReviews, plans: Plans, annotations: Annotations, asides: Asides, settings: SettingsStore, github: Github, delivery: Delivery, bugbot: BugbotStore, schedule: Schedule, setup: Setup, remote: RemoteAccess, terminals: Terminals, ask: Ask, restart: () => void, updates: Updates, token: string, root: string, config: DaemonConfig }} DaemonOptions
  */
 
 /**
  * The daemon's routes, served on any listener: `serve` starts one (throws if its port is taken).
  * @param {DaemonOptions} options
  */
-export function createDaemon({ hub, history, scratchpads, attachments, workspaces, unread, pins, forks, forker, decisions, plans, annotations, asides, settings, github, delivery, bugbot, schedule, setup, remote, terminals, ask, restart, updates, token, root, config }) {
+export function createDaemon({ hub, history, scratchpads, attachments, workspaces, origins, unread, pins, forks, forker, decisions, plans, annotations, asides, settings, github, delivery, bugbot, schedule, setup, remote, terminals, ask, restart, updates, token, root, config }) {
   const rootDir = resolve(root);
   const pageFiles = PAGE_FILES.map((page) => resolve(rootDir, page));
   const staticDirs = STATIC_DIRS.map((dir) => resolve(rootDir, dir));
@@ -305,19 +306,20 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           for (const [id, seq] of cursors) cursors.set(id, Math.max(seq, lastSeen));
           replay = [...hub.since(Math.min(...cursors.values()))].filter((event) => event.seq > (cursors.get(event.session) ?? Infinity));
         }
-        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), update: updates.state(), terminals: terminals.list(), workspaces: workspaces.all(), stream: streamId })}\n\n`);
+        write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), update: updates.state(), terminals: terminals.list(), workspaces: workspaces.all(), origins: origins.all(), stream: streamId })}\n\n`);
         const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
         for (const event of replay) send(event);
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
         });
-        // No id: scratchpad, history, unread, pins, workspaces, forks, decisions, plan, annotations, asides, settings, bugbot, schedule, login, activity, remote, update and terminal events are not part of the replayable log (see wire.js).
+        // No id: scratchpad, history, unread, pins, workspaces, origins, forks, decisions, plan, annotations, asides, settings, bugbot, schedule, login, activity, remote, update and terminal events are not part of the replayable log (see wire.js).
         const offScratchpad = scratchpads.subscribe((/** @type {string} */ id, /** @type {Scratchpad} */ pad) =>
           write(`data: ${JSON.stringify({ kind: 'scratchpad', id, ...pad })}\n\n`),
         );
         const offHistory = history.watch(() => write(`data: ${JSON.stringify({ kind: 'history' })}\n\n`));
         const offUnread = unread.subscribe((/** @type {Unread} */ marks) => write(`data: ${JSON.stringify({ kind: 'unread', unread: marks })}\n\n`));
         const offPins = pins.subscribe((/** @type {Pinned} */ pinned) => write(`data: ${JSON.stringify({ kind: 'pins', pinned })}\n\n`));
+        const offOrigins = origins.subscribe((/** @type {Origins} */ all) => write(`data: ${JSON.stringify({ kind: 'origins', origins: all })}\n\n`));
         const offWorkspaces = workspaces.subscribe((/** @type {readonly Workspace[]} */ all) => write(`data: ${JSON.stringify({ kind: 'workspaces', workspaces: all })}\n\n`));
         const offForks = forks.subscribe((/** @type {Forks} */ all) => write(`data: ${JSON.stringify({ kind: 'forks', forks: all })}\n\n`));
         const offDecisions = decisions.subscribe((/** @type {string} */ ompId, /** @type {Reviews} */ reviews) =>
@@ -349,6 +351,7 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           offHistory();
           offUnread();
           offPins();
+          offOrigins();
           offWorkspaces();
           offForks();
           offDecisions();
@@ -681,8 +684,11 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
             if (resume && history.isArchived(resume)) throw new HttpError(409, 'the conversation is archived: restore it to carry it on');
             const running = resume && hub.writing(resume);
             if (running) return json({ session: running });
-            if (fork) return json({ session: await forker.fork({ cwd, file: fork, prompt: body?.prompt ?? null }) }, 201);
-            return json({ session: hub.create({ cwd, resume, fork: null }) }, 201);
+            // Where a new conversation (or fork) is started; a resumed one keeps where it began.
+            const workspace = typeof body?.workspace === 'string' && workspaces.all().some((w) => w.id === body.workspace) ? body.workspace : null;
+            const session = fork ? await forker.fork({ cwd, file: fork, prompt: body?.prompt ?? null }) : hub.create({ cwd, resume, fork: null });
+            if (workspace && !resume) origins.expect(session.id, workspace);
+            return json({ session }, 201);
           },
         }),
         '/api/sessions/:id': api({

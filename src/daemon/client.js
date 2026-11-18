@@ -39,6 +39,7 @@ import { withoutSpent } from '../omp/event-log.js';
 /** @import { Leaf, Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
+/** @import { Origins } from '../../daemon/origins.js' */
 /** @import { Forks } from '../../daemon/forks.js' */
 /** @import { DaemonSettings } from '../../daemon/settings.js' */
 /** @import { Reviews } from '../omp/decisions.js' */
@@ -119,8 +120,10 @@ export class DaemonError extends Error {
  *   deleteWorkspace(id: string): Promise<void>,
  *   saveWorkspace(id: string, tree: Tree, base: number, options?: { keepalive?: boolean }): Promise<WorkspaceSave>,
  *   moveWindow(workspace: string, leaf: Leaf): Promise<void>,
+ *   origins(): Origins,
+ *   onOrigins(fn: () => void): () => void,
  *   config(): Promise<DaemonConfig>,
- *   createSession(options: { cwd: string, resume?: string, fork?: string, prompt?: string }): Promise<SessionMeta>,
+ *   createSession(options: { cwd: string, resume?: string, fork?: string, prompt?: string, workspace?: string | null }): Promise<SessionMeta>,
  *   seen(session: string): Promise<void>,
  *   end(session: string): Promise<void>,
  *   rpc(session: string, command: Record<string, unknown>): Promise<RpcResponse>,
@@ -252,6 +255,15 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
   const setWorkspaces = (all) => {
     workspaces = all;
     for (const fn of workspacesListeners) fn();
+  };
+  /** The workspace each conversation was started in, by omp id (daemon/origins.js). @type {Origins} */
+  let origins = {};
+  /** @type {Set<() => void>} */
+  const originsListeners = new Set();
+  /** @param {Origins} all */
+  const setOrigins = (all) => {
+    origins = all;
+    for (const fn of originsListeners) fn();
   };
   /** @type {Forks} */
   let forks = {};
@@ -440,6 +452,7 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     setPins(hello.pinned);
     // A daemon from before workspaces were named layouts says nothing: keep what was loaded.
     if (hello.workspaces) setWorkspaces(hello.workspaces);
+    setOrigins(hello.origins ?? {});
     setForks(hello.forks);
     setSettings(hello.settings);
     setWatches(hello.bugbot);
@@ -477,6 +490,7 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     if (event.kind === 'unread') return setUnread(event.unread);
     if (event.kind === 'pins') return setPins(event.pinned);
     if (event.kind === 'workspaces') return setWorkspaces(event.workspaces);
+    if (event.kind === 'origins') return setOrigins(event.origins);
     if (event.kind === 'forks') return setForks(event.forks);
     if (event.kind === 'settings') return setSettings(event.settings);
     if (event.kind === 'bugbot') return setWatches(event.watches);
@@ -860,6 +874,11 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
       scratchpadListeners.add(fn);
       return () => scratchpadListeners.delete(fn);
     },
+    origins: () => origins,
+    onOrigins(fn) {
+      originsListeners.add(fn);
+      return () => originsListeners.delete(fn);
+    },
     workspaces: () => workspaces,
     onWorkspaces(fn) {
       workspacesListeners.add(fn);
@@ -915,8 +934,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
       });
       return config;
     },
-    async createSession({ cwd, resume, fork, prompt }) {
-      const body = await request('/api/sessions', { method: 'POST', body: JSON.stringify({ cwd, resume, fork, prompt }) });
+    async createSession({ cwd, resume, fork, prompt, workspace }) {
+      const body = await request('/api/sessions', { method: 'POST', body: JSON.stringify({ cwd, resume, fork, prompt, workspace }) });
       // The stream may have told of the session already, and newer: its answer is the oldest news.
       if (!metas.has(body.session.id)) {
         metas.set(body.session.id, body.session);

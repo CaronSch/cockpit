@@ -4,7 +4,9 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkspaces } from '../daemon/workspace.js';
+import { loadOrigins } from '../daemon/origins.js';
 import { leaf } from '../src/layout/grid-model.js';
+/** @import { SessionMeta } from '../daemon/wire.js' */
 
 describe('workspaces on disk', () => {
   test('the screens kept before become workspaces of their own, main’s first, once', async () => {
@@ -40,5 +42,25 @@ describe('workspaces on disk', () => {
     assert.ok(saved.ok);
     const stale = store.save(only.id, leaf('w_00000002', 'file'), only.rev);
     assert.ok(!stale.ok && stale.current?.tree?.kind === 'leaf' && stale.current.tree.widget === 'omp');
+  });
+
+  test('a conversation is noted as started in its workspace once omp names it, and keeps it through a rewind', async () => {
+    const file = join(await mkdtemp(join(tmpdir(), 'ac-origins-')), 'origins.json');
+    const origins = await loadOrigins({ file });
+    /** @param {string | null} ompId @returns {any} */
+    const event = (ompId) => {
+      /** @type {SessionMeta} */
+      const meta = { id: 's1', cwd: '/', resume: null, fork: null, sessionFile: null, status: 'ready', pid: 1, exitCode: null, error: null, startedAt: 0, ompId };
+      return { kind: 'session', meta, seq: 1, at: 0, session: 's1' };
+    };
+    const A = '01a1cacf-44ec-7483-a118-e5d911a16e50';
+    const B = '01a1cacf-44ec-7483-a118-e5d911a16e51';
+    origins.expect('s1', 'ws_0000000a');
+    origins.heard(event(null));
+    assert.deepEqual(origins.all(), {}, 'not until omp says which conversation it is');
+    origins.heard(event(A));
+    await origins.moved(A, B);
+    const again = await loadOrigins({ file });
+    assert.deepEqual(again.all(), { [B]: 'ws_0000000a' });
   });
 });

@@ -16,7 +16,7 @@
  * access token, unread.json (which conversations have news not read yet), pins.json (which are pinned), forks.json
  * (which conversation each fork came from), settings.json, bugbot.json (the Bugbot reviews watched for), schedule.json
  * (the prompts agents scheduled), decisions/
- * (each conversation's decision reviews), plans/ (each conversation's plan), asides/ (each conversation's `/btw` side questions), fork-sources/ (journals forked mid-turn, cut to their last response, while
+ * (each conversation's decision reviews), plans/ (each conversation's plan), asides/ (each conversation's `/btw` side questions), origins.json (the workspace each conversation was started in), fork-sources/ (journals forked mid-turn, cut to their last response, while
  * their fork starts), scratchpads/, attachments/, workspaces.json (workspaces/ the screens it was migrated from) and archive/sessions/, the archived omp sessions), COCKPIT_OMP_SESSIONS (omp's session journals; default
  * `$PI_CODING_AGENT_DIR/sessions`, i.e. ~/.omp/agent/sessions), COCKPIT_SLEEP_AFTER_MS (how long
  * an idle, unused session stays awake; default 30 minutes, shorter for tests),
@@ -50,6 +50,7 @@ import { createRemoteAccess } from './remote.js';
 import { loadWorkspaces } from './workspace.js';
 import { loadToken } from './token.js';
 import { loadUnread } from './unread.js';
+import { loadOrigins } from './origins.js';
 import { loadPins } from './pins.js';
 import { createForker, loadForks } from './forks.js';
 import { nameFork } from './fork-title.js';
@@ -88,6 +89,7 @@ const unreadable = (err) => {
   console.error(`[daemon] ${err instanceof Error ? err.message : err}`);
   process.exit(1);
 };
+const origins = await loadOrigins({ file: join(stateDir, 'origins.json') }).catch(unreadable);
 const unread = await loadUnread({ file: join(stateDir, 'unread.json') }).catch(unreadable);
 const pins = await loadPins({ file: join(stateDir, 'pins.json') }).catch(unreadable);
 const workspaces = await loadWorkspaces({ file: join(stateDir, 'workspaces.json'), legacyDir: join(stateDir, 'workspaces') }).catch(unreadable);
@@ -130,6 +132,7 @@ const hub = createHub({
     void plans.moved(from, to).catch((err) => console.error(`[daemon] could not move the plan of conversation ${from}:`, err));
     void annotations.moved(from, to).catch((err) => console.error(`[daemon] could not move the annotations of conversation ${from}:`, err));
     void asides.moved(from, to).catch((err) => console.error(`[daemon] could not move the side questions of conversation ${from}:`, err));
+    void origins.moved(from, to);
   },
   onTurnEnded: decisions.turnEnded,
   onTodo: (ompId, phases) => void plans.todo(ompId, phases).catch((err) => console.error(`[daemon] could not follow the todo list of conversation ${ompId}:`, err)),
@@ -148,8 +151,10 @@ const hub = createHub({
 });
 // Switched, a setting reaches a conversation as it next wakes: idle ones go to sleep now.
 settings.subscribe(() => hub.launchChanged());
-// omp keeps a `/btw` answer only while its session runs: each is saved as it ends (asides.js).
+// Where a new conversation was started is noted once omp names it (origins.js); omp keeps a
+// `/btw` answer only while its session runs: each is saved as it ends (asides.js).
 hub.subscribe((event) => {
+  origins.heard(event);
   if (event.kind !== 'frame' || /** @type {Record<string, any>} */ (event.frame).type !== 'btw_record') return;
   const ompId = hub.get(event.session)?.meta().ompId;
   if (ompId) void asides.heard(ompId, /** @type {Record<string, any>} */ (event.frame).record).catch((err) => console.error(`[daemon] could not keep a side question of conversation ${ompId}:`, err));
@@ -184,6 +189,7 @@ const updates = createUpdates({ root: ROOT, restart });
 const daemon = createDaemon({
   hub,
   history,
+  origins,
   scratchpads: createScratchpads({ dir: scratchpadDir }),
   attachments: createAttachments({ dir: join(stateDir, 'attachments') }),
   workspaces,

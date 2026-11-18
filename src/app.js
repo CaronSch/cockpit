@@ -231,6 +231,9 @@ export async function createApp(root) {
         else families.delete(leaf.id);
         drawFamilies();
       },
+      get workspace() {
+        return opened.ok ? opened.shown.id() : null;
+      },
     };
 
     /** @type {{ destroy(): void, paramsChanged?(): void, closed?(): void }} */
