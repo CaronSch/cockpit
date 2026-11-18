@@ -348,7 +348,8 @@ What runs today:
   · read, edit ×2" with a spinner while it runs, "Worked · …" once done, a red "1 failed" if a
   step failed: `compactWork` in `src/omp/visibility.js`), keeping its text; a click opens it,
   each step a row of its own (no markers: rows brighten under the pointer, a spinner while one
-  runs, a failed one red), what an opened row holds hanging off a thin rule.
+  runs, a failed one red), what an opened row holds hanging off a thin rule; a stretch of
+  thinking alone ("Thought") opens straight to the thought.
   *Only prompts and responses* shows only prompts and responses (every reply the agent
   finished, not only a turn's last) and the agent's narration between tool calls in every
   agent window, hiding thinking and tool calls, with one "Working…" line while a turn runs.
