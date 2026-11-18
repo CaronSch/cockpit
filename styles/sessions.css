@@ -13,9 +13,9 @@
 }
 
 /* ── controls, in the window's top bar ── */
-/* The directory: a quiet menu showing which one, no native chrome, a thin chevron. */
-.sessions-directory {
-  /* As wide as the directory it shows, not its longest one. */
+/* The workspace and the directory: quiet menus showing which one, no native chrome, a thin chevron. */
+.sessions-menu {
+  /* As wide as the choice it shows, not its longest one. */
   field-sizing: content;
   min-width: 0;
   max-width: 14em;
@@ -33,17 +33,17 @@
   cursor: pointer;
 }
 
-.sessions-directory:hover {
+.sessions-menu:hover {
   background-color: var(--color-hover);
   color: var(--color-text);
 }
 
-.sessions-directory option {
+.sessions-menu option {
   background: var(--color-surface-raised);
   color: var(--color-text);
 }
 
-:is(.sessions-directory, .sessions-action):focus-visible,
+:is(.sessions-menu, .sessions-action):focus-visible,
 .sessions-item:focus-visible {
   outline: 1px solid var(--color-accent);
   outline-offset: -1px;

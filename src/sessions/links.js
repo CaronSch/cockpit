@@ -1,6 +1,7 @@
 /**
- * Which agent windows of this screen show which conversations, so the Sessions window can mark
- * its rows and point at their windows. A window shows the conversation its settings name
+ * Which agent windows show which conversations: on this screen, so the Sessions window can mark
+ * its rows and point at their windows; and in a workspace, so it can list only the
+ * conversations a workspace shows. A window shows the conversation its settings name
  * (`conversationKey`: its journal, else a new one's session); one still starting a fork has
  * none yet, and shows nothing here.
  *
@@ -8,8 +9,9 @@
  * Sessions shows conversations in. That is not always the focused window (focus may be in
  * Sessions itself, or nowhere), and it is where a click lands, so it is the one marked.
  */
+import { listLeaves } from '../layout/grid-model.js';
 import { conversationKey } from './running.js';
-/** @import { Leaf } from '../layout/grid-model.js' */
+/** @import { Leaf, Tree } from '../layout/grid-model.js' */
 /** @import { ScreenWindows } from '../widgets/registry.js' */
 
 /**
@@ -40,3 +42,6 @@ export function sessionLinks(screen) {
   const shownIn = (id) => shownBy(screen.windows.find((leaf) => leaf.id === id));
   return { windows, current: shownIn(screen.used.omp), pointed: shownIn(screen.pointed) };
 }
+
+/** The conversations the agent windows of layout `tree` show, tabs behind others too. @param {Tree} tree @returns {Set<string>} */
+export const conversationsIn = (tree) => new Set(listLeaves(tree).flatMap((leaf) => shownBy(leaf) ?? []));
