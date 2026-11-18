@@ -357,7 +357,7 @@ function createPane(body, ctx, daemon) {
         recentLabel: (dir) => `Start an agent in ${dir}`,
         cwd: params().cwd,
         start: async (dir) => {
-          const meta = await daemon.createSession({ cwd: dir });
+          const meta = await daemon.createSession({ cwd: dir, workspace: ctx.workspace });
           ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: null });
           // The folder picked, the prompt comes next: its box takes the focus from the form.
           focusNext = true;
@@ -386,7 +386,7 @@ function createPane(body, ctx, daemon) {
       actions.hidden = true;
       const { prompt } = params();
       daemon
-        .createSession({ cwd: cwd ?? '~', fork, ...(prompt ? { prompt } : {}) })
+        .createSession({ cwd: cwd ?? '~', fork, ...(prompt ? { prompt } : {}), workspace: ctx.workspace })
         .then((meta) => {
           // A fork's own journal is not known until omp reports it; update() saves it then.
           ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: meta.sessionFile, fork: null, prompt: null });
@@ -868,7 +868,7 @@ function createPane(body, ctx, daemon) {
         await loading;
         const own = meta();
         const running = own && isRunning(own) ? own.id : holding(file);
-        const id = running ?? (await daemon.createSession(file && saved() ? { cwd: cwd() || '~', resume: file } : { cwd: cwd() || '~' })).id;
+        const id = running ?? (await daemon.createSession(file && saved() ? { cwd: cwd() || '~', resume: file } : { cwd: cwd() || '~', workspace: ctx.workspace })).id;
         if (id !== session) follow(id);
         await untilReady(id);
         return id;
@@ -1142,7 +1142,7 @@ function createPane(body, ctx, daemon) {
       try {
         if (archive && file && saved()) await daemon.archivePastSession(file);
         else if (old && !saved()) await daemon.end(old);
-        const meta = await daemon.createSession({ cwd: cwd() || '~' });
+        const meta = await daemon.createSession({ cwd: cwd() || '~', workspace: ctx.workspace });
         focusNext = true;
         ctx.setParams({ session: meta.id, cwd: meta.cwd, sessionFile: null, name: null });
       } catch (err) {
