@@ -1,5 +1,9 @@
 # Cockpit
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/CaronSch/cockpit/main/install.sh | sh
+```
+
 **A modular, in-browser workbench for coding agents.**
 
 Cockpit runs coding agents from a local daemon and shows them in your browser, and
