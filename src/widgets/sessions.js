@@ -8,8 +8,9 @@
  * the list's. Showing a conversation needs no omp: its window shows the journal until
  * something is sent.
  *
- * The window's top bar holds its controls: a directory menu (narrowing runs here) and View, a
- * menu of the sort order, its direction and the archived list. They are this window's own
+ * The window's top bar holds its controls: a workspace menu (the conversations a workspace's
+ * agent windows show; with more than one workspace), a directory menu (narrowing runs here) and
+ * View, a menu of the sort order, its direction and the archived list. They are this window's own
  * settings, so two Sessions windows can show different slices. Searching is Spotlight's
  * (ui/spotlight.js). The list follows the daemon as journals change, so nothing refreshes it.
  *
@@ -39,7 +40,7 @@ import { errorMessage, tildeHome } from '../ui/format.js';
 import { getDaemon } from '../daemon/client.js';
 import { SORT_KEYS, directoryCounts, displayTitle, isSortKey, naturalDir, relativeTime, sortSessions } from '../sessions/order.js';
 import { STATE_LABELS, conversationMatch, listConversations, runningState, showConversation } from '../sessions/running.js';
-import { sessionLinks } from '../sessions/links.js';
+import { conversationsIn, sessionLinks } from '../sessions/links.js';
 import { openContextMenu, opensContextMenu } from '../ui/context-menu.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { DaemonClient } from '../daemon/client.js' */
@@ -71,15 +72,21 @@ function createSessionsWindow(body, ctx, daemon) {
   const showArchived = () => ctx.params.archived === true;
   /** The one directory this window shows, or null for all. */
   const directory = () => (typeof ctx.params.directory === 'string' && ctx.params.directory ? ctx.params.directory : null);
+  /** The workspace whose conversations this window shows, or null for all (and for one deleted since). */
+  const workspace = () => daemon.workspaces()?.find((w) => w.id === ctx.params.workspace) ?? null;
 
   // ── controls, in the window's top bar ──
-  const directories = el('select', 'sessions-directory');
+  const workspaces = el('select', 'sessions-menu');
+  workspaces.setAttribute('aria-label', 'Workspace');
+  /** What the workspace options were last built from, so an open menu is not rebuilt for nothing. */
+  let workspacesSignature = '';
+  const directories = el('select', 'sessions-menu');
   directories.setAttribute('aria-label', 'Directory');
   /** What the directory options were last built from, so an open menu is not rebuilt for nothing. */
   let directoriesSignature = '';
   const view = button('omp-tool-btn sessions-view', 'View');
   view.setAttribute('aria-haspopup', 'menu');
-  ctx.headActions.replaceChildren(directories, view);
+  ctx.headActions.replaceChildren(workspaces, directories, view);
   // Loading, failing, empty: said once, above the list; a full list says nothing.
   const status = el('p', 'sessions-status');
   status.setAttribute('aria-live', 'polite');
@@ -151,7 +158,13 @@ function createSessionsWindow(body, ctx, daemon) {
   }
 
   /** The conversations this window lists: archived ones on their own, else every one, awake or not. */
-  const listed = () => listConversations(sessions, showArchived() ? [] : daemon.sessions(), { directory: directory() });
+  function listed() {
+    const all = listConversations(sessions, showArchived() ? [] : daemon.sessions(), { directory: directory() });
+    const chosen = workspace();
+    if (!chosen) return all;
+    const keys = conversationsIn(chosen.tree);
+    return all.filter((c) => keys.has(c.key));
+  }
 
   /** What a row's conversation is called: its awake session's name, else its journal's. @param {Listed} c */
   const nameOf = (c) => (c.meta && daemon.activity(c.meta.id)?.name) ?? (c.title || c.firstPrompt ? displayTitle(c) : null);
@@ -336,6 +349,28 @@ function createSessionsWindow(body, ctx, daemon) {
     return row;
   }
 
+  /** The workspace menu: every workspace, each with how many conversations it shows; hidden while there is only one. */
+  function drawWorkspaces() {
+    const all = daemon.workspaces() ?? [];
+    const options = all.map((w) => ({ value: w.id, text: `${w.name} (${conversationsIn(w.tree).size})` }));
+    const signature = JSON.stringify(options);
+    if (signature !== workspacesSignature) {
+      workspacesSignature = signature;
+      const any = el('option', '', 'All workspaces');
+      any.value = '';
+      workspaces.replaceChildren(
+        any,
+        ...options.map((o) => {
+          const option = el('option', '', o.text);
+          option.value = o.value;
+          return option;
+        }),
+      );
+    }
+    workspaces.value = workspace()?.id ?? '';
+    workspaces.hidden = all.length < 2 && !workspace();
+  }
+
   function drawDirectories() {
     const options = directoryCounts(sessions, directory()).map((d) => ({ value: d.cwd, text: `${shortDir(d.cwd)} (${d.count})` }));
     const signature = JSON.stringify(options);
@@ -361,7 +396,7 @@ function createSessionsWindow(body, ctx, daemon) {
     if (error) status.textContent = `Could not list sessions: ${error}`;
     else if (moveError) status.textContent = moveError;
     else if (!loaded) status.textContent = 'Loading sessions…';
-    else if (count === 0) status.textContent = directory() ? 'No session matches.' : showArchived() ? 'No archived sessions.' : 'No sessions yet.';
+    else if (count === 0) status.textContent = workspace() && !directory() ? `No conversation is open in ${workspace()?.name}.` : directory() || workspace() ? 'No session matches.' : showArchived() ? 'No archived sessions.' : 'No sessions yet.';
     else status.textContent = '';
     status.hidden = status.textContent === '';
   }
@@ -404,6 +439,7 @@ function createSessionsWindow(body, ctx, daemon) {
 
   function draw() {
     list.setAttribute('aria-label', showArchived() ? 'Archived sessions' : 'Sessions');
+    drawWorkspaces();
     drawDirectories();
 
     const now = Date.now();
@@ -490,6 +526,10 @@ function createSessionsWindow(body, ctx, daemon) {
     }
   });
 
+  workspaces.addEventListener('change', () => {
+    ctx.setParams({ workspace: workspaces.value || null });
+    draw();
+  });
   directories.addEventListener('change', () => {
     ctx.setParams({ directory: directories.value || null });
     draw();
@@ -500,6 +540,8 @@ function createSessionsWindow(body, ctx, daemon) {
   const offPins = daemon.onPins(scheduleDraw);
   const offSessions = daemon.onSessions(scheduleDraw);
   const offActivity = daemon.onActivity(scheduleDraw);
+  // A workspace's windows change what it shows; its name and the list of them, the menu.
+  const offWorkspaces = daemon.onWorkspaces(scheduleDraw);
   const offStatus = daemon.onStatus((s) => {
     if (s === 'open') void load();
   });
@@ -563,6 +605,7 @@ function createSessionsWindow(body, ctx, daemon) {
       offPins();
       offStatus();
       offActivity();
+      offWorkspaces();
       cancelAnimationFrame(frame);
       root.remove();
     },

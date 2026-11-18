@@ -425,9 +425,10 @@ What runs today:
   outlines its windows, and pointing at an agent window lights its row (`ctx.screen`,
   `ctx.outline`; `src/sessions/links.js`). Waking a journal a session already
   holds gets that session: the daemon never starts a second omp on one. A
-  directory menu (every directory with sessions, A→Z, with counts) narrows a
-  window to one directory, together with View's choices; like
-  those, the choice is the window's own. An untitled session is listed by its first
+  workspace menu (with more than one workspace: each with how many conversations its agent
+  windows show, tabs behind others too) narrows a window to the conversations one workspace
+  shows, and a directory menu (every directory with sessions, A→Z, with counts) to one
+  directory, together with View's choices; like those, the choice is the window's own. An untitled session is listed by its first
   prompt. Row actions show on hover or focus. A fork is listed as a
   session of its own, under the title its first prompt gave it (until then, the one it copied from its source). **Archive** (a box with an arrow into it; **Restore**, an arrow out) moves a
   session's journal and its folder out of omp's sessions into
@@ -853,7 +854,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/render/tab-strip.js` — Tab strips of stacked windows: the window a stack shows carries, in place of its title, a tab for each window of the stack (its glyph and title, a dot while it is unread), the one shown marked.
 - `src/scratchpad/blocks.js` — A scratchpad's text as blocks to edit: runs of text, and the images and files it references, kept free of the DOM so the round trip can be tested.
 - `src/scratchpad/store.js` — The page's copy of one scratchpad: every window in the page showing that pad edits this one object, so they agree as you type; it saves to the daemon after a pause and follows what other pages save.
-- `src/sessions/links.js` — Which agent windows of this screen show which conversations, so the Sessions window can mark its rows and point at their windows.
+- `src/sessions/links.js` — Which agent windows show which conversations: on this screen, so the Sessions window can mark its rows and point at their windows; and in a workspace, so it can list only the conversations a workspace shows.
 - `src/sessions/notify.js` — Desktop notifications when an agent is done or needs its user, so a session can be left running while the user is elsewhere: the moments that mark a conversation unread (omp/activity.js), as they happen.
 - `src/sessions/order.js` — Sorting and labels for the Sessions window, kept free of the DOM so they can be tested.
 - `src/sessions/running.js` — Conversations as the Sessions window lists them, kept free of the DOM so they can be tested: every journal with the session holding it while one is awake, how each is doing, and what an agent window is given to show one.
