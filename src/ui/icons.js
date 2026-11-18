@@ -33,8 +33,14 @@ export const mailIcon = () => icon('M2.5 4h11v8h-11zM2.75 4.5L8 8.5l5.25-4', 16)
 /** An open envelope: mark as read. */
 export const mailOpenIcon = () => icon('M2.5 7L8 3l5.5 4v6h-11zM2.75 7.25L8 10.75l5.25-3.5', 16);
 
-/** Two screens, one behind the other: the screen switcher. */
-export const screensIcon = () => icon('M5 3.5h8.5v6.5H5zM2.5 6v6.5H11', 16);
+/** Two panes, one behind the other: the workspace switcher. */
+export const workspacesIcon = () => icon('M5 3.5h8.5v6.5H5zM2.5 6v6.5H11', 16);
+
+/** A pencil: rename. */
+export const pencilIcon = () => icon('M10.5 2.5l3 3-7.5 7.5H3v-3zM9 4l3 3', 16);
+
+/** A bin: delete. */
+export const binIcon = () => icon('M2.5 4.5h11M6 4.5V2.75h4V4.5M4 4.5l.75 9h6.5l.75-9M6.75 7v4M9.25 7v4', 16);
 
 /** A small chevron pointing down: a control that opens a menu. */
 export const chevronIcon = () => icon('M2.5 4l2.5 2.5L7.5 4', 10);
