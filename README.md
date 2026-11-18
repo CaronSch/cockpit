@@ -47,7 +47,7 @@ every browser:
 **Workspaces.** A workspace is a named layout of windows, like a macOS desktop. The switcher in
 the top bar names the one shown; point at it and it lists them all, with what each holds. Click
 one to show it in this window instead (its agents keep running), **New workspace** adds one, and
-a right-click renames or deletes one. **⌃⌥←** and **⌃⌥→** step to the workspace before or after,
+the pencil or bin on a workspace you point at (or a right-click) renames or deletes it. **⌃⌥←** and **⌃⌥→** step to the workspace before or after,
 **⌃⌥1**–**⌃⌥9** jump to one, from anywhere (a terminal too). Drag a window onto the switcher and
 drop it on a workspace to move it there. Layouts are kept by the daemon
 (`~/.cockpit/workspaces.json`), so they survive a browser restart; a reload shows the same

@@ -149,9 +149,10 @@ What runs today:
   column shows every tab as a window of its own. The top bar's workspace switcher (open while
   pointed at, `src/ui/workspace-switcher.js`) names the workspace shown and lists every one with
   what it holds; a click shows one in this window in place of the one shown (its windows
-  unmounted, which ends nothing), **New workspace** adds one and shows it, and a right-click
-  renames or deletes one (asking first if it holds windows; its windows close, agents keep
-  running, a terminal's shell ends with its window). ⌃⌥← and ⌃⌥→ show the workspace before or
+  unmounted, which ends nothing; its row is filled), **New workspace** adds one and shows it, and
+  as on a Sessions row, a pencil and a bin over a row's right end while it is pointed at or
+  focused (or a right-click) rename or delete one (no bin on the last; asking first if it holds
+  windows; its windows close, agents keep running, a terminal's shell ends with its window). ⌃⌥← and ⌃⌥→ show the workspace before or
   after (sliding in from that side, as swiping between macOS desktops does; at either end the
   grid gives a little), ⌃⌥1–9 one by its place, from anywhere, a terminal included. A window
   dragged onto the switcher opens its menu, and dropped on a workspace there moves to it (its

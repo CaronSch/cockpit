@@ -1,9 +1,11 @@
 /**
  * The workspace switcher in the top bar: the workspace this window shows, and a menu, open
  * while the pointer rests on it (hover-menu.js), of every workspace with what it holds; a click
- * on one shows it in this window instead. New workspace adds one and shows it; a right-click on
- * one (or Shift+F10) renames or deletes it. ⌃⌥1–9 show the first nine, ⌃⌥← and ⌃⌥→ the one
- * before or after (src/app.js), as swiping between macOS desktops does.
+ * on one shows it in this window instead. New workspace adds one and shows it. As a Sessions
+ * row does, a row shows its actions (Rename, and Delete while there is another workspace) over
+ * its right end while pointed at or focused, and a right-click (or Shift+F10) offers them too.
+ * ⌃⌥1–9 show the first nine, ⌃⌥← and ⌃⌥→ the one before or after (src/app.js), as swiping
+ * between macOS desktops does.
  *
  * While a window is dragged, its rows are where it can be dropped to move it to that workspace
  * (`dropAt`, which src/app.js asks as the drag goes; interaction/drag-controller.js).
@@ -14,7 +16,7 @@
  */
 import { button, el } from './dom.js';
 import { errorMessage } from './format.js';
-import { chevronIcon, screensIcon } from './icons.js';
+import { binIcon, chevronIcon, pencilIcon, workspacesIcon } from './icons.js';
 import { openOnHover } from './hover-menu.js';
 import { openContextMenu, opensContextMenu } from './context-menu.js';
 import { workspaceName } from '../workspace/model.js';
@@ -35,7 +37,7 @@ export function createWorkspaceSwitcher({ opened, describe }) {
   const label = el('span', 'ws-label');
   const caret = chevronIcon();
   caret.classList.add('ws-caret');
-  toggle.append(screensIcon(), label, caret);
+  toggle.append(workspacesIcon(), label, caret);
   const menu = el('div', 'ws-menu');
   menu.popover = 'auto';
   menu.setAttribute('aria-label', 'Workspaces');
@@ -81,7 +83,10 @@ export function createWorkspaceSwitcher({ opened, describe }) {
   /** @param {Workspace} w @param {number} i */
   function row(w, i) {
     if (editing?.id === w.id && editing.kind === 'rename') return renameRow(w);
-    const item = button('ws-row');
+    const item = el('div', 'ws-row');
+    item.tabIndex = 0;
+    item.setAttribute('role', 'button');
+    item.setAttribute('aria-label', `Show ${w.name}`);
     item.dataset.workspace = w.id;
     const text = el('span', 'ws-row-text');
     text.append(el('span', 'ws-row-name', w.name), el('span', 'ws-row-detail', describe(w.tree)));
@@ -93,24 +98,46 @@ export function createWorkspaceSwitcher({ opened, describe }) {
     }
     if (w.id === shown.id()) item.setAttribute('aria-current', 'true');
     item.classList.toggle('is-drop', w.id === dropping);
-    item.addEventListener('click', () => {
+    const rename = () => {
+      editing = { kind: 'rename', id: w.id };
+      fillMenu();
+    };
+    const deletable = shown.list().length > 1;
+    // Over the row's right end, where its shortcut is, while it is pointed at or focused.
+    const tools = el('div', 'ws-row-tools');
+    tools.append(action(pencilIcon(), `Rename ${w.name}`, rename), ...(deletable ? [action(binIcon(), `Delete ${w.name}`, () => remove(w))] : []));
+    item.append(tools);
+    const show = () => {
       menu.hidePopover();
       attempt(shown.switchTo(w.id), `show ${w.name}`);
+    };
+    item.addEventListener('click', (e) => {
+      if (!/** @type {Element} */ (e.target).closest('.ws-row-action')) show();
     });
-    const actions = () => [
-      { label: 'Rename', run: () => ((editing = { kind: 'rename', id: w.id }), fillMenu()) },
-      ...(shown.list().length > 1 ? [{ label: 'Delete', run: () => remove(w) }] : []),
-    ];
+    const actions = () => [{ label: 'Rename', run: rename }, ...(deletable ? [{ label: 'Delete', run: () => remove(w) }] : [])];
     item.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openContextMenu(item, actions(), { x: e.clientX, y: e.clientY });
     });
     item.addEventListener('keydown', (e) => {
-      if (!opensContextMenu(e)) return;
-      e.preventDefault();
-      openContextMenu(item, actions());
+      if (e.target !== item) return;
+      if (opensContextMenu(e)) {
+        e.preventDefault();
+        openContextMenu(item, actions());
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        show();
+      }
     });
     return item;
+  }
+
+  /** A row's action, drawn as an icon. @param {SVGElement} icon @param {string} label @param {() => void} run */
+  function action(icon, label, run) {
+    const b = button('ws-row-action', '', run);
+    b.append(icon);
+    b.setAttribute('aria-label', label);
+    return b;
   }
 
   /** @param {Workspace} w */
