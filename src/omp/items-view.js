@@ -151,7 +151,8 @@ export function renderPending(text, which, continues, cancel) {
 /**
  * A stretch of the agent's work as one line: how it went (still going, how many failed), how
  * many tool calls and which (`edit ×2`), opening to the thinking and tool calls themselves, and
- * the notes omp sent meanwhile but does not display. A stretch of those notes alone (as a
+ * the notes omp sent meanwhile but does not display. A stretch of thinking alone (`Thought`)
+ * opens to the thought itself, not to a fold of its own. A stretch of those notes alone (as a
  * session starts: the tools omp mounted) says where they came from: `From omp · xdev`.
  * `live`: the turn is still running and this is its latest stretch, so the agent is still at it.
  * @param {WorkItem} work @param {ItemContext} ctx @param {boolean} [live] @returns {HTMLElement}
@@ -196,7 +197,12 @@ export function renderWork(work, ctx, live = false) {
         : 'Thought';
   const head = [...spinnerIf(going ? 'running' : ''), el('span', 'omp-work-summary', label)];
   if (failed) head.push(el('span', 'omp-work-failed', `${failed} failed`));
-  return collapsible(ctx, work.key, `omp-work${going ? ' is-running' : ''}`, head, () => work.parts.map((part) => renderItem(part, ctx)));
+  /** @param {WorkItem['parts'][number]} part @returns {HTMLElement[]} */
+  const show = (part) =>
+    calls.length === 0 && part.kind === 'assistant'
+      ? part.blocks.flatMap((b) => (b.kind === 'thinking' ? [el('div', 'omp-thinking-text', b.redacted ? 'Thinking (redacted)' : b.text)] : []))
+      : [renderItem(part, ctx)];
+  return collapsible(ctx, work.key, `omp-work${going ? ' is-running' : ''}`, head, () => work.parts.flatMap(show));
 }
 
 /**
