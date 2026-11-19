@@ -76,6 +76,10 @@ Planned capabilities:
   end carries it, ended sessions). The browser replays it on load, so a
   window shows the same history whether it was open all along or not; the `hello` says how many
   events the replay holds, and an agent window draws once they are all in, not event by event.
+  An event of 64 KiB or more (a resumed conversation's history, tens of megabytes) goes on the
+  stream as a stub (`large`) the page reads whole over HTTP (`GET /api/events/:seq`, gzipped), its
+  session's later events waiting for it: written on the open stream, the browser got the end of
+  one only with the stream's next writes (its heartbeats), 30 s on.
   `src/daemon/client.js` is the browser side; widgets never open their own
   connections. The daemon also does omp's housekeeping once for every window: its
   setup fetches a resumed or forked session's history before the session is ready,
