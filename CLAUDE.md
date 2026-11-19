@@ -69,9 +69,11 @@ Planned capabilities:
   proxies model calls and observes the filesystem.
 - **Wire** (`daemon/wire.js`): a JSON API for commands and one Server-Sent Events
   stream per page carrying every session's events in order: each omp stdout frame
-  verbatim, each frame the daemon wrote to omp, stderr lines, undecodable stdout
+  (without what omp keeps of its messages for itself and no window reads: `inputTransformations`,
+  a tool result's `details.trace`), each frame the daemon wrote to omp, stderr lines, undecodable stdout
   (`garbled`) and session status changes, less what no window needs any more
-  (`src/omp/event-log.js`: finished streams' deltas, ended sessions). The browser replays it on load, so a
+  (`src/omp/event-log.js`: finished streams' deltas, a tool's progress once newer progress or its
+  end carries it, ended sessions). The browser replays it on load, so a
   window shows the same history whether it was open all along or not; the `hello` says how many
   events the replay holds, and an agent window draws once they are all in, not event by event.
   `src/daemon/client.js` is the browser side; widgets never open their own
@@ -829,7 +831,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/dialogs-view.js` — Inline dialogs for omp's extension UI requests (select, confirm, input, editor, ask); each one answers through a single `respond(payload)` call.
 - `src/omp/drafts.js` — Unsent messages, one per conversation: what is in an agent window's message box (its text, and its comment and file cards) waits while the window shows another conversation, or the page reloads, and is back when the conversation is shown again (in any window of this browser).
 - `src/omp/drag-highlight.js` — The omp transcript's selection highlight, drawn as in Google Docs: while the pointer drags, it already covers whole words (ui/word-snap.js) and its edges glide from word to word.
-- `src/omp/event-log.js` — What of a session's events a later window still needs, so the daemon's log and a page's buffers stay about as long as the conversation instead of growing with every token streamed: a message's deltas go once `message_end` carries it whole, a tool's progress once `tool_execution_end` carries its result, and a session's events once it has ended (windows then read the conversation from its journal), bar the event saying how it ended.
+- `src/omp/event-log.js` — What of a session's events a later window still needs, so the daemon's log and a page's buffers stay about as long as the conversation instead of growing with every token streamed: a message's deltas go once `message_end` carries it whole, a tool's progress once a newer progress frame or `tool_execution_end` carries it (a subagent run in the background reports progress long after its call has ended, each frame all of it so far), and a session's events once it has ended (windows then read the conversation from its journal), bar the event saying how it ended.
 - `src/omp/file-mention.js` — Paths typed in the agent pane, as `@` file mentions in its draft or plainly in its Directory field: the path being typed at the caret, the folder entries that match it, and the text that completes it, kept free of the DOM so they can be tested.
 - `src/omp/file-suggest.js` — Path suggestions in the agent pane's text boxes (`@` file mentions in its draft, its dialogs' answers and its comments and questions on reply text; its Directory field): while the caret ends a path, the suggestion list shows the matching entries of the folder it names, and Tab, Enter or a click completes the path (see `file-mention.js`).
 - `src/omp/fork-family.js` — Reads the daemon's fork registry (daemon/forks.js: each fork's omp id → the conversation it was forked from, and its title) for one conversation: what it was forked from and its own forks, which the agent pane's Forks menu lists, and the family it belongs to, which colours the windows of related conversations alike.

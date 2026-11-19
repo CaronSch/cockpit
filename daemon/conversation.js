@@ -14,6 +14,7 @@
  * their summaries. Model and thinking level are the path's last changes. A journal whose
  * entries carry no ids (one written by hand, or the test fake) is a single path, in order.
  */
+import { slimMessage } from '../src/omp/event-log.js';
 /** @import { Conversation } from './wire.js' */
 
 /** @param {unknown} timestamp ISO time, as journals write it @returns {number} */
@@ -38,7 +39,8 @@ function messageOf(entry) {
     case 'message': {
       const m = entry.message;
       if (!m || typeof m !== 'object') return null;
-      return m.role === 'toolResult' && m.useless === true && m.isError !== true ? null : m;
+      // Without what omp keeps of a message for itself, as the event log keeps it (event-log.js).
+      return m.role === 'toolResult' && m.useless === true && m.isError !== true ? null : slimMessage(m);
     }
     case 'custom_message':
       return { role: 'custom', customType: entry.customType, content: entry.content, display: entry.display, details: entry.details, attribution: entry.attribution, timestamp: epoch(entry.timestamp) };
