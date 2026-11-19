@@ -66,6 +66,7 @@ import { runningWork } from '../src/omp/running-work.js';
  *   idle(id: string): boolean,
  *   working(id: string): boolean,
  *   since(seq: number): SessionEvent[],
+ *   event(seq: number): SessionEvent | null,
  *   latest(): number,
  *   subscribe(fn: (event: SessionEvent) => void): () => void,
  *   activity(): Record<string, SessionActivity>,
@@ -237,6 +238,17 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
     // Its agent is on a turn now.
     working: (id) => activity.get(id)?.transcript.streaming === true,
     since: (seq) => log.filter((event) => event.seq > seq),
+    // The log is in seq order: found by bisection.
+    event(seq) {
+      let lo = 0;
+      let hi = log.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (log[mid].seq < seq) lo = mid + 1;
+        else hi = mid;
+      }
+      return log[lo]?.seq === seq ? log[lo] : null;
+    },
     latest: () => latest,
     subscribe(fn) {
       listeners.add(fn);

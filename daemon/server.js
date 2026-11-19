@@ -26,7 +26,7 @@ import { WORKSPACE_ID, workspaceName } from '../src/workspace/model.js';
 import { isValidTree, listLeaves } from '../src/layout/grid-model.js';
 import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion } from './ui-files.js';
 /** @import { BunRequest, Server } from 'bun' */
-/** @import { BugbotWatch, ConversationTarget, DaemonConfig, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent, TerminalEvent, TerminalInfo, UpdateState } from './wire.js' */
+/** @import { BugbotWatch, ConversationTarget, DaemonConfig, LargeEvent, PastSession, RemoteState, ScheduledTask, Scratchpad, SessionActivity, SessionEvent, TerminalEvent, TerminalInfo, UpdateState } from './wire.js' */
 /** @import { Hub } from './hub.js' */
 /** @import { RemoteAccess } from './remote.js' */
 /** @import { Updates } from './updates.js' */
@@ -65,6 +65,13 @@ import { CONTENT_TYPES, PAGE_FILES, STATIC_DIRS, VENDOR_FILES, createUiVersion }
 /** Bun refuses (413) any request body larger than this; uploads are the largest. */
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 const HEARTBEAT_MS = 15_000;
+/**
+ * A session event this large or larger (its JSON, in characters) goes on the stream as a stub
+ * (`large`), its whole read from GET /api/events/:seq: a long conversation's history is tens of
+ * megabytes, and written on a stream that stays open, the browser was measured getting the end
+ * of it only with the stream's next writes (its heartbeats), 30 s later.
+ */
+const STREAM_EVENT_MAX_CHARS = 64 * 1024;
 /** JSON answers this large or larger are gzipped for a client that accepts it. */
 const GZIP_FROM_BYTES = 64 * 1024;
 /** How much of a body is handed to the compressor at a time, so a large one never holds up the daemon. */
@@ -307,7 +314,11 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
           replay = [...hub.since(Math.min(...cursors.values()))].filter((event) => event.seq > (cursors.get(event.session) ?? Infinity));
         }
         write(`data: ${JSON.stringify({ kind: 'hello', bootId: hub.bootId, seq: hub.latest(), replay: replay.length, sessions: hub.list(), unread: unread.all(), pinned: pins.all(), forks: forks.all(), settings: settings.all(), bugbot: bugbot.all(), schedule: schedule.all(), login: setup.login.state(), ui, activity: hub.activity(), remote: remote.state(), update: updates.state(), terminals: terminals.list(), workspaces: workspaces.all(), origins: origins.all(), stream: streamId })}\n\n`);
-        const send = (/** @type {SessionEvent} */ event) => write(`id: ${hub.bootId}:${event.seq}\ndata: ${JSON.stringify(event)}\n\n`);
+        const send = (/** @type {SessionEvent} */ event) => {
+          const data = JSON.stringify(event);
+          const sent = data.length < STREAM_EVENT_MAX_CHARS ? data : JSON.stringify(/** @type {LargeEvent} */ ({ kind: 'large', session: event.session, seq: event.seq }));
+          write(`id: ${hub.bootId}:${event.seq}\ndata: ${sent}\n\n`);
+        };
         for (const event of replay) send(event);
         const unsubscribe = hub.subscribe((event) => {
           if (wanted(event)) send(event);
@@ -478,6 +489,14 @@ export function createDaemon({ hub, history, scratchpads, attachments, workspace
     /** @type {Record<string, Handler>} */
     const routes = {
         '/api/stream': api({ GET: stream }),
+        // A session event the stream sent as a stub (`large`): gone once the log no longer keeps it.
+        '/api/events/:seq': api({
+          GET: (req) => {
+            const event = hub.event(Number(req.params.seq));
+            if (!event) throw new HttpError(404, 'no such event: the log no longer keeps it');
+            return json(event);
+          },
+        }),
         '/api/config': api({ GET: () => json(config) }),
         '/api/ui': api({ GET: async () => json({ version: await uiVersion.current() }) }),
         '/api/history': api({

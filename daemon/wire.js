@@ -152,6 +152,8 @@
  *                                      `follow`): only their events with a seq above their cursor (or
  *                                      Last-Event-ID's, the larger) are replayed, and only their events
  *                                      sent live, bar every session's `session` events; 400 when malformed
+ *   GET    /api/events/:seq            → SessionEvent: one the stream sent as a `large` stub; 404 once the
+ *                                      log no longer keeps it (its session ended)
  *
  * A `PUT /api/settings` naming `remote` is refused (403) on the remote listener: the phone
  * cannot switch itself off. JSON answers of 64 KiB or more are gzipped for a request that accepts
@@ -163,7 +165,10 @@
  * events up to it that follow are a replay), how many events that replay holds (`replay`, so a
  * page can draw once it has them all), session list, unread conversations, forks, settings, Bugbot watches,
  * scheduled prompts, the Setup window's login, UI version, awake sessions' activity, Phone access, the
- * terminals running and the connection's own `stream` id. `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `plan`, `annotations`, `settings`,
+ * terminals running and the connection's own `stream` id. A session event of 64 KiB or more (a
+ * resumed conversation's history) comes as a `large` stub with its id, session and seq, read
+ * whole from GET /api/events/:seq: a page delivers it, and the session's events after it, once it is in.
+ * `scratchpad`, `history`, `unread`, `pins`, `forks`, `decisions`, `plan`, `annotations`, `settings`,
  * `bugbot`, `schedule`, `login`, `activity`, `remote`, `terminals` and `terminal` events carry no id and are not replayed: a reconnecting page reads GET /api/scratchpads/:id,
  * GET /api/history, GET /api/decisions/:ompId, GET /api/plans/:ompId and GET /api/annotations/:ompId instead, its `hello` carries the rest, and it
  * watches its terminals again (their scrollback is their replay).
@@ -340,8 +345,9 @@
  * it comes (`data`).
  * @typedef {{ kind: 'terminal', id: string } & ({ replay: ScrollbackPart[] } | { data: string })} TerminalEvent
  */
+/** A session event too large for the stream, in its place: read it from GET /api/events/:seq. @typedef {{ kind: 'large', session: string, seq: number }} LargeEvent */
 
-/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | WorkspacesEvent | OriginsEvent | ForksEvent | DecisionsEvent | AsidesEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | SessionEvent} StreamEvent */
+/** @typedef {HelloEvent | ScratchpadEvent | HistoryEvent | UnreadEvent | PinsEvent | WorkspacesEvent | OriginsEvent | ForksEvent | DecisionsEvent | AsidesEvent | PlanEvent | AnnotationsEvent | SettingsEvent | BugbotEvent | ScheduleEvent | LoginEvent | ActivityEvent | RemoteEvent | UpdateEvent | TerminalsEvent | TerminalEvent | LargeEvent | SessionEvent} StreamEvent */
 
 /**
  * `idleCompactAfterMs`: how long after its last request a conversation is compacted while idle

@@ -21,7 +21,9 @@
  * page heard of them, from those happening now: the replay is everything up to the `hello`'s
  * seq. While a replay is still arriving (the `hello` says how many events it holds), `replaying`
  * is true, and `afterReplay` waits for its end, so a window draws a conversation once instead
- * of typing it out again event by event.
+ * of typing it out again event by event. A session event too large for the stream (a resumed
+ * conversation's history) comes as a stub (`large`) and is read over HTTP; its session's events
+ * after it wait for it, so each session's still arrive in order, and the replay is in once it is.
  *
  * It also tracks the UI files' version (see daemon/ui-files.js): the first one the daemon
  * reports is the code this page loaded, and `onUiChange` hears when the files served stop
@@ -35,7 +37,7 @@
  * meanwhile together, so it arrives in order.
  */
 import { withoutSpent } from '../omp/event-log.js';
-/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, UpdateState, Workspace } from '../../daemon/wire.js' */
+/** @import { BugbotWatch, Conversation, ConversationTarget, DaemonConfig, DirListing, HelloEvent, LargeEvent, PastSession, Pull, PullList, RemoteInfo, RemoteState, RepoList, RpcResponse, ScheduledTask, Scratchpad, ScratchpadSummary, SessionActivity, SessionEvent, SessionMeta, StreamEvent, TerminalEvent, TerminalInfo, TextFile, UpdateState, Workspace } from '../../daemon/wire.js' */
 /** @import { Leaf, Tree } from '../layout/grid-model.js' */
 /** @import { Unread } from '../../daemon/unread.js' */
 /** @import { Pinned } from '../../daemon/pins.js' */
@@ -193,6 +195,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
   let replayedTo = 0;
   /** How many events of the replay this connection opened with are still to come. */
   let replayLeft = 0;
+  /** How many connections have opened (`hello`s heard): which one a replayed event belongs to. */
+  let connections = 0;
   /** Called once the replay is in. @type {Set<() => void>} */
   const replayWaiters = new Set();
   function replayDone() {
@@ -430,8 +434,10 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
 
   /** @param {HelloEvent} hello */
   function onHello(hello) {
+    connections++;
     if (bootId !== null && hello.bootId !== bootId) {
       buffers.clear();
+      behind.clear();
       metas.clear();
       config = null;
       // The new daemon's seqs start over.
@@ -525,7 +531,40 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
       annotations.set(event.ompId, event.annotations);
       return annotationsChanged();
     }
+    if (event.kind === 'large' || behind.has(event.session)) return hold(event);
     replayArrived();
+    deliver(event);
+  }
+
+  /**
+   * Per session, the end of the chain of its events still on their way: one the stream sent as
+   * a stub (`large`, read from the daemon), and those that came after it, delivered in order.
+   * @type {Map<string, Promise<void>>}
+   */
+  const behind = new Map();
+
+  /** Delivers `event` in its session's order, once the stub ahead of it (or it) is read. @param {LargeEvent | SessionEvent} event */
+  function hold(event) {
+    const { session } = event;
+    const boot = bootId;
+    const connection = connections;
+    // Gone from the log (its session ended, which a later event says): nothing to deliver.
+    /** @type {Promise<SessionEvent | null>} */
+    const read = event.kind === 'large' ? request(`/api/events/${event.seq}`).catch(() => null) : Promise.resolve(event);
+    const done = (behind.get(session) ?? Promise.resolve()).then(async () => {
+      const got = await read;
+      // Only the connection whose replay it was in counts it; a new daemon's log is another.
+      if (connections === connection) replayArrived();
+      if (got && bootId === boot) deliver(got);
+    });
+    behind.set(session, done);
+    void done.then(() => {
+      if (behind.get(session) === done) behind.delete(session);
+    });
+  }
+
+  /** @param {SessionEvent} event */
+  function deliver(event) {
     const cursor = cursors.get(event.session);
     // Scoped, a reopened stream may repeat what the last one delivered.
     if (cursor !== undefined) {
