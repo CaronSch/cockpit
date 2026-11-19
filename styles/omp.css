@@ -533,8 +533,9 @@
 }
 
 /* Back to the latest (omp.js `drawJump`): a small round arrow over the transcript's foot, shown
-   once scrolled up; drawn as SVG (ring and arrow), so both are smooth and centred. Its ring
-   spins in the accent while the agent works. */
+   once scrolled up; drawn as SVG (track and arrow), so both are smooth and centred. While the
+   agent works an arc of the accent spins round its track: a pseudo-element turned by `transform`,
+   which the compositor animates without the main thread (an SVG's `rotate` would repaint). */
 .omp-jump-wrap {
   position: relative;
   z-index: 3;
@@ -575,19 +576,9 @@
   stroke-linejoin: round;
 }
 
-.omp-jump-track,
-.omp-jump-ring {
-  stroke-width: 1.25;
-}
-
 .omp-jump-track {
+  stroke-width: 1.25;
   stroke: var(--color-line-strong);
-}
-
-.omp-jump-ring {
-  stroke: none;
-  transform-box: fill-box;
-  transform-origin: center;
 }
 
 .omp-jump-arrow {
@@ -603,20 +594,27 @@
   stroke: color-mix(in oklch, var(--color-accent) 30%, transparent);
 }
 
-.omp-jump.is-working .omp-jump-ring {
-  stroke: var(--color-accent);
-  stroke-dasharray: 20 62;
+/* The arc: a quarter of the track (r 13, 1.25 wide, as the SVG draws it), cut out of a conic
+   gradient by a ring-shaped mask. */
+.omp-jump.is-working::before {
+  content: '';
+  position: absolute;
+  inset: 0.375px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: conic-gradient(var(--color-accent) 0 88deg, transparent 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.25px), #000 calc(100% - 1.25px));
   animation: omp-jump-spin 1.4s linear infinite;
 }
 
 @keyframes omp-jump-spin {
   to {
-    rotate: 1turn;
+    transform: rotate(1turn);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .omp-jump.is-working .omp-jump-ring {
+  .omp-jump.is-working::before {
     animation: none;
   }
 }
@@ -719,7 +717,10 @@
 }
 
 /* Rewind: quiet in the band's corner until the prompt is hovered or focused; never while the
-   agent works, nor on what a pending rewind sets aside. */
+   agent works, nor on what a pending rewind sets aside. At rest it is invisible and cannot be
+   pressed, and only a shown one hangs on the transcript's `is-streaming`: as that flips, with
+   every turn, no button's style changes, so none is laid out again (a long conversation has
+   hundreds; `display: none` on them all took tens of ms). The pane ignores a press mid-turn. */
 .omp-rewind-btn {
   position: absolute;
   top: 3px;
@@ -733,11 +734,13 @@
   cursor: pointer;
   user-select: none;
   opacity: 0;
+  pointer-events: none;
 }
 
-.omp-user:hover > .omp-rewind-btn,
-.omp-rewind-btn:focus-visible {
+.omp-transcript:not(.is-streaming) .omp-user:hover > .omp-rewind-btn,
+.omp-transcript:not(.is-streaming) .omp-rewind-btn:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .omp-rewind-btn:hover {
@@ -745,7 +748,6 @@
   color: var(--color-text);
 }
 
-.omp-transcript.is-streaming .omp-rewind-btn,
 .is-set-aside .omp-rewind-btn {
   display: none;
 }
@@ -953,12 +955,6 @@
   right: 6px;
 }
 
-.md-visual svg {
-  display: block;
-  max-width: 100%; /* down to a floor set per drawing (visuals.js `fit`), then it scrolls */
-  height: auto;
-}
-
 .md-visual-error {
   color: var(--color-text-dim);
   font-style: italic;
@@ -1055,36 +1051,40 @@
   border-top: 1px solid var(--color-line);
 }
 
-/* A collapsed row: no marker; it brightens under the pointer and opens on a click on its words
-   (not the empty width beside them). Opened, what it holds hangs off a thin rule under it. */
-.omp details > summary {
+/* A collapsed row (items-view.js `collapsible`): no marker; it brightens under the pointer and
+   opens on a click on its words (not the empty width beside them). Opened, what it holds hangs
+   off a thin rule under it. */
+.omp-fold-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   width: fit-content;
   max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--color-text-dim);
+  text-align: start;
   cursor: pointer;
-  list-style: none;
   transition: color var(--duration-fast);
 }
 
-.omp details > summary::-webkit-details-marker {
-  display: none;
-}
-
-.omp details > summary:hover,
-.omp details[open] > summary {
+.omp-fold-head:hover,
+.omp-fold.is-open > .omp-fold-head {
   color: var(--color-text);
 }
 
-.omp details[open] {
+.omp-fold.is-open {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.omp-details-body,
+.omp-fold:not(.is-open) > .omp-fold-body {
+  display: none;
+}
+
+.omp-fold-body,
 .omp-bash > :not(.omp-bash-head) {
   display: flex;
   flex-direction: column;
@@ -1100,7 +1100,7 @@
   white-space: pre-wrap;
 }
 
-.omp-unrecognised > summary {
+:where(.omp-unrecognised) > .omp-fold-head {
   color: var(--color-accent);
 }
 
@@ -1173,9 +1173,10 @@
 }
 
 /* Compaction (omp near its context's limit, or the daemon while idle): a line across the
-   transcript with what happened in its middle; the summary opens under it. */
-div.omp-compaction,
-.omp details.omp-compaction > summary {
+   transcript with what happened in its middle; the summary opens under it. Its head stays dim,
+   opened or not. */
+div.omp-compaction:not(.omp-fold),
+.omp-fold.omp-compaction > .omp-fold-head {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -1185,10 +1186,10 @@ div.omp-compaction,
   font-size: var(--text-xs);
 }
 
-div.omp-compaction::before,
-div.omp-compaction::after,
-.omp details.omp-compaction > summary::before,
-.omp details.omp-compaction > summary::after {
+div.omp-compaction:not(.omp-fold)::before,
+div.omp-compaction:not(.omp-fold)::after,
+.omp-fold.omp-compaction > .omp-fold-head::before,
+.omp-fold.omp-compaction > .omp-fold-head::after {
   content: '';
   flex: 1;
   height: 1px;
@@ -1253,7 +1254,7 @@ div.omp-compaction::after,
   color: var(--color-danger);
 }
 
-.omp-note.is-hidden > summary {
+.omp-note.is-hidden > .omp-fold-head {
   opacity: 0.7;
 }
 
@@ -1480,10 +1481,9 @@ div.omp-compaction::after,
 }
 
 /* A shell or subagent running now: roomier, with a light going round its outline (ui/orbit.js).
-   Its corners are round (not squircles) so the light can follow them: its outline runs half a
-   pixel inside the edge, so its corners are the chip's radius less that half pixel. */
+   Its corners are round (not squircles) so the light, masked to its 1px border, follows them; the
+   light is placed against it, so it stays positioned. */
 .omp-running .omp-chip.is-running {
-  --orbit-radius: 7.5px;
   position: relative;
   box-sizing: border-box;
   height: 26px;

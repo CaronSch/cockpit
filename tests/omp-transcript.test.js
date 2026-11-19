@@ -655,11 +655,11 @@ describe('the event log a window replays', () => {
   });
 
   test('messages lose what omp keeps for itself, and show the same', () => {
-    const message = assistant([{ type: 'text', text: 'Done.' }], { inputTransformations: [{ type: 'thinking_dropped', path: 'messages.0', reason: 'x' }] });
+    const message = assistant([{ type: 'thinking', thinking: 'Hmm.', thinkingSignature: 'opaque' }, { type: 'text', text: 'Done.' }], { inputTransformations: [{ type: 'thinking_dropped', path: 'messages.0', reason: 'x' }], requestControls: { tools: {} } });
     const tool = { role: 'toolResult', toolCallId: 'c1', toolName: 'bash', content: [{ type: 'text', text: 'ok' }], details: { trace: { units: [] }, wallTimeMs: 3 }, isError: false, timestamp: 2 };
     const events = [frame({ type: 'response', command: 'get_messages', success: true, data: { messages: [message, tool] } }), frame({ type: 'message_end', message })];
     const log = kept(events);
-    assert.ok(!JSON.stringify(log).includes('inputTransformations') && !JSON.stringify(log).includes('trace'));
+    for (const field of ['inputTransformations', 'requestControls', 'thinkingSignature', 'trace']) assert.ok(!JSON.stringify(log).includes(field), field);
     assert.equal(shown(run(log)), shown(run(events)));
   });
 });

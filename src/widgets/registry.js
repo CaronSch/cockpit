@@ -11,7 +11,7 @@ import plan from './plan.js';
 
 /**
  * Widgets the palette can add, keyed by type.
- * Contract: { type, title, glyph, description, newParams?(), newTab?(params), mount(body, ctx) → { destroy(), paramsChanged?(), closed?() } }.
+ * Contract: { type, title, glyph, description, newParams?(), newTab?(params), mount(body, ctx) → { destroy(), paramsChanged?(), shownChanged?(), closed?() } }.
  * `newParams()` gives a window its starting settings when one is created (e.g. a fresh
  * scratchpad id); windows restored from a saved layout keep theirs.
  * `newTab(params)`, if a widget has it, puts a + after its window's title (or its stack's tabs):
@@ -53,6 +53,11 @@ import plan from './plan.js';
  * same colour in their top bar. Null: none.
  * `ctx.workspace` is the workspace the window is shown in now (an agent window starts its
  * conversations there: daemon/origins.js); null where there is none (the phone, signed out).
+ * `ctx.shown` is true while the window is on screen, false while it is a tab stacked behind
+ * another window (kept mounted, but neither laid out nor seen); in the narrow column, and on the
+ * phone, every window is shown. `shownChanged()` is called after it flips, once the page shows
+ * the window or has hidden it, so a window hidden behind a tab may put off work nobody sees and
+ * catch up as it is shown again.
  */
 /** @import { Leaf, LeafParams } from '../layout/grid-model.js' */
 /** @import { DragEndResult } from '../interaction/drag-controller.js' */
@@ -84,13 +89,18 @@ import plan from './plan.js';
  *   outline(ids: readonly string[]): void,
  *   setFamily(family: string | null): void,
  *   readonly workspace: string | null,
+ *   readonly shown: boolean,
  * }} WidgetContext
  */
 /**
  * @typedef {{ type: string, title: string, glyph: string, description: string,
  *   newParams?: () => LeafParams,
  *   newTab?: (params: LeafParams) => LeafParams,
- *   mount(body: HTMLElement, ctx: WidgetContext): { destroy(): void, paramsChanged?(): void, closed?(): void } }} WidgetDef
+ *   mount(body: HTMLElement, ctx: WidgetContext): WidgetInstance }} WidgetDef
+ */
+/**
+ * What a mounted widget gives back: its hooks (the contract above).
+ * @typedef {{ destroy(): void, paramsChanged?(): void, shownChanged?(): void, closed?(): void }} WidgetInstance
  */
 
 /** @type {readonly WidgetDef[]} */

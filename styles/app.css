@@ -53,41 +53,52 @@ input[type='radio'],
   corner-shape: round;
 }
 
-/* A light going round an element's outline while it works (ui/orbit.js): a dash of an outline
-   100 long, moved by its offset, so it keeps an even pace round any shape. Its host is
-   positioned, round-cornered, and sets `--orbit-radius` to its corner radius. */
+/* A light going round an element's outline while it works (ui/orbit.js): glows set all round
+   it, each flaring in turn, by opacity alone (so the compositor runs it, never the page), seen
+   only where they cross the host's 1px border: the ring is laid over that border, with its
+   corners, and masked to it (its padding box cut out). The host is positioned. */
 .orbit {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  fill: none;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  corner-shape: inherit;
+  overflow: clip;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
   pointer-events: none;
 }
 
-.orbit-path {
-  x: 0.5px;
-  y: 0.5px;
-  width: calc(100% - 1px);
-  height: calc(100% - 1px);
-  rx: var(--orbit-radius, 8px);
-  stroke: color-mix(in oklch, var(--color-accent) 65%, transparent);
-  stroke-width: 1;
-  stroke-linecap: round;
-  stroke-dasharray: 8 92;
+/* Each glow is centred where orbit.js places it (`translate`); its flare is the 4s turn's first
+   and last few percent, so it fades in as the light nears and out once it has passed. */
+.orbit-light {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 28px;
+  height: 28px;
+  margin: -14px;
+  background: radial-gradient(closest-side, var(--color-accent), transparent);
+  opacity: 0;
   animation: orbit 4s linear infinite;
 }
 
 @keyframes orbit {
-  to {
-    stroke-dashoffset: -100;
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  5%,
+  95% {
+    opacity: 0;
   }
 }
 
+/* No light going round: the whole outline lit, steadily. */
 @media (prefers-reduced-motion: reduce) {
-  .orbit-path {
+  .orbit-light {
     animation: none;
+    opacity: 0.4;
   }
 }
 
@@ -979,10 +990,12 @@ body:not(.is-dragging) .ws-row:is(:hover, :focus-within) .ws-row-tools {
   opacity: 0.35;
 }
 
-/* A tab of a stack behind the one it shows: still mounted and laid out (its state and scroll
-   kept), but neither seen nor reached (render/grid-renderer.js also makes it inert). */
+/* A tab of a stack behind the one it shows: still mounted (its state and scroll kept), but
+   neither seen nor reached (render/grid-renderer.js also makes it inert), and its contents
+   skipped by style, layout and paint, so a page of many tabs costs what its shown windows do. */
 .widget.is-tab-hidden {
   visibility: hidden;
+  content-visibility: hidden;
 }
 
 /* Inset, because `contain: strict` clips anything painted outside the frame. */

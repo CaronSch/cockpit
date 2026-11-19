@@ -21,6 +21,13 @@
  * Plan window (widgets/plan.js) as a tab here, or brings forward the one showing it; a drag places
  * one where it is dropped.
  *
+ * A window behind another tab of its stack builds nothing until it is first shown (no journal
+ * read, no transcript), its tab kept saying what it shows and whether it is unread; once
+ * built, it keeps up with the conversation while hidden but draws it only as it is shown again.
+ * Every agent window draws in one shared frame (ui/frame.js), so the page is laid out once a
+ * frame however many windows draw; news of some conversation redraws only the windows showing
+ * it, and only the part it changes.
+ *
  * New, Fork and PRs (shown while the conversation's directory is in a GitHub repository) sit in
  * the window's top bar, beside its close button; Stop is there too, shown on the phone only
  * (omp.css): on the desktop, Esc in the message box stops a turn. Another provider or account is
@@ -67,6 +74,7 @@ import { familyOf, relatives } from '../omp/fork-family.js';
 import { readDraft, writeDraft } from '../omp/drafts.js';
 import { focusOnClick } from '../ui/click-focus.js';
 import { settings } from '../ui/settings.js';
+import * as frame from '../ui/frame.js';
 /** @import { WidgetContext } from './registry.js' */
 /** @import { LeafParams } from '../layout/grid-model.js' */
 /** @import { RpcResponse, SessionEvent, SessionMeta } from '../../daemon/wire.js' */
@@ -80,6 +88,12 @@ import { settings } from '../ui/settings.js';
  * @typedef {{ session: string | null, cwd: string | null, sessionFile: string | null, name: string | null, fork: string | null, prompt: string | null }} OmpParams
  */
 /** @typedef {{ label: string, detail?: string, current?: boolean, pick: () => void, drag?: (event: PointerEvent, close: () => void) => void }} MenuEntry */
+/**
+ * News the daemon broadcasts about some conversation (daemon/client.js), not always this window's.
+ * @typedef {'sessions' | 'activity' | 'unread' | 'decisions' | 'asides' | 'annotations' | 'plan' | 'forks' | 'schedule'} News
+ */
+/** A part of the window that news redraws on its own, where the rest need not be. @typedef {'unread' | 'toolbar' | 'transcript' | 'marks' | 'scheduled' | 'plan'} Part */
+/** One thing the transcript draws, by key; `rev` says when it must be built again. @typedef {{ key: string, rev: number | string, render: () => HTMLElement }} Entry */
 /** How often, at most, a window being used tells the daemon so (it keeps the session awake). */
 const SEEN_EVERY_MS = 60_000;
 const MAX_SUGGESTIONS = 8;
@@ -132,6 +146,9 @@ export default {
 /** @param {unknown} v @returns {string | null} */
 const str = (v) => (typeof v === 'string' && v ? v : null);
 
+/** The omp id a journal's name carries: omp names it `<time>_<id>.jsonl` (or `<id>.jsonl`). @param {string | null} file */
+const journalId = (file) => (file && /(?:^|[/_])([^_/]+)\.jsonl$/.exec(file)?.[1]) || null;
+
 /**
  * The jump buttons' face: a ring (a faint track, and the arc that spins while the agent works)
  * round an arrow, down to the latest or up to the start of the response.
@@ -141,7 +158,6 @@ function jumpIcon(direction = 'down') {
   const icon = svg('svg', { viewBox: '0 0 28 28', 'aria-hidden': 'true' });
   icon.append(
     svg('circle', { class: 'omp-jump-track', cx: '14', cy: '14', r: '13' }),
-    svg('circle', { class: 'omp-jump-ring', cx: '14', cy: '14', r: '13' }),
     svg('path', { class: 'omp-jump-arrow', d: direction === 'down' ? 'M14 8.5v11M9.5 15l4.5 4.5 4.5-4.5' : 'M14 19.5v-11M9.5 13l4.5-4.5 4.5 4.5' }),
   );
   return icon;
@@ -166,8 +182,13 @@ function createPane(body, ctx, daemon) {
 
   /** @type {string | null} */
   let mode = null;
-  let frame = 0;
   let destroyed = false;
+  /** What the next draw redraws: the parts news changed, or (null) everything. @type {Set<Part> | null} */
+  let dirty = new Set();
+  /** Whether a draw is due in the next frame. */
+  let due = false;
+  /** Whether a draw waits for the replay to finish (see `schedule`). */
+  let afterReplay = false;
   /** @type {SessionView | null} */
   let view = null;
   /** Views made so far, so each gets its own id. */
@@ -201,27 +222,45 @@ function createPane(body, ctx, daemon) {
     view = null;
     schedule();
   });
+  // What follows is news of any conversation: each window draws only what concerns its own (`heard`).
   // Another window may wake the conversation this one shows: follow it then.
-  const offSessions = daemon.onSessions(() => schedule());
+  const offSessions = daemon.onSessions(() => heard('sessions'));
+  // An awake conversation's name, for a tab not shown yet (`drawFace`).
+  const offActivity = daemon.onActivity(() => heard('activity'));
 
   // ── unread: a final response or question nobody has looked at (omp/activity.js) ──
   // Which conversations are unread is the daemon's (daemon/unread.js), so every window showing
   // the session, and the Sessions window, agree on it, across reloads and restarts.
-  const offUnread = daemon.onUnread(() => schedule());
+  const offUnread = daemon.onUnread(() => heard('unread'));
   // Decision reviews (daemon/decisions.js) arrive after the turn, for any conversation.
-  const offDecisions = daemon.onDecisions(() => schedule());
+  const offDecisions = daemon.onDecisions(() => heard('decisions'));
   // Kept `/btw` side questions (daemon/asides.js), shown where they were asked after a reload or sleep.
-  const offAsides = daemon.onAsides(() => schedule());
+  const offAsides = daemon.onAsides(() => heard('asides'));
   // The daemon's settings: plans switched off hide the Plan line.
-  const offDaemonSettings = daemon.onSettings(() => schedule());
+  const offDaemonSettings = daemon.onSettings(() => heard('plan'));
   // Forks started or moved (daemon/forks.js): the Forks count, and which windows are related.
-  const offForks = daemon.onForks(() => schedule());
+  const offForks = daemon.onForks(() => heard('forks'));
   // Prompts agents scheduled (daemon/schedule.js): the Scheduled line, for this conversation's.
-  const offSchedule = daemon.onSchedule(() => schedule());
+  const offSchedule = daemon.onSchedule(() => heard('schedule'));
   // Plans agents keep (daemon/plans.js): the Plan line, for this conversation's.
-  const offPlans = daemon.onPlans(() => schedule());
+  const offPlans = daemon.onPlans(() => heard('plan'));
   // Comments and questions on replies (daemon/annotations.js): their highlights.
-  const offAnnotations = daemon.onAnnotations(() => schedule());
+  const offAnnotations = daemon.onAnnotations(() => heard('annotations'));
+
+  /**
+   * News of some conversation: drawn only where it concerns this window's, and then only the
+   * part it changes (`concerns`). Without a conversation view, the window draws its screen or
+   * its tab's face again, which costs next to nothing.
+   * @param {News} news
+   */
+  function heard(news) {
+    if (!view) {
+      if (news === 'sessions' || news === 'activity' || news === 'unread') schedule();
+      return;
+    }
+    const part = view.concerns(news);
+    if (part) schedule(part);
+  }
   let pointerInside = false;
   /** The user's last click, keystroke or move of focus was in this window. */
   let inside = false;
@@ -277,10 +316,12 @@ function createPane(body, ctx, daemon) {
   });
   for (const type of ['pointermove', 'wheel']) body.addEventListener(type, seen, { passive: true });
 
-  /** Whether a draw waits for the replay to finish (see `schedule`). */
-  let afterReplay = false;
-  function schedule() {
-    if (frame || destroyed) return;
+  /** Draws `part` of the window in the next frame (ui/frame.js), with every other window that draws. @param {Part | 'all'} [part] */
+  function schedule(part = 'all') {
+    if (destroyed) return;
+    if (part === 'all') dirty = null;
+    else dirty?.add(part);
+    if (due) return;
     // A replay (a reload, a reconnect) is drawn once it is all in, not event by event.
     if (daemon.replaying()) {
       if (afterReplay) return;
@@ -291,10 +332,14 @@ function createPane(body, ctx, daemon) {
       });
       return;
     }
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      if (!destroyed) render();
-    });
+    due = true;
+    frame.draw(drawDue);
+  }
+  function drawDue() {
+    due = false;
+    const parts = dirty;
+    dirty = new Set();
+    render(parts);
   }
 
   /** @param {string} next @param {() => HTMLElement[]} build */
@@ -304,15 +349,19 @@ function createPane(body, ctx, daemon) {
     root.replaceChildren(...build());
   }
 
-  function render() {
+  /** @param {Set<Part> | null} parts what news changed; null: anything may have */
+  function render(parts) {
     const status = daemon.status();
     const p = params();
-    ctx.setLabel(p.name);
     if (view && !view.shows(p)) {
       view.destroy();
       view = null;
       ctx.setUnread(false);
     }
+    // A tab behind another window builds nothing until it is first shown: no journal read, no
+    // transcript drawn. Its tab still says what it shows, and whether it is unread.
+    if (!view && !ctx.shown) return drawFace(p);
+    ctx.setLabel(p.name);
     if (!view && status !== 'open') {
       mode = null; // the status text changes with the status: always redraw it
       return show('status', () => statusScreen(status));
@@ -321,13 +370,31 @@ function createPane(body, ctx, daemon) {
     if (!view) {
       mode = null;
       view = createSessionView();
+      parts = null;
     }
     show(`view:${view.id}`, () => [view?.root ?? el('div')]);
-    view.update();
-    if (focusNext) {
+    view.update(parts);
+    if (focusNext && ctx.shown) {
       focusNext = false;
       view.focus();
     }
+  }
+
+  /**
+   * The face of a tab that has not been shown yet: its conversation's name and whether it is
+   * unread, found without reading the conversation. Its omp id is the awake session's, else
+   * the one its journal's name carries.
+   * @param {OmpParams} p
+   */
+  function drawFace(p) {
+    const own = p.session ? daemon.meta(p.session) : null;
+    const held = holding(p.sessionFile);
+    const awake = own && isRunning(own) ? own : held ? daemon.meta(held) : null;
+    // An awake conversation is named as it goes (as `update` names it, from the same transcript).
+    const name = (awake && daemon.activity(awake.id)?.name) || p.name;
+    if (name !== p.name) ctx.setParams({ name });
+    ctx.setLabel(name);
+    ctx.setUnread(daemon.unreadSince(awake?.ompId ?? journalId(p.sessionFile) ?? own?.ompId ?? null) !== null);
   }
 
   /** @param {string} status */
@@ -422,7 +489,7 @@ function createPane(body, ctx, daemon) {
   /**
    * The conversation the window's params name: awake (a session's events) or asleep (its
    * journal), and woken by what needs omp.
-   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, update(): void, focus(): void, read(): void, seen(): void, destroy(): void }} SessionView
+   * @typedef {{ id: number, root: HTMLElement, shows(p: OmpParams): boolean, concerns(news: News): Part | 'all' | null, update(parts: Set<Part> | null): void, focus(): void, read(): void, seen(): void, destroy(): void }} SessionView
    * @returns {SessionView}
    */
   function createSessionView() {
@@ -512,7 +579,7 @@ function createPane(body, ctx, daemon) {
     transcript.addEventListener('scroll', () => {
       stickToBottom = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < BOTTOM_SLACK_PX;
       drawJump();
-      drawTop();
+      drawTop(false);
     });
     // Scrolled up, a small arrow at the transcript's foot goes back to the latest; its ring spins
     // while the agent works (the window's outline says when it is done or asks).
@@ -585,14 +652,25 @@ function createPane(body, ctx, daemon) {
     const responseStart = () => (lastResponse ? (drawn.get(`response:${lastResponse}`) ?? drawn.get(lastResponse))?.node : null) ?? null;
     /** How far the response's start is below the transcript's top edge (negative: scrolled past). @param {HTMLElement} at */
     const below = (at) => at.getBoundingClientRect().top - transcript.getBoundingClientRect().top - transcript.clientTop;
-    function drawTop() {
+    /**
+     * Offers the arrow for the latest response, and shows it while that start is scrolled past,
+     * measured once every window has drawn (ui/frame.js): after the transcript is pinned
+     * (`settle`) when it was drawn, else as it is now.
+     * @param {boolean} pin
+     */
+    function drawTop(pin) {
       if (state.streaming) sawWork = true;
       else if (lastResponse && (sawWork || unreadSince() !== null)) {
         sawWork = false;
         topOffered = lastResponse;
       }
+      frame.measure(pin ? settle : placeTop);
+    }
+    /** Whether the arrow shows, from where the response's start is now; its write, if it changes. */
+    function placeTop() {
       const at = responseStart();
-      topWrap.hidden = !(at?.isConnected && !state.streaming && topOffered === lastResponse && lastResponse !== topTaken && below(at) < 0);
+      const hide = !(at?.isConnected && !state.streaming && topOffered === lastResponse && lastResponse !== topTaken && below(at) < 0);
+      if (hide !== topWrap.hidden) return () => void (topWrap.hidden = hide);
     }
     /** The user is reading on their own (typing, scrolling): the arrow goes for this response. */
     function takeTop() {
@@ -613,13 +691,37 @@ function createPane(body, ctx, daemon) {
         () => drawJump(),
       );
     }
+    /** Follows new output: reading the transcript's height lays the page out if a draw changed it. */
     const pinToBottom = () => {
-      if (stickToBottom) transcript.scrollTop = transcript.scrollHeight;
+      if (stickToBottom && ctx.shown) transcript.scrollTop = transcript.scrollHeight;
     };
-    // Heights keep changing after a draw: the dialogs and composer below resize the
-    // transcript, and fonts or expanded blocks reflow items. Re-pin whenever either moves.
+    /**
+     * After a draw, once every window has drawn (ui/frame.js), so the page is laid out once for
+     * them all: the transcript pinned to its bottom while it follows new output (a scroll, which
+     * lays nothing out again), then the arrow to the response's start placed.
+     */
+    function settle() {
+      if (!ctx.shown) return;
+      pinToBottom();
+      return placeTop();
+    }
+    // Heights keep changing after a draw: the dialogs and composer below resize the transcript,
+    // and the latest item grows as it streams, or as its fonts, images and diagrams come in.
+    // Re-pin whenever one moves. Only the transcript's box and its last item are watched (an
+    // older item seldom changes, and watching thousands costs every frame), and an image coming
+    // in anywhere re-pins too.
     const resizes = new ResizeObserver(pinToBottom);
     resizes.observe(transcript);
+    transcript.addEventListener('load', () => frame.measure(settle), { capture: true });
+    /** The last item drawn, watched by `resizes`. @type {Element | null} */
+    let watched = null;
+    /** @param {Element | null} last */
+    function watchLast(last) {
+      if (last === watched) return;
+      if (watched) resizes.unobserve(watched);
+      if (last) resizes.observe(last);
+      watched = last;
+    }
     /**
      * Scrolls the transcript so the previous or next response starts at its top, or to its very
      * top or bottom when there is none (omp/response-nav.js). Going up stops following new
@@ -977,16 +1079,22 @@ function createPane(body, ctx, daemon) {
       return rewind?.key ?? null;
     }
 
+    /** What drawRewind dimmed as set aside, to undim at the next draw. @type {Element[]} */
+    let setAside = [];
     /** Marks the prompt being rewound to and dims what sending would set aside. */
     function drawRewind() {
-      for (const n of transcript.querySelectorAll('.is-set-aside')) n.classList.remove('is-set-aside');
+      for (const n of setAside) n.classList.remove('is-set-aside');
+      setAside = [];
       rewindBar.remove();
       const key = rewindKey();
       const point = key && rewindPoint(state.items, key);
       const at = key && drawn.get(key)?.node;
       if (!point || !at) return;
       rewindText.textContent = `Rewinding here: sending sets aside ${point.setAside} prompt${point.setAside === 1 ? '' : 's'} and what followed`;
-      for (let n = /** @type {Element | null} */ (at); n; n = n.nextElementSibling) n.classList.add('is-set-aside');
+      for (let n = /** @type {Element | null} */ (at); n; n = n.nextElementSibling) {
+        n.classList.add('is-set-aside');
+        setAside.push(n);
+      }
       transcript.insertBefore(rewindBar, at);
     }
 
@@ -1517,22 +1625,38 @@ function createPane(body, ctx, daemon) {
     let loginKey = '';
     /** How the transcript was drawn (which view), so changing it redraws every item. */
     let drawnView = '';
+    // The daemon's news of this conversation as last drawn or heard, so news of others redraws
+    // nothing here (`concerns`): its side questions, decision reviews, annotations and forks,
+    // the session holding it, and since when it is unread.
+    /** @type {unknown} */
+    let drawnAsides = null;
+    /** @type {unknown} */
+    let drawnDecisions = null;
+    /** @type {unknown} */
+    let drawnAnnotations = null;
+    let forksKey = '';
+    /** @type {unknown} */
+    let heardMeta = null;
+    /** @type {string | null} */
+    let heardHolding = null;
+    /** @type {number | null} */
+    let heardUnread = null;
     /** Stands in for the hidden work of a running turn when only responses show. */
     const workingEl = el('div', 'omp-working');
     workingEl.setAttribute('role', 'status');
 
     /** Forgets every item drawn, so the next draw builds them all afresh. */
     function clearDrawn() {
-      for (const entry of drawn.values()) {
-        resizes.unobserve(entry.node);
-        entry.node.remove();
-      }
+      for (const entry of drawn.values()) entry.node.remove();
       drawn.clear();
+      watchLast(null);
     }
 
     function drawTranscript() {
       rewindBar.remove(); // items are placed by index; drawRewind puts it back
-      addAsides(state, daemon.asides(ompId()) ?? []);
+      const asides = daemon.asides(ompId());
+      drawnAsides = asides;
+      addAsides(state, asides ?? []);
       const { onlyResponses } = settings.get();
       const view = onlyResponses ? 'responses' : 'work';
       if (view !== drawnView) {
@@ -1556,23 +1680,34 @@ function createPane(body, ctx, daemon) {
       }
       const live = new Set();
       const itemCtx = { tools: state.tools, open: openDetails };
-      /** @type {Array<{ key: string, rev: number | string, render: () => HTMLElement }>} */
-      const entries = shown.items.map((item) =>
-        item.kind === 'work'
-          ? { key: item.key, rev: item.key === liveWork ? `${item.rev}:live` : item.rev, render: () => renderWork(item, itemCtx, item.key === liveWork) }
-          : { key: item.key, rev: item.rev, render: () => renderItem(item, itemCtx) },
-      );
-      // Each turn's decision review shows where the turn ends (placed from the last, so the
-      // places before it hold); one that found no decisions shows nothing.
-      for (const { index, at, review } of placeReviews(shown.items, daemon.decisions(ompId()) ?? {}).reverse()) {
+      // Each turn's decision review shows where the turn ends, before the item at its index;
+      // one that found no decisions shows nothing.
+      const decisions = daemon.decisions(ompId());
+      drawnDecisions = decisions;
+      /** @type {Map<number, Entry[]>} */
+      const reviews = new Map();
+      for (const { index, at, review } of placeReviews(shown.items, decisions ?? {})) {
         if (review.status === 'done' && review.decisions.length === 0) continue;
-        entries.splice(index, 0, { key: `review:${at}`, rev: JSON.stringify(review), render: () => renderReview(review) });
+        const here = reviews.get(index) ?? [];
+        here.push({ key: `review:${at}`, rev: JSON.stringify(review), render: () => renderReview(review) });
+        reviews.set(index, here);
       }
       // A response after the agent's work starts under a quiet mark, so the answer stands apart.
-      for (const key of responseStarts(shown.items)) {
-        const at = entries.findIndex((e) => e.key === key);
-        if (at >= 0) entries.splice(at, 0, { key: `response:${key}`, rev: '', render: renderResponseMark });
-      }
+      const starts = responseStarts(shown.items);
+      /** @type {Entry[]} */
+      const entries = [];
+      // A new conversation, nothing said in it yet, opens on the welcome card, as omp's TUI does.
+      if (fresh()) entries.push({ key: 'welcome', rev: version ?? '', render: () => renderWelcome(tip, version) });
+      shown.items.forEach((item, i) => {
+        for (const review of reviews.get(i) ?? []) entries.push(review);
+        if (starts.has(item.key)) entries.push({ key: `response:${item.key}`, rev: '', render: renderResponseMark });
+        entries.push(
+          item.kind === 'work'
+            ? { key: item.key, rev: item.key === liveWork ? `${item.rev}:live` : item.rev, render: () => renderWork(item, itemCtx, item.key === liveWork) }
+            : { key: item.key, rev: item.rev, render: () => renderItem(item, itemCtx) },
+        );
+      });
+      for (const review of reviews.get(shown.items.length) ?? []) entries.push(review);
       // What omp holds to send later ends the transcript, as the prompts they will be.
       for (const which of /** @type {const} */ (['steering', 'followUp'])) {
         state.queue[which].forEach((text, i) => {
@@ -1580,18 +1715,12 @@ function createPane(body, ctx, daemon) {
           entries.push({ key: `pending:${which}:${i}`, rev: text, render: () => renderPending(text, which, isContinueDirective(text), cancel) });
         });
       }
-      // A new conversation, nothing said in it yet, opens on the welcome card, as omp's TUI does.
-      if (fresh()) entries.unshift({ key: 'welcome', rev: version ?? '', render: () => renderWelcome(tip, version) });
       entries.forEach(({ key, rev, render }, i) => {
         live.add(key);
         let entry = drawn.get(key);
         if (!entry || entry.rev !== rev) {
           const fresh = render();
-          if (entry) {
-            resizes.unobserve(entry.node);
-            entry.node.replaceWith(fresh);
-          }
-          resizes.observe(fresh);
+          entry?.node.replaceWith(fresh);
           entry = { rev, node: fresh };
           drawn.set(key, entry);
         }
@@ -1600,11 +1729,11 @@ function createPane(body, ctx, daemon) {
       });
       for (const [key, entry] of drawn) {
         if (!live.has(key)) {
-          resizes.unobserve(entry.node);
           entry.node.remove();
           drawn.delete(key);
         }
       }
+      watchLast(entries.length ? (drawn.get(entries[entries.length - 1].key)?.node ?? null) : null);
       if (shown.working) {
         const { steps } = shown.working;
         workingEl.textContent = steps ? `Working… ${steps} step${steps === 1 ? '' : 's'}` : 'Working…';
@@ -1614,8 +1743,14 @@ function createPane(body, ctx, daemon) {
       }
       transcript.classList.toggle('is-streaming', state.streaming);
       drawRewind();
-      pinToBottom();
-      marks.draw(daemon.annotations(ompId()) ?? []);
+      drawMarks();
+    }
+
+    /** The highlights of the conversation's annotations (omp/annotation-marks.js). */
+    function drawMarks() {
+      const annotations = daemon.annotations(ompId());
+      drawnAnnotations = annotations;
+      marks.draw(annotations ?? []);
     }
 
     function drawDialogs() {
@@ -1666,10 +1801,22 @@ function createPane(body, ctx, daemon) {
       }
     }
     function tickRunning() {
+      if (!ctx.shown) return; // drawn again as it is shown
       for (const time of running.querySelectorAll('.omp-chip-time')) {
         const since = Number(/** @type {HTMLElement} */ (time).dataset.since);
         time.textContent = since ? elapsed(Date.now() - since) : '';
       }
+    }
+
+    /** The prompts scheduled for this conversation, soonest first, and what the Scheduled line says of each. */
+    function scheduledNow() {
+      const at = Date.now();
+      const tasks = daemon
+        .schedule()
+        .filter((t) => (t.target.sessionFile ? t.target.sessionFile === file : t.target.session !== null && t.target.session === session))
+        .sort((a, b) => a.dueAt - b.dueAt);
+      const shown = tasks.map((t) => ({ id: t.id, prompt: t.prompt, when: whenLabel(t.dueAt, at), missed: t.missedAt !== null, failed: Boolean(t.error) }));
+      return { tasks, shown, key: JSON.stringify(shown) };
     }
 
     /**
@@ -1677,13 +1824,7 @@ function createPane(body, ctx, daemon) {
      * each with when it runs and an × that removes it: it never runs, and nothing wakes the agent.
      */
     function drawScheduled() {
-      const at = Date.now();
-      const tasks = daemon
-        .schedule()
-        .filter((t) => (t.target.sessionFile ? t.target.sessionFile === file : t.target.session !== null && t.target.session === session))
-        .sort((a, b) => a.dueAt - b.dueAt);
-      const shown = tasks.map((t) => ({ id: t.id, prompt: t.prompt, when: whenLabel(t.dueAt, at), missed: t.missedAt !== null, failed: Boolean(t.error) }));
-      const key = JSON.stringify(shown);
+      const { tasks, shown, key } = scheduledNow();
       if (key === scheduledKey) return;
       scheduledKey = key;
       scheduled.replaceChildren(
@@ -1708,15 +1849,17 @@ function createPane(body, ctx, daemon) {
       scheduled.hidden = tasks.length === 0;
     }
 
-    /**
-     * This conversation's plan, if its agent keeps one: its title, how far its steps are, and the
-     * one under way. None while plans are switched off (Config), even one kept before.
-     */
-    function drawPlan() {
+    /** This conversation's plan as the Plan line shows it; none while plans are switched off (Config), even one kept before. */
+    function planNow() {
       const plan = daemon.settings()?.plans === false ? null : daemon.plan(ompId());
       const progress = plan ? todoProgress(plan.todo) : null;
       const shown = plan ? { title: plan.title, done: progress?.done ?? 0, total: progress?.total ?? 0, current: progress?.current ?? null } : null;
-      const key = JSON.stringify(shown);
+      return { shown, key: JSON.stringify(shown) };
+    }
+
+    /** This conversation's plan, if its agent keeps one: its title, how far its steps are, and the one under way. */
+    function drawPlan() {
+      const { shown, key } = planNow();
       if (key === planKey) return;
       planKey = key;
       planLine.hidden = !shown;
@@ -1819,10 +1962,18 @@ function createPane(body, ctx, daemon) {
       signInBtn.hidden = !live || !needsLogin(state);
       stopBtn.disabled = !live || !state.streaming;
       // Its forks counted; related windows on the screen coloured alike (app.js).
+      const forks = forksNow();
+      forksKey = forks.key;
+      setText(forksBtn, forks.count ? `Forks ${forks.count}` : 'Forks');
+      ctx.setFamily(forks.family);
+    }
+
+    /** How many forks the conversation has, and the family of related ones it belongs to (omp/fork-family.js). */
+    function forksNow() {
       const forks = daemon.forks();
-      const { children } = relatives(forks, ompId());
-      setText(forksBtn, children.length ? `Forks ${children.length}` : 'Forks');
-      ctx.setFamily(familyOf(forks, ompId()));
+      const count = relatives(forks, ompId()).children.length;
+      const family = familyOf(forks, ompId());
+      return { count, family, key: `${count}:${family}` };
     }
 
     function drawComposer() {
@@ -1858,55 +2009,109 @@ function createPane(body, ctx, daemon) {
       const wait = at === null ? null : at - Date.now();
       node.classList.toggle('is-cold', wait !== null && wait <= 0);
       clearTimeout(coldTimer);
-      coldTimer = wait !== null && wait > 0 ? setTimeout(schedule, wait + 50) : undefined;
+      coldTimer = wait !== null && wait > 0 ? setTimeout(() => schedule(), wait + 50) : undefined;
     }
 
-    function update() {
-      // Woken elsewhere (another window, another tab): show the session that holds it now.
-      const running = !ready() && !waking ? holding(file) : null;
-      if (running && running !== session) follow(running);
-      // A rewind's prompt goes once the transcript holds the rewound conversation, or once
-      // there is no session left to send it to.
-      const waiting = reseedWaiters;
-      reseedWaiters = waiting.filter((w) => ready() && state.rewinds === w.after);
-      for (const w of waiting) if (!reseedWaiters.includes(w)) w.resolve();
-      // A ready session holds its earlier history already (the daemon fetched it first).
-      if (ready()) fillCarried();
-      // The journal names the conversation, and the name labels the window: both are saved
-      // with it. omp reports a new conversation's journal as it starts (and another on /new).
-      const reported = meta()?.sessionFile;
-      if (reported && reported !== file) {
-        // The conversation's key may change with it (a new one's session named it so far).
-        const before = draftKey();
-        file = reported;
-        if (before && before !== draftKey()) writeDraft(before, { text: '', cards: [] });
-        keepDraft();
-        ctx.setParams({ sessionFile: reported });
+    /**
+     * Which part of the window news of some conversation redraws, if it concerns this one's: what
+     * it says now is compared with what was drawn from it last. Behind another tab only what the
+     * window keeps up with while hidden counts (see `update`): it is drawn in full as it is shown.
+     * @param {News} news @returns {Part | 'all' | null}
+     */
+    function concerns(news) {
+      if (!ctx.shown && news !== 'sessions' && news !== 'unread') return null;
+      const id = ompId();
+      switch (news) {
+        case 'sessions':
+          return meta() !== heardMeta || holding(file) !== heardHolding ? 'all' : null;
+        case 'unread':
+          return daemon.unreadSince(id) !== heardUnread ? 'unread' : null;
+        case 'activity':
+          return null; // the session's own events say it all
+        case 'decisions':
+          return daemon.decisions(id) !== drawnDecisions ? 'transcript' : null;
+        case 'asides':
+          return daemon.asides(id) !== drawnAsides ? 'transcript' : null;
+        case 'annotations':
+          return daemon.annotations(id) !== drawnAnnotations ? 'marks' : null;
+        case 'plan':
+          return planNow().key !== planKey ? 'plan' : null;
+        case 'forks':
+          return forksNow().key !== forksKey ? 'toolbar' : null;
+        case 'schedule':
+          return scheduledNow().key !== scheduledKey ? 'scheduled' : null;
       }
-      const name = conversationName(state);
-      if (name && name !== params().name) {
-        ctx.setParams({ name });
-        schedule(); // the next draw labels the window with it
+    }
+
+    /**
+     * Draws the window: all of it (`parts` null), or only the parts news changed. Behind another
+     * tab it keeps up with the conversation (the session holding it, its journal, its name and
+     * whether it is unread) but draws nothing: it is drawn in full as it is shown again.
+     * @param {Set<Part> | null} parts
+     */
+    function update(parts) {
+      /** @param {Part} part */
+      const has = (part) => parts === null || parts.has(part);
+      if (parts === null) {
+        // Woken elsewhere (another window, another tab): show the session that holds it now.
+        const running = !ready() && !waking ? holding(file) : null;
+        if (running && running !== session) follow(running);
+        // A rewind's prompt goes once the transcript holds the rewound conversation, or once
+        // there is no session left to send it to.
+        const waiting = reseedWaiters;
+        reseedWaiters = waiting.filter((w) => ready() && state.rewinds === w.after);
+        for (const w of waiting) if (!reseedWaiters.includes(w)) w.resolve();
+        // A ready session holds its earlier history already (the daemon fetched it first).
+        if (ready()) fillCarried();
+        // The journal names the conversation, and the name labels the window: both are saved
+        // with it. omp reports a new conversation's journal as it starts (and another on /new).
+        const reported = meta()?.sessionFile;
+        if (reported && reported !== file) {
+          // The conversation's key may change with it (a new one's session named it so far).
+          const before = draftKey();
+          file = reported;
+          if (before && before !== draftKey()) writeDraft(before, { text: '', cards: [] });
+          keepDraft();
+          ctx.setParams({ sessionFile: reported });
+        }
+        const name = conversationName(state);
+        if (name && name !== params().name) {
+          ctx.setParams({ name });
+          ctx.setLabel(name);
+        }
+        heardMeta = meta();
+        heardHolding = holding(file);
       }
-      drawCold();
-      drawToolbar();
-      checkGithub();
-      drawStrips();
-      drawBanner();
-      drawTranscript();
-      drawJump();
-      drawTop();
-      drawDialogs();
-      drawRunning();
-      drawScheduled();
-      drawPlan();
-      drawComposer();
-      selectionPopup.refresh();
+      if (ctx.shown) {
+        if (parts === null) {
+          drawCold();
+          drawToolbar();
+          checkGithub();
+          drawStrips();
+          drawBanner();
+        } else if (has('toolbar')) drawToolbar();
+        if (has('transcript')) {
+          drawTranscript();
+          drawJump();
+        } else if (has('marks')) drawMarks();
+        if (has('transcript') || has('unread')) drawTop(has('transcript'));
+        if (parts === null) {
+          drawDialogs();
+          drawRunning();
+        }
+        if (has('scheduled')) drawScheduled();
+        if (has('plan')) drawPlan();
+        if (parts === null) {
+          drawComposer();
+          selectionPopup.refresh();
+        }
+      }
       // News heard as it landed under the reader's eyes is read (see follow). A mark the user
       // made themselves (newer than any news here) waits for them to come into the window.
       const since = unreadSince();
       if (since !== null && since <= readLive) markRead();
       ctx.setUnread(unreadSince() !== null);
+      heardUnread = daemon.unreadSince(ompId());
     }
 
     /** The window is being used: the session stays awake. */
@@ -1932,6 +2137,7 @@ function createPane(body, ctx, daemon) {
       id: ++views,
       root: node,
       shows: (p) => (p.sessionFile !== null && p.sessionFile === file) || (p.session !== null && (p.session === session || p.session === started.session)),
+      concerns,
       update,
       focus: () => draft.focus(),
       /** The user came into the window: what it shows is read, and the session stays awake. */
@@ -1948,6 +2154,8 @@ function createPane(body, ctx, daemon) {
         ctx.setFamily(null);
         ctx.headActions.removeEventListener('keydown', onNavKey);
         resizes.disconnect();
+        frame.cancel(settle);
+        frame.cancel(placeTop);
         composer.destroy();
         selectionPopup.destroy();
         marks.destroy();
@@ -1975,13 +2183,19 @@ function createPane(body, ctx, daemon) {
 
   return {
     // Sessions or a drop switched this window to another session: show it.
-    paramsChanged: schedule,
+    paramsChanged: () => schedule(),
+    // Shown again, what was put off while it was a tab behind another is drawn (built, the first time).
+    shownChanged() {
+      if (ctx.shown) schedule();
+    },
     destroy() {
       destroyed = true;
-      if (frame) cancelAnimationFrame(frame);
+      frame.cancel(drawDue);
       offStatus();
       offSettings();
       offReset();
+      offSessions();
+      offActivity();
       offUnread();
       offDecisions();
       offAsides();
