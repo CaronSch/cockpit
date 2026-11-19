@@ -20,6 +20,7 @@ import { autosize } from '../ui/autosize.js';
 import { renderMarkdown } from './markdown-dom.js';
 import { snapToWords } from '../ui/word-snap.js';
 import { withMentions } from './file-suggest.js';
+import { onSelectionIn } from './selection-watch.js';
 /** @import { SideAnswer } from './transcript.js' */
 /** @import { ListDir } from './file-suggest.js' */
 /** @import { Anchor } from './annotation-marks.js' */
@@ -516,7 +517,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
   transcript.addEventListener('scroll', onScroll);
   pop.addEventListener('keydown', onKeyDown);
   panel.addEventListener('keydown', onKeyDown);
-  document.addEventListener('selectionchange', onSelectionChange);
+  const offSelection = onSelectionIn(transcript, onSelectionChange);
   document.addEventListener('keydown', onShortcut);
   document.addEventListener('pointerdown', onOutside, true);
 
@@ -553,7 +554,7 @@ export function attachSelectionPopup({ host, transcript, onComment, ask, cite = 
       document.removeEventListener('pointerup', onPointerUp, true);
       document.removeEventListener('pointercancel', onPointerCancel, true);
       transcript.removeEventListener('scroll', onScroll);
-      document.removeEventListener('selectionchange', onSelectionChange);
+      offSelection();
       document.removeEventListener('keydown', onShortcut);
       document.removeEventListener('pointerdown', onOutside, true);
       pop.remove();

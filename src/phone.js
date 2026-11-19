@@ -106,6 +106,7 @@ function mount(type, params) {
     outline: noop,
     setFamily: noop,
     workspace: null,
+    shown: true,
   };
   body.dataset.widget = type;
   viewEl.replaceChildren(body);

@@ -20,14 +20,24 @@ export const tabId = (id) => `tab-${id}`;
 /** The id of window `id`'s body, the panel its tab controls. @param {string} id */
 export const panelId = (id) => `panel-${id}`;
 
+/** Sets attribute `name` of `node` to `value`, or removes it for null, unless it is so already. @param {Element} node @param {string} name @param {string | null} value */
+function writeAttr(node, name, value) {
+  if (node.getAttribute(name) === value) return;
+  if (value === null) node.removeAttribute(name);
+  else node.setAttribute(name, value);
+}
+
 /**
  * @param {{
- *   gridEl: HTMLElement,
  *   frameElement: (id: string) => HTMLElement | null,
+ *   frameElements: () => Iterable<[string, HTMLElement]>,
  *   describe: (id: string) => TabFace,
  * }} options
  */
-export function createTabStrips({ gridEl, frameElement, describe }) {
+export function createTabStrips({ frameElement, frameElements, describe }) {
+  /** The tabs on the page, by their window's id. @type {Map<string, HTMLElement>} */
+  const tabs = new Map();
+
   /** @param {string} id */
   function createTab(id) {
     const tab = button('widget-tab');
@@ -51,9 +61,9 @@ export function createTabStrips({ gridEl, frameElement, describe }) {
     const [glyph, name] = /** @type {HTMLElement[]} */ ([...tab.children]);
     if (glyph.textContent !== face.glyph) glyph.textContent = face.glyph;
     if (name.textContent !== face.name) name.textContent = face.name;
-    tab.dataset.unread = String(face.unread);
-    tab.setAttribute('aria-selected', String(active));
-    tab.tabIndex = active ? 0 : -1;
+    if (tab.dataset.unread !== String(face.unread)) tab.dataset.unread = String(face.unread);
+    writeAttr(tab, 'aria-selected', String(active));
+    if (tab.tabIndex !== (active ? 0 : -1)) tab.tabIndex = active ? 0 : -1;
   }
 
   /** @param {HTMLElement} strip @param {Stack} stack */
@@ -62,6 +72,7 @@ export function createTabStrips({ gridEl, frameElement, describe }) {
     stack.tabs.forEach(({ id }, i) => {
       const tab = old.get(id) ?? createTab(id);
       old.delete(id);
+      tabs.set(id, tab);
       paint(tab, id, id === stack.active);
       const here = strip.children[i] ?? null;
       if (here !== tab) strip.insertBefore(tab, here);
@@ -81,24 +92,24 @@ export function createTabStrips({ gridEl, frameElement, describe }) {
       if (strip instanceof HTMLElement) strips.set(strip, stack);
     }
     // Strips no stack shows any more go first, so no tab id is ever on the page twice.
-    for (const node of gridEl.querySelectorAll('.widget')) {
-      const frame = /** @type {HTMLElement} */ (node);
+    for (const [id, frame] of frameElements()) {
       const strip = /** @type {HTMLElement} */ (frame.querySelector('.widget-tabs'));
       const tabbed = strips.has(strip);
       frame.classList.toggle('is-tabbed', tabbed);
       if (!tabbed && strip.firstChild) strip.replaceChildren();
       const body = frame.querySelector('.widget-body');
-      const id = frame.dataset.id ?? '';
-      if (stackOf.has(id)) {
-        body?.setAttribute('role', 'tabpanel');
-        body?.setAttribute('aria-labelledby', tabId(id));
-      } else {
-        body?.removeAttribute('role');
-        body?.removeAttribute('aria-labelledby');
-      }
+      if (!body) continue;
+      const stacked = stackOf.has(id);
+      writeAttr(body, 'role', stacked ? 'tabpanel' : null);
+      writeAttr(body, 'aria-labelledby', stacked ? tabId(id) : null);
     }
+    tabs.clear();
     strips.forEach((stack, strip) => sync(strip, stack));
   }
 
-  return { draw };
+  return {
+    draw,
+    /** The tabs the strips drew last, by their window's id. @returns {ReadonlyMap<string, HTMLElement>} */
+    tabs: () => tabs,
+  };
 }

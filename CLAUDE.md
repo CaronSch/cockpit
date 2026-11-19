@@ -70,7 +70,7 @@ Planned capabilities:
 - **Wire** (`daemon/wire.js`): a JSON API for commands and one Server-Sent Events
   stream per page carrying every session's events in order: each omp stdout frame
   (without what omp keeps of its messages for itself and no window reads: `inputTransformations`,
-  a tool result's `details.trace`), each frame the daemon wrote to omp, stderr lines, undecodable stdout
+  `requestControls`, `thinkingSignature`, a tool result's `details.trace`), each frame the daemon wrote to omp, stderr lines, undecodable stdout
   (`garbled`) and session status changes, less what no window needs any more
   (`src/omp/event-log.js`: finished streams' deltas, a tool's progress once newer progress or its
   end carries it, ended sessions). The browser replays it on load, so a
@@ -147,7 +147,10 @@ What runs today:
   drag along the strip reorders and out of it moves the window (an edge of its own slot
   splits it out); arrows, Home and End move between tabs and show them, Delete closes one.
   The windows behind stay mounted, hidden and inert, so nothing in them ends or forgets
-  its scroll; a stack closed down to one window is a plain window again, and the narrow
+  its scroll, and out of the page's layout (`content-visibility: hidden`): a widget tells from
+  `ctx.shown` and hears `shownChanged()` as it is shown or hidden, and does no work for a window
+  nobody sees (an agent window builds its conversation only once first shown, a terminal fits
+  itself only while shown); a stack closed down to one window is a plain window again, and the narrow
   column shows every tab as a window of its own. The top bar's workspace switcher (open while
   pointed at, `src/ui/workspace-switcher.js`) names the workspace shown and lists every one with
   what it holds; a click shows one in this window in place of the one shown (its windows
@@ -170,8 +173,8 @@ What runs today:
   conversations, awake or not, archived ones aside (at most five, most recently active first,
   `src/omp/recent-dirs.js`), each start omp there with one click), chat with it from its
   structured event stream (streamed replies with Markdown, tables, TeX math as
-  MathML, `mermaid` diagrams and `vega-lite` charts drawn once their fence closes
-  (`src/omp/visuals.js`: kept as SVG by source, live on hover, in a card whose **Save** saves an SVG or PNG file or copies a PNG, and which a click shows larger in the image viewer, below; Vega's loader reads
+  MathML, `mermaid` diagrams and `vega-lite` charts drawn once their fence closes and their card
+  nears the window, never in a tab stacked behind another (`src/omp/visuals.js`: each in a shadow root of its own, kept as SVG by source, in IndexedDB across reloads, the latest 300, a chart that reads a file drawn afresh; live on hover, in a card whose **Save** saves an SVG or PNG file or copies a PNG, and which a click shows larger in the image viewer, below; Vega's loader reads
   only local files), and images on this machine, `![alt](/abs/path.png)`, which a click shows
   in an image viewer over the workbench (`src/ui/image-viewer.js`; ⌘-click opens a tab); images and
   chart data are served by `/api/file`, raster and data types only, sandboxed;
@@ -190,7 +193,11 @@ What runs today:
   works again (`src/omp/cold.js`, the cutoff from `DaemonConfig`). What the agent says on its way
   (narration: a message that went on to call tools) shows dimmer than a response, and a response
   after tool calls or narration starts under a faint **Response** label and hairline, so the answer
-  stands apart from the work (`src/omp/visibility.js` `isNarration`, `responseStarts`). A pane shows one conversation at a time: **Forks**
+  stands apart from the work (`src/omp/visibility.js` `isNarration`, `responseStarts`). Agent windows draw in one shared
+  animation frame (`src/ui/frame.js`: every window's draws, then the layout reads, then the writes that need them, so
+  the page is laid out once a frame), and news about one conversation redraws only the windows showing it, and only
+  the part it changes; folded work and tool rows are a button and a body built when first opened, not `<details>`,
+  and one `selectionchange` listener serves every window (`src/omp/selection-watch.js`). A pane shows one conversation at a time: **Forks**
   sits in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring
   spinning in the accent while the agent works (`drawJump` in `src/widgets/omp.js`). Its twin,
@@ -846,6 +853,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/rewind.js` — Rewinding an omp conversation to one of the user's prompts, as omp's `/branch` does: what the rewind sets aside, and which of omp's entries the prompt is.
 - `src/omp/running-work.js` — What an agent has running now, for the agent window's Running line and the Sessions list: the shells and subagents its turn is waiting on, and its background jobs (omp/transcript.js `jobs`), which go on after their tool call has returned, even once the turn has ended.
 - `src/omp/selection-popup.js` — Actions on highlighted transcript text: select part of a reply and Comment and Ask buttons appear at the end of the selection; C and A press them while they show.
+- `src/omp/selection-watch.js` — One `selectionchange` listener for every agent window: a change reaches only the windows whose transcript the selection touches, and once more those it has just left (to take down what they showed for it), so a caret moving in one window's message box runs nothing in the others.
 - `src/omp/suggestions.js` — The suggestion list above the agent pane's message box (slash commands, `@` file entries), driven from the draft's keys so focus never leaves it.
 - `src/omp/table-copy.js` — Copy control for a rendered Markdown table: a button whose menu copies the table as Markdown, CSV or a PNG image.
 - `src/omp/table-text.js` — Plain-text forms of a parsed Markdown table: a cell's text without its formatting, and the table as CSV.
@@ -873,12 +881,13 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/directory-form.js` — The form a window starts something in a directory from (an agent, a shell): a Directory field that suggests folders as the path is typed, a start button, and under them the directories of the latest conversations, each a click from starting there.
 - `src/ui/dom.js` — Element construction helpers: elements, SVG elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
+- `src/ui/frame.js` — One animation frame for every window that draws: first each window's drawing (DOM writes), then the layout reads they asked for (`measure`), then the writes those reads decided.
 - `src/ui/hover-menu.js` — Top bar menus that open while the pointer rests on their button (Config, workspaces, + Widget): the menu follows the pointer, closing a moment after it leaves, and a click on the button or in the menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
 - `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note), or on a diagram or chart an agent drew, shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
 - `src/ui/indent.js` — Tab and Shift+Tab indent and outdent text in a textarea, as in a code editor, and Backspace in a line's leading spaces takes a whole indent back; Esc then Tab leaves the field instead, so keyboard users are never trapped in it.
 - `src/ui/login.js` — Signing omp in to a model provider, or another account, without a conversation: `omp login`, run by the daemon (daemon/setup.js) and shown as it goes, its questions answered from a line here.
-- `src/ui/orbit.js` — A light going round an element's outline while something it stands for is at work (a running shell or subagent): an SVG outline the size of its element whose dash moves along it, at an even pace whatever the element's shape, since the outline's length is set to 100 and the dash moves by its offset.
+- `src/ui/orbit.js` — A light going round an element's outline while something it stands for is at work (a running shell or subagent): glows set all round the element's edge, each flaring in turn as the light passes, seen only where they cross the element's 1px border (styles/app.css `.orbit`, masked to that ring).
 - `src/ui/palette.js` — "Add widget" palette.
 - `src/ui/prefs.js` — Per-browser preferences in localStorage.
 - `src/ui/settings.js` — App-wide settings, picked in the top bar's Config menu and kept per browser.

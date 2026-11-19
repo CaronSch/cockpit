@@ -13,6 +13,7 @@
  */
 import { el } from '../ui/dom.js';
 import { snappedRange } from '../ui/word-snap.js';
+import { onSelectionIn } from './selection-watch.js';
 
 /** @typedef {{ left: number, top: number, right: number, bottom: number }} Box */
 
@@ -130,7 +131,7 @@ export function attachDragHighlight({ host, transcript, enabled }) {
   document.addEventListener('pointerdown', onDown, true);
   document.addEventListener('pointerup', onUp);
   document.addEventListener('pointercancel', onUp);
-  document.addEventListener('selectionchange', draw);
+  const offSelection = onSelectionIn(transcript, draw);
   transcript.addEventListener('scroll', follow);
 
   return {
@@ -140,7 +141,7 @@ export function attachDragHighlight({ host, transcript, enabled }) {
       document.removeEventListener('pointerdown', onDown, true);
       document.removeEventListener('pointerup', onUp);
       document.removeEventListener('pointercancel', onUp);
-      document.removeEventListener('selectionchange', draw);
+      offSelection();
       transcript.removeEventListener('scroll', follow);
       layer.remove();
     },

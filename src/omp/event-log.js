@@ -13,7 +13,9 @@
  * Frames are also kept without what omp records of each message for itself and no window reads
  * (`slimFrame`): an assistant message's `inputTransformations` (which earlier thinking omp left
  * out of the request: it grows with the conversation, so a long one's messages carry tens of
- * megabytes of it) and a tool result's `details.trace` (how omp parsed a shell command).
+ * megabytes of it), its `requestControls` (the request's tool list) and each thinking block's
+ * `thinkingSignature` (the provider's opaque proof, sent back to it), and a tool result's
+ * `details.trace` (how omp parsed a shell command).
  */
 /** @import { SessionEvent } from '../../daemon/wire.js' */
 
@@ -49,8 +51,13 @@ function slimResult(result) {
  */
 export function slimMessage(message) {
   if (!message || typeof message !== 'object') return message;
-  const { inputTransformations, ...rest } = message;
-  return slimResult(inputTransformations === undefined ? message : rest);
+  const { inputTransformations, requestControls, ...rest } = message;
+  /** @type {any} */
+  let slim = inputTransformations === undefined && requestControls === undefined ? message : rest;
+  if (Array.isArray(slim.content) && slim.content.some((/** @type {any} */ b) => b?.thinkingSignature !== undefined)) {
+    slim = { ...slim, content: slim.content.map((/** @type {any} */ b) => (b?.thinkingSignature === undefined ? b : (({ thinkingSignature: _s, ...block }) => block)(b))) };
+  }
+  return slimResult(slim);
 }
 
 /** @param {unknown} list */

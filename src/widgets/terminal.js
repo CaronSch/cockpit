@@ -133,7 +133,7 @@ function createTerminalWindow(body, ctx, daemon) {
   });
   const root = el('div', 'term');
   body.append(root);
-  /** The view shown: its key, and what ends it. @type {{ key: string, destroy: () => void } | null} */
+  /** The view shown: its key, what ends it, and what it does as the window is shown again. @type {{ key: string, destroy: () => void, shown: () => void } | null} */
   let view = null;
   /** Whether the next terminal shown takes the focus: it was just started here. */
   let focusNext = false;
@@ -149,12 +149,12 @@ function createTerminalWindow(body, ctx, daemon) {
     })
     .catch(() => {});
 
-  /** Shows the view `key` names, built by `build` unless it is the one shown. @param {string} key @param {() => { root: HTMLElement, destroy?: () => void }} build */
+  /** Shows the view `key` names, built by `build` unless it is the one shown. @param {string} key @param {() => { root: HTMLElement, destroy?: () => void, shown?: () => void }} build */
   function show(key, build) {
     if (view?.key === key) return;
     view?.destroy();
     const next = build();
-    view = { key, destroy: next.destroy ?? (() => {}) };
+    view = { key, destroy: next.destroy ?? (() => {}), shown: next.shown ?? (() => {}) };
     root.replaceChildren(next.root);
   }
 
@@ -289,7 +289,8 @@ function createTerminalWindow(body, ctx, daemon) {
 
     /** Fits the terminal to the window and, when that changed it, tells the daemon. */
     function fitToWindow() {
-      if (!term || !fit || replaying || !screen.clientWidth || !screen.clientHeight) return; // a tab behind another: no size
+      // A tab behind another has no size, and asking for one lays out its hidden content.
+      if (!ctx.shown || !term || !fit || replaying || !screen.clientWidth || !screen.clientHeight) return;
       const size = fit.proposeDimensions();
       if (!size || !(size.cols > 0) || !(size.rows > 0)) return;
       if (size.cols !== term.cols || size.rows !== term.rows) term.resize(size.cols, size.rows);
@@ -372,6 +373,8 @@ function createTerminalWindow(body, ctx, daemon) {
 
     return {
       root: box,
+      // Its size may have changed while it was behind another tab.
+      shown: scheduleFit,
       destroy() {
         destroyed = true;
         cancelAnimationFrame(fitting);
@@ -384,6 +387,7 @@ function createTerminalWindow(body, ctx, daemon) {
   render();
   return {
     paramsChanged: render,
+    shownChanged: () => view?.shown(),
     closed() {
       const id = ctx.params.terminal;
       if (typeof id !== 'string' || !id) return;

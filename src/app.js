@@ -30,7 +30,7 @@ import { openWorkspace } from './workspace/shown.js';
 import { describeWindows, stepFrom } from './workspace/model.js';
 import { WIDGETS, newWidgetLeaf } from './widgets/registry.js';
 /** @import { Leaf, LeafParams, Tree } from './layout/grid-model.js' */
-/** @import { ScreenWindows, TabMatch, WidgetContext } from './widgets/registry.js' */
+/** @import { ScreenWindows, TabMatch, WidgetContext, WidgetInstance } from './widgets/registry.js' */
 /** @import { Layout, Rect } from './layout/compute-layout.js' */
 /** @import { Palette } from './ui/palette.js' */
 /** @import { Workspace } from '../daemon/wire.js' */
@@ -205,12 +205,10 @@ export async function createApp(root) {
         });
       },
       setUnread(/** @type {boolean} */ unread) {
+        if (face.unread === unread) return;
+        face.unread = unread;
         frameEl.classList.toggle('is-unread', unread);
-        frameEl.dataset.unread = String(unread);
-        if (face.unread !== unread) {
-          face.unread = unread;
-          redrawTabs();
-        }
+        redrawTabs();
       },
       setLabel(/** @type {string | null} */ text) {
         if (label.textContent === (text ?? '')) return;
@@ -234,9 +232,13 @@ export async function createApp(root) {
       get workspace() {
         return opened.ok ? opened.shown.id() : null;
       },
+      // The layout drawn last (the one being drawn, as a window mounts): not a tab behind another.
+      get shown() {
+        return !layout.hidden.has(leaf.id);
+      },
     };
 
-    /** @type {{ destroy(): void, paramsChanged?(): void, closed?(): void }} */
+    /** @type {WidgetInstance} */
     let instance = { destroy() {} };
     if (!def) {
       body.append(el('p', 'widget-empty', 'This widget type is not installed.'));
@@ -259,6 +261,7 @@ export async function createApp(root) {
     closers.set(leaf.id, () => instance.closed?.());
     return {
       el: frameEl,
+      shownChanged: () => instance.shownChanged?.(),
       destroy() {
         offParams();
         instance.destroy?.();
@@ -283,9 +286,8 @@ export async function createApp(root) {
   /** Outlines those windows, and the tabs of those stacked behind another. */
   function drawOutlines() {
     const ids = new Set([...outlines.values()].flat());
-    for (const node of gridEl.querySelectorAll('.widget, .widget-tab')) {
-      node.classList.toggle('is-outlined', ids.has(/** @type {HTMLElement} */ (node).dataset.id ?? ''));
-    }
+    for (const [id, frameEl] of renderer.frameElements()) frameEl.classList.toggle('is-outlined', ids.has(id));
+    for (const [id, tab] of strips.tabs()) tab.classList.toggle('is-outlined', ids.has(id));
   }
 
   /** The family each window's conversation belongs to (`ctx.setFamily`), by window id. @type {Map<string, string>} */
@@ -306,18 +308,19 @@ export async function createApp(root) {
       for (let tries = 0; tries < FAMILY_COLOURS && [...colourOf.values()].includes(colour); tries++) colour = (colour + 1) % FAMILY_COLOURS;
       colourOf.set(family, colour);
     }
-    for (const node of gridEl.querySelectorAll('.widget')) {
-      const frameEl = /** @type {HTMLElement} */ (node);
-      const colour = colourOf.get(families.get(frameEl.dataset.id ?? '') ?? '');
-      if (colour === undefined) delete frameEl.dataset.family;
-      else frameEl.dataset.family = String(colour + 1);
+    for (const [id, frameEl] of renderer.frameElements()) {
+      const colour = colourOf.get(families.get(id) ?? '');
+      const family = colour === undefined ? undefined : String(colour + 1);
+      if (frameEl.dataset.family === family) continue;
+      if (family === undefined) delete frameEl.dataset.family;
+      else frameEl.dataset.family = family;
     }
   }
 
   const renderer = createGridRenderer(gridEl, { mountWidget, prefersReducedMotion: () => reducedMotion.matches });
   const strips = createTabStrips({
-    gridEl,
     frameElement: (id) => renderer.frameElement(id),
+    frameElements: () => renderer.frameElements(),
     describe: (id) => faces.get(id) ?? { glyph: '?', name: id, unread: false },
   });
   /** The tree on screen (the narrow column's, when narrow), whose stacks' strips are drawn. @type {Tree} */
@@ -340,13 +343,6 @@ export async function createApp(root) {
       drawTabs();
     });
   }
-  // A window mounted after an outline was asked for (the layout redrawn) gets it too.
-  layoutAtom.subscribe(() =>
-    requestAnimationFrame(() => {
-      drawOutlines();
-      drawFamilies();
-    }),
-  );
 
   const isStacked = () => bounds.w > 0 && bounds.w < STACK_BREAKPOINT;
 
@@ -366,6 +362,7 @@ export async function createApp(root) {
     renderer.render(shown, layout, { animate });
     shownTree = shown;
     drawTabs();
+    drawFamilies(); // a window colours its bar as it mounts, before the renderer lists its frame
     emptyEl.hidden = Boolean(tree);
   }
 
@@ -544,8 +541,11 @@ export async function createApp(root) {
     pointer.focused = null;
     refreshScreen();
   });
+  // Fired on every element the pointer crosses: only a move into another window changes the screen.
   gridEl.addEventListener('pointerover', (event) => {
-    pointer.hovered = windowAt(event);
+    const id = windowAt(event);
+    if (id === pointer.hovered) return;
+    pointer.hovered = id;
     refreshScreen();
   });
   gridEl.addEventListener('pointerleave', () => {

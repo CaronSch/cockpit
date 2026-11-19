@@ -6,19 +6,20 @@
  *   (the same trick as VS Code's FastDomNode).
  * - Structural changes animate with FLIP on `transform` only.
  * - A stack's tabs share their slot's rect; those behind the one it shows stay mounted (their
- *   state, scroll and all, is kept) but hidden and inert (`is-tab-hidden`).
+ *   state, scroll and all, is kept) but hidden and inert (`is-tab-hidden`), and their widget
+ *   hears when that flips (`shownChanged`).
  */
 import { listLeaves } from '../layout/grid-model.js';
 
 /** @import { Axis, Leaf, Tree } from '../layout/grid-model.js' */
 /** @import { Layout, Rect, Sash } from '../layout/compute-layout.js' */
-/** A mounted widget: its frame element plus an optional teardown hook. @typedef {{ el: HTMLElement, destroy?: () => void }} MountedWidget */
+/** A mounted widget: its frame element plus optional hooks, run as it goes and as it is shown or hidden behind a tab. @typedef {{ el: HTMLElement, destroy?: () => void, shownChanged?: () => void }} MountedWidget */
 /**
  * @typedef {object} GridRendererOptions
  * @property {(leaf: Leaf) => MountedWidget} mountWidget
  * @property {() => boolean} prefersReducedMotion
  */
-/** @typedef {{ el: HTMLElement, widget: string, instance: MountedWidget, rect: Rect | null }} Frame */
+/** @typedef {{ el: HTMLElement, widget: string, instance: MountedWidget, rect: Rect | null, hidden: boolean }} Frame */
 /** @typedef {{ el: HTMLElement, rect: Rect | null, axis?: Axis, percent?: number }} SashEntry */
 /** @typedef {ReturnType<typeof createGridRenderer>} GridRenderer */
 
@@ -73,10 +74,22 @@ export function createGridRenderer(gridEl, { mountWidget, prefersReducedMotion }
     frames.delete(id);
   }
 
-  /** @param {Tree} tree @param {Layout} layout @param {boolean} animate */
+  /** @param {Frame} frame @param {boolean} hidden */
+  function writeHidden(frame, hidden) {
+    frame.hidden = hidden;
+    frame.el.inert = hidden;
+    frame.el.classList.toggle('is-tab-hidden', hidden);
+  }
+
+  /**
+   * @param {Tree} tree @param {Layout} layout @param {boolean} animate
+   * @returns {Frame[]} the frames shown or hidden behind a tab since the last render
+   */
   function syncFrames(tree, layout, animate) {
     /** @type {Set<string>} */
     const live = new Set();
+    /** @type {Frame[]} */
+    const flipped = [];
     const motion = animate && !prefersReducedMotion();
 
     for (const leaf of listLeaves(tree)) {
@@ -89,28 +102,31 @@ export function createGridRenderer(gridEl, { mountWidget, prefersReducedMotion }
 
       const next = layout.leaves.get(leaf.id);
       if (!next) throw new Error(`[renderer] layout has no rect for leaf "${leaf.id}"`);
+      const hidden = layout.hidden.has(leaf.id);
       if (!frame) {
         const instance = mountWidget(leaf);
+        frame = { el: instance.el, widget: leaf.widget, instance, rect: null, hidden: false };
+        // Hidden before it is on the page, so a tab mounted behind another is never laid out.
+        if (hidden) writeHidden(frame, true);
         gridEl.append(instance.el);
-        frame = { el: instance.el, widget: leaf.widget, instance, rect: null };
         frames.set(leaf.id, frame);
         writeRect(frame.el, null, next);
         if (motion) frame.el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ENTER_MS, easing: EASE });
       } else {
         if (motion && frame.rect && !sameRect(frame.rect, next)) flip(frame.el, frame.rect, next);
         writeRect(frame.el, frame.rect, next);
+        if (frame.hidden !== hidden) {
+          writeHidden(frame, hidden);
+          flipped.push(frame);
+        }
       }
       frame.rect = next;
-      const hidden = layout.hidden.has(leaf.id);
-      if (frame.el.inert !== hidden) {
-        frame.el.inert = hidden;
-        frame.el.classList.toggle('is-tab-hidden', hidden);
-      }
     }
 
     for (const id of [...frames.keys()]) {
       if (!live.has(id)) destroyFrame(id);
     }
+    return flipped;
   }
 
   /** @param {Sash} sash */
@@ -163,11 +179,22 @@ export function createGridRenderer(gridEl, { mountWidget, prefersReducedMotion }
   return {
     /** @param {Tree} tree @param {Layout} layout @param {{ animate?: boolean }} [options] */
     render(tree, layout, { animate = false } = {}) {
-      syncFrames(tree, layout, animate);
+      const flipped = syncFrames(tree, layout, animate);
       syncSashes(layout);
+      for (const frame of flipped) {
+        try {
+          frame.instance.shownChanged?.();
+        } catch (err) {
+          console.error(`[renderer] widget "${frame.widget}" failed to follow being shown or hidden`, err);
+        }
+      }
     },
     /** @param {string} id */
     frameElement: (id) => frames.get(id)?.el ?? null,
+    /** Every mounted window's frame element, by window id. @returns {Iterable<[string, HTMLElement]>} */
+    *frameElements() {
+      for (const [id, frame] of frames) yield [id, frame.el];
+    },
     /** @param {string} key */
     sashElement: (key) => sashes.get(key)?.el ?? null,
     destroy() {

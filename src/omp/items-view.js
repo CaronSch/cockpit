@@ -277,35 +277,44 @@ function toolCard(id, block, run, ctx) {
  */
 const statusLine = (level, text, tag = 'div') => el(tag, `omp-note is-${level}`, text);
 
+/** Folds made so far, numbering their bodies' ids (`aria-controls`). */
+let folds = 0;
+
 /**
- * A `<details>` whose body is built only while open.
+ * A fold: a head that opens and closes it, and a body built only once it is first opened.
+ * Not a `<details>`: Chrome walks the whole document to insert a closed one (its body is
+ * `content-visibility: hidden`), 40–250 ms in a busy page, and the live work row is inserted
+ * anew with every streaming draw; a button and a div cost what any element does.
  * @param {ItemContext} ctx @param {string} id @param {string} className
  * @param {Array<string | Node>} summary @param {() => Node[]} body
  */
 function collapsible(ctx, id, className, summary, body) {
-  const details = el('details', className);
-  const head = el('summary');
+  const fold = el('div', `omp-fold ${className}`);
+  const head = button('omp-fold-head');
   head.append(...summary);
-  details.append(head);
-  const fill = () => {
-    if (details.childNodes.length > 1) return;
-    const inside = el('div', 'omp-details-body');
-    inside.append(...body());
-    details.append(inside);
-  };
-  if (ctx.open.has(id)) {
-    details.open = true;
-    fill();
-  }
-  details.addEventListener('toggle', () => {
-    if (details.open) {
-      ctx.open.add(id);
-      fill();
-    } else {
-      ctx.open.delete(id);
+  fold.append(head);
+  /** @type {HTMLElement | null} */
+  let inside = null;
+  /** @param {boolean} open */
+  const show = (open) => {
+    fold.classList.toggle('is-open', open);
+    head.setAttribute('aria-expanded', String(open));
+    if (open && !inside) {
+      inside = el('div', 'omp-fold-body');
+      inside.id = `omp-fold-${++folds}`;
+      inside.append(...body());
+      fold.append(inside);
+      head.setAttribute('aria-controls', inside.id);
     }
+  };
+  show(ctx.open.has(id));
+  head.addEventListener('click', () => {
+    const open = !fold.classList.contains('is-open');
+    if (open) ctx.open.add(id);
+    else ctx.open.delete(id);
+    show(open);
   });
-  return details;
+  return fold;
 }
 
 const SUMMARY_KEYS = ['command', 'path', 'file_path', 'pattern', 'query', 'url', 'paths'];

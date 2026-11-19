@@ -132,6 +132,7 @@ export class DaemonError extends Error {
  *   textFile(path: string): Promise<TextFile>,
  *   saveTextFile(path: string, text: string, base: string): Promise<{ ok: true, file: TextFile } | { ok: false, current: TextFile }>,
  *   onUiChange(fn: (outdated: boolean) => void): () => void,
+ *   uiVersion(): string | null,
  *   checkUi(): Promise<void>,
  *   update(): UpdateState | null,
  *   onUpdate(fn: () => void): () => void,
@@ -903,6 +904,8 @@ function createDaemonClient(env = {}, { scoped = false } = {}) {
     async moveWindow(workspace, leaf) {
       await request(`${workspacePath(workspace)}/windows`, { method: 'POST', body: JSON.stringify({ leaf }) });
     },
+    /** The version of the UI files this page runs (daemon/ui-files.js), null until the daemon has said. */
+    uiVersion: () => loadedUi,
     onUiChange(fn) {
       uiListeners.add(fn);
       return () => uiListeners.delete(fn);
