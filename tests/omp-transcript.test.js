@@ -4,6 +4,7 @@ import { IDLE_COMPACTED, IDLE_COMPACTING, addNote, applyEvent, askAnswers, conve
 import { CONTINUE_DIRECTIVE, composeAsk, composeSideQuestion } from '../src/omp/message.js';
 import { sentPrompts } from '../src/omp/prompt-history.js';
 import { branchEntry, rewindPoint } from '../src/omp/rewind.js';
+import { slimFrame, withoutSpent } from '../src/omp/event-log.js';
 /** @import { SessionEvent } from '../daemon/wire.js' */
 /** @import { Transcript } from '../src/omp/transcript.js' */
 
@@ -621,5 +622,44 @@ describe('needsLogin', () => {
     assert.equal(needsLogin(state('keyed', [{ id: 'keyed', authenticated: true }])), false);
     assert.equal(needsLogin(state('openrouter', [{ id: 'fake', authenticated: false }])), false);
     assert.equal(needsLogin(state('fake', null)), false);
+  });
+});
+
+describe('the event log a window replays', () => {
+  /** The log the daemon would keep of `events` (hub.js `emit`). @param {SessionEvent[]} events */
+  function kept(events) {
+    /** @type {SessionEvent[]} */
+    let log = [];
+    for (const event of events) {
+      const slim = event.kind === 'frame' ? { ...event, frame: slimFrame(event.frame) } : event;
+      log.push(slim);
+      log = withoutSpent(log, slim);
+    }
+    return log;
+  }
+  /** What a window shows: the transcript's items (but for `rev`, which only counts redraws) and its tools' output. @param {Transcript} state */
+  const shown = (state) => JSON.stringify([state.items.map(({ rev: _rev, ...item }) => item), [...state.tools.values()].map((t) => [t.id, t.status, t.output, t.result])]);
+
+  test('a background subagent’s progress after its call ended keeps only the newest, and shows the same', () => {
+    const progress = (/** @type {string} */ text) => frame({ type: 'tool_execution_update', toolCallId: 't1', toolName: 'task', partialResult: { content: [{ type: 'text', text }], details: { trace: 'x'.repeat(1000) } } });
+    const events = [
+      frame({ type: 'tool_execution_start', toolCallId: 't1', toolName: 'task', args: { agent: 'scout' } }),
+      frame({ type: 'tool_execution_end', toolCallId: 't1', toolName: 'task', result: { content: [{ type: 'text', text: 'started' }], details: { async: { state: 'running', jobId: 'j1' } } } }),
+      progress('one'),
+      progress('one two'),
+      progress('one two three'),
+    ];
+    const log = kept(events);
+    assert.equal(log.filter((e) => e.kind === 'frame' && e.frame.type === 'tool_execution_update').length, 1);
+    assert.equal(shown(run(log)), shown(run(events)));
+  });
+
+  test('messages lose what omp keeps for itself, and show the same', () => {
+    const message = assistant([{ type: 'text', text: 'Done.' }], { inputTransformations: [{ type: 'thinking_dropped', path: 'messages.0', reason: 'x' }] });
+    const tool = { role: 'toolResult', toolCallId: 'c1', toolName: 'bash', content: [{ type: 'text', text: 'ok' }], details: { trace: { units: [] }, wallTimeMs: 3 }, isError: false, timestamp: 2 };
+    const events = [frame({ type: 'response', command: 'get_messages', success: true, data: { messages: [message, tool] } }), frame({ type: 'message_end', message })];
+    const log = kept(events);
+    assert.ok(!JSON.stringify(log).includes('inputTransformations') && !JSON.stringify(log).includes('trace'));
+    assert.equal(shown(run(log)), shown(run(events)));
   });
 });

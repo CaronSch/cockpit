@@ -44,7 +44,7 @@ import { APPEND_SYSTEM_PROMPT, NO_HOST_TOOLS, launchOmp } from './omp-session.js
 import { SLEEP_AFTER_MS, sleepsNow } from './sleep.js';
 import { OMP_ID } from './unread.js';
 import { awaitsUser } from '../src/omp/activity.js';
-import { withoutSpent } from '../src/omp/event-log.js';
+import { slimFrame, withoutSpent } from '../src/omp/event-log.js';
 import { applyEvent, conversationName, createTranscript, handsTurnBack } from '../src/omp/transcript.js';
 import { runningWork } from '../src/omp/running-work.js';
 /** @import { SessionActivity, SessionEvent, SessionMeta } from './wire.js' */
@@ -121,7 +121,9 @@ export function createHub({ ompPath, unread, now = daemonNow, launch = launchOmp
 
   /** @param {string} session @param {SessionEventBody} body */
   function emit(session, body) {
-    const event = /** @type {SessionEvent} */ ({ ...body, seq: ++latest, at: now(), session });
+    // A frame is kept, and sent, without what no window reads of it (event-log.js `slimFrame`).
+    const kept = body.kind === 'frame' ? { ...body, frame: slimFrame(body.frame) } : body;
+    const event = /** @type {SessionEvent} */ ({ ...kept, seq: ++latest, at: now(), session });
     log.push(event);
     log = withoutSpent(log, event);
     const seen = activity.get(session);
