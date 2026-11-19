@@ -79,9 +79,9 @@
  * `get_state` also reports the `PI_BROWSER_*` variables the daemon set (daemon/browser.js).
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { isContinueDirective } from '../../src/omp/message.js';
 
@@ -180,6 +180,28 @@ if (args.includes('-p')) {
 const option = (flag) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : null);
 const resumed = option('--resume');
 const forkedFrom = option('--fork');
+
+/** A folder's real path (macOS's `/tmp` is `/private/tmp`), or the path itself if it is not there. @param {string} dir */
+const real = (dir) => {
+  try {
+    return realpathSync(dir);
+  } catch {
+    return resolve(dir);
+  }
+};
+/** Where this fake may write journals: the temp folders, never a real omp's sessions. */
+const WRITABLE = [tmpdir(), '/tmp'].map(real);
+// It rewrites the journal it resumes in a shape of its own (no ids, no compactions), so pointed
+// at a real conversation (a preview's layout naming one) it would destroy it: refuse, as omp
+// refuses a journal it cannot read, before anything is written.
+const inTemp = (/** @type {string} */ file) => {
+  const dir = real(dirname(file));
+  return WRITABLE.some((temp) => dir === temp || dir.startsWith(temp + sep));
+};
+if (resumed && !inTemp(resumed)) {
+  process.stderr.write(`fake omp: refusing to resume ${resumed}: it only writes journals in a temp folder (${WRITABLE.join(', ')})\n`);
+  process.exit(1);
+}
 const appendedPrompt = option('--append-system-prompt');
 
 /** A journal's lines; a missing one ends the process, as omp's `--resume` and `--fork` do. @param {string} file */
