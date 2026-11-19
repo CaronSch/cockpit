@@ -196,7 +196,10 @@ What runs today:
   stands apart from the work (`src/omp/visibility.js` `isNarration`, `responseStarts`). Agent windows draw in one shared
   animation frame (`src/ui/frame.js`: every window's draws, then the layout reads, then the writes that need them, so
   the page is laid out once a frame), and news about one conversation redraws only the windows showing it, and only
-  the part it changes; folded work and tool rows are a button and a body built when first opened, not `<details>`,
+  the part it changes, newest first: a draw builds at least the latest 60 items, then stops after 8 ms and leaves the
+  older ones for the next frame, so a long conversation shown for the first time opens at once on its latest part and
+  the rest comes in above it without moving what is in view (`drawTranscript`; ⌘↑ / ⌘↓ draw it whole first);
+  folded work and tool rows are a button and a body built when first opened, not `<details>`,
   and one `selectionchange` listener serves every window (`src/omp/selection-watch.js`). A pane shows one conversation at a time: **Forks**
   sits in the window's title bar (`ctx.headActions`); Esc in the message box stops a turn (the phone, with no Esc, keeps a **Stop** button).
   Scrolled up, a small round arrow at the transcript's foot goes back to the latest, its ring

@@ -102,6 +102,14 @@ const BOTTOM_SLACK_PX = 24;
 const TOP_SLACK_PX = 12;
 /** How long a jump (to the latest, to a response's start) takes, whatever the distance. */
 const JUMP_MS = 150;
+/**
+ * A draw builds what changed newest first and leaves the rest for the next frame once it has
+ * built DRAW_LEAST entries and spent DRAW_MS, so a long conversation shown for the first time
+ * opens at once on its latest part (enough of it to fill the window) and the older part comes
+ * in above it, a little each frame.
+ */
+const DRAW_LEAST = 60;
+const DRAW_MS = 8;
 /** ⌘ on Apple's keyboards, Ctrl elsewhere: the modifier of the previous/next response keys. */
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const REFUSED = 'The daemon refused this page.';
@@ -623,6 +631,9 @@ function createPane(body, ctx, daemon) {
       jump.setAttribute('aria-label', jump.title);
     }
 
+    /** The keys of the responses as drawn (drawTranscript), in order, for ⌘↑ / ⌘↓ (toResponse). @type {string[]} */
+    let responses = [];
+
     // A long response followed down to its end leaves its start far above: a small arrow at the
     // transcript's head goes back there while that start is scrolled past. It is offered for a
     // response that ended in this window, watched or not, and for one still unread; a click on it
@@ -725,15 +736,23 @@ function createPane(body, ctx, daemon) {
     /**
      * Scrolls the transcript so the previous or next response starts at its top, or to its very
      * top or bottom when there is none (omp/response-nav.js). Going up stops following new
-     * output at once, before the next draw re-pins; reaching the bottom follows it again.
+     * output at once, before the next draw re-pins; reaching the bottom follows it again. It counts
+     * every response, so a transcript still coming in is drawn whole first, what was in view kept
+     * where it was.
      * @param {'previous' | 'next'} direction
      */
     function toResponse(direction) {
+      if (partial) {
+        const oldest = transcript.firstElementChild;
+        const was = oldest?.getBoundingClientRect().top ?? 0;
+        drawTranscript(true);
+        if (oldest) transcript.scrollTop += oldest.getBoundingClientRect().top - was;
+      }
       const origin = transcript.getBoundingClientRect().top + transcript.clientTop - transcript.scrollTop;
       /** @type {number[]} */
       const tops = [];
-      for (const item of state.items) {
-        const at = item.kind === 'assistant' && isResponse(item) ? drawn.get(item.key)?.node : null;
+      for (const key of responses) {
+        const at = drawn.get(key)?.node;
         if (at?.isConnected) tops.push(at.getBoundingClientRect().top - origin);
       }
       const max = transcript.scrollHeight - transcript.clientHeight;
@@ -1652,8 +1671,17 @@ function createPane(body, ctx, daemon) {
       watchLast(null);
     }
 
-    function drawTranscript() {
-      rewindBar.remove(); // items are placed by index; drawRewind puts it back
+    /** Whether the last draw left older items for the next frame (drawTranscript). */
+    let partial = false;
+
+    /**
+     * Draws the transcript: what changed, newest first, the rest left for the next frame once
+     * this one has done its share (DRAW_LEAST, DRAW_MS), unless `whole`, for what reads all of it.
+     * @param {boolean} [whole]
+     */
+    function drawTranscript(whole = false) {
+      const start = performance.now();
+      rewindBar.remove(); // items are placed each before the next; drawRewind puts it back
       const asides = daemon.asides(ompId());
       drawnAsides = asides;
       addAsides(state, asides ?? []);
@@ -1672,11 +1700,16 @@ function createPane(body, ctx, daemon) {
       const liveWork = state.streaming && last?.kind === 'work' ? last.key : null;
       /** @type {{ items: Array<import('../omp/transcript.js').Item | import('../omp/visibility.js').WorkItem>, working: { steps: number } | null }} */
       const shown = folded ? { items: folded, working: state.streaming && last?.kind === 'user' ? { steps: 0 } : null } : promptsAndResponses(state.items, state.streaming);
-      // The latest turn's response, for the arrow back to its start (drawTop).
+      // Every response, for ⌘↑ / ⌘↓ (toResponse), and the latest turn's, for the arrow back to its
+      // start (drawTop).
+      responses = [];
       lastResponse = null;
       for (const item of shown.items) {
         if (item.kind === 'user' && !item.byAgent) lastResponse = null;
-        else if (item.kind === 'assistant' && isResponse(item)) lastResponse = item.key;
+        else if (item.kind === 'assistant' && isResponse(item)) {
+          responses.push(item.key);
+          lastResponse = item.key;
+        }
       }
       const live = new Set();
       const itemCtx = { tools: state.tools, open: openDetails };
@@ -1715,18 +1748,30 @@ function createPane(body, ctx, daemon) {
           entries.push({ key: `pending:${which}:${i}`, rev: text, render: () => renderPending(text, which, isContinueDirective(text), cancel) });
         });
       }
-      entries.forEach(({ key, rev, render }, i) => {
-        live.add(key);
+      // Newest first, each put before the one after it, so what is left for later leaves no gap;
+      // an item changed but left for later shows as it was until then.
+      let built = 0;
+      partial = false;
+      /** @type {Element | null} */
+      let next = workingEl.parentNode === transcript ? workingEl : null;
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const { key, rev, render } = entries[i];
         let entry = drawn.get(key);
         if (!entry || entry.rev !== rev) {
-          const fresh = render();
-          entry?.node.replaceWith(fresh);
-          entry = { rev, node: fresh };
-          drawn.set(key, entry);
+          if (!whole && built >= DRAW_LEAST && performance.now() - start > DRAW_MS) partial = true;
+          else {
+            const fresh = render();
+            entry?.node.replaceWith(fresh);
+            entry = { rev, node: fresh };
+            drawn.set(key, entry);
+            built++;
+          }
         }
-        const at = transcript.children[i];
-        if (at !== entry.node) transcript.insertBefore(entry.node, at ?? null);
-      });
+        if (!entry) continue;
+        live.add(key);
+        if (entry.node.parentNode !== transcript || entry.node.nextSibling !== next) transcript.insertBefore(entry.node, next);
+        next = entry.node;
+      }
       for (const [key, entry] of drawn) {
         if (!live.has(key)) {
           entry.node.remove();
@@ -1744,6 +1789,7 @@ function createPane(body, ctx, daemon) {
       transcript.classList.toggle('is-streaming', state.streaming);
       drawRewind();
       drawMarks();
+      if (partial) schedule('transcript');
     }
 
     /** The highlights of the conversation's annotations (omp/annotation-marks.js). */
