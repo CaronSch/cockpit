@@ -849,6 +849,47 @@
   font-size: var(--text-xs);
 }
 
+/* A diff (code-copy.js): a row per line, every row as wide as the widest, so each tint runs the
+   block's whole width as it scrolls; the rows reach its edges, the padding inside them. */
+.md-code.is-diff {
+  padding-inline: 0;
+}
+
+.md-code.is-diff::before {
+  padding-inline: var(--space-3);
+}
+
+.md-code.is-diff > code {
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+}
+
+.md-diff-line {
+  min-height: 1lh;
+  padding-inline: var(--space-3);
+  white-space: pre;
+}
+
+.md-diff-line.is-add {
+  background: color-mix(in oklch, var(--color-ok) 14%, transparent);
+  color: color-mix(in oklch, var(--color-ok) 35%, var(--color-text));
+}
+
+.md-diff-line.is-del {
+  background: color-mix(in oklch, var(--color-danger) 14%, transparent);
+  color: color-mix(in oklch, var(--color-danger) 35%, var(--color-text));
+}
+
+.md-diff-line.is-hunk {
+  color: var(--color-code);
+}
+
+.md-diff-line.is-meta {
+  color: var(--color-text-dim);
+  font-weight: 500;
+}
+
 /* The scrolling `pre` sits inside, so the Copy control stays in the block's top-right corner. */
 .md-code-block {
   position: relative;
@@ -1291,6 +1332,8 @@ div.omp-compaction:not(.omp-fold)::after,
 }
 
 /* ── Dialogs, queue, suggestions, composer ──────────── */
+/* What the agent waits for (dialogs-view.js), over the message box and set like it: a card on a
+   soft shadow, its edge a faint hairline. */
 .omp-dialogs {
   flex: none;
   max-height: 55%;
@@ -1298,18 +1341,52 @@ div.omp-compaction:not(.omp-fold)::after,
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2);
-  border-top: 1px solid var(--color-line);
+  padding: var(--space-2) var(--space-3) 0;
 }
 
 .omp-dialog {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid color-mix(in oklch, var(--color-accent) 55%, transparent);
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-l);
+  corner-shape: round;
   background: var(--color-surface-raised);
+  box-shadow: 0 8px 24px -12px oklch(0% 0 0 / 0.6), 0 1px 2px oklch(0% 0 0 / 0.3);
+}
+
+/* What it waits for and its question, with Dismiss in the top-right corner. */
+.omp-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.omp-dialog-said {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* What it waits for, in the warm "needs you" of the Sessions list, after a dot of it. */
+.omp-dialog-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-warn);
+  font: 500 var(--text-xs) / 1.3 var(--font-ui);
+}
+
+.omp-dialog-kicker::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  corner-shape: round;
+  background: currentColor;
 }
 
 .omp-dialog-title {
@@ -1321,23 +1398,107 @@ div.omp-compaction:not(.omp-fold)::after,
   white-space: pre-wrap;
 }
 
+/* Its foot: Submit or Yes and No, and how long it waits, when it has them. */
+.omp-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .omp-dialog-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
+.omp-dialog-timeout {
+  color: var(--color-text-faint);
+  font-size: var(--text-xs);
+}
+
+.omp-dialog-dismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin: -2px -4px 0 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-faint);
+  font: var(--weight-regular) var(--text-xs) / 1 var(--font-ui);
+  cursor: pointer;
+  transition: background-color var(--duration-fast), color var(--duration-fast);
+}
+
+.omp-dialog-dismiss:hover,
+.omp-dialog-dismiss:focus-visible {
+  outline: none;
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+/* A key that does it: Esc, or an option's number. */
+.omp-dialog-key,
+.omp-option-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--color-line);
+  border-radius: 5px;
+  color: var(--color-text-faint);
+  font: 500 var(--text-2xs) / 1 var(--font-ui);
+  transition: border-color var(--duration-fast), color var(--duration-fast);
+}
+
+/* A choice's options: quiet rows, as a menu's, each with its number and, under its name, what it
+   means; the one pointed at or focused is filled, its number in the accent. */
 .omp-options {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 1px;
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
 }
 
 .omp-option {
-  flex-direction: column;
+  display: flex;
   align-items: flex-start;
+  gap: var(--space-3);
+  padding: 7px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
   text-align: left;
-  font-weight: var(--weight-regular);
+  cursor: pointer;
+  transition: background-color var(--duration-fast);
+}
+
+.omp-option:hover,
+.omp-option:focus-visible {
+  outline: none;
+  background: var(--color-hover);
+}
+
+.omp-option:is(:hover, :focus-visible) .omp-option-key {
+  border-color: color-mix(in oklch, var(--color-accent) 60%, transparent);
+  color: var(--color-accent);
+}
+
+.omp-option-key {
+  flex: none;
+  margin-top: 1px;
+}
+
+.omp-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .omp-option-desc {
@@ -1385,13 +1546,19 @@ div.omp-compaction:not(.omp-fold)::after,
   align-items: flex-start;
   gap: var(--space-3);
   margin-inline: calc(-1 * var(--space-2));
-  padding: 6px var(--space-2);
+  padding: 7px var(--space-2);
   border-radius: var(--radius-m);
   cursor: pointer;
+  transition: background-color var(--duration-fast);
 }
 
-.omp-choice:hover {
+.omp-choice:is(:hover, :focus-within) {
   background: var(--color-hover);
+}
+
+/* A chosen one keeps a tint of the accent. */
+.omp-choice:has(input:checked) {
+  background: color-mix(in oklch, var(--color-accent) 12%, transparent);
 }
 
 .omp-choice input {

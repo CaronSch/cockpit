@@ -184,7 +184,9 @@ What runs today:
   chart data are served by `/api/file`, raster and data types only, sandboxed;
   nothing remote is ever fetched, so a URL can't carry out what an agent read), thinking,
   tool calls with output), pick model and thinking level, log in to
-  providers, use slash commands, answer approval and `ask` dialogs, steer or stop
+  providers, use slash commands, answer approval and `ask` dialogs (a card over the message box set like it, saying
+  what the agent waits for over its question; a choice's options quiet numbered rows that 1–9 pick, ↑ ↓ move
+  between, Esc or Dismiss in its corner dismisses: `src/omp/dialogs-view.js`), steer or stop
   a running turn, and carry on a conversation whatever became of its omp (asleep,
   a daemon restart). Compaction draws a line across the transcript, in every view (*Only
   prompts and responses* too), with what happened in its middle and the summary a click away:
@@ -301,7 +303,8 @@ What runs today:
   way; a click shows it in a Plan window as a tab of the agent window (or brings forward the one
   showing it), a drag places one where it is dropped. A Markdown table in a reply has a Copy button (on
   hover) for Markdown, CSV or a PNG image drawn from its cells; a code block has one for its code
-  (not its language label), pinned to its corner while long lines scroll. Selected
+  (not its language label), pinned to its corner while long lines scroll; a ```diff (or ```patch) block shows its
+  added lines green and its removed ones red across its whole width, as the pull request window does. Selected
   reply text shows Comment and Ask (following the selection as new output scrolls it); either opens a box in the transcript under the block the
   selection ends in (a paragraph, a whole list or table), set like the message box, with that
   action alone, which Enter does too (as it saves a comment card edited in the message box;
