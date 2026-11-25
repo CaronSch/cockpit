@@ -1,6 +1,7 @@
 import { test, describe } from 'bun:test';
 import assert from 'node:assert/strict';
 import { parseInline, parseMarkdown, safeHref } from '../src/omp/markdown.js';
+import { diffLines } from '../src/omp/code-copy.js';
 
 describe('blocks', () => {
   test('headings, paragraphs with line breaks, and rules', () => {
@@ -192,5 +193,12 @@ describe('math', () => {
     assert.deepEqual(parseInline('`$x$`'), [{ type: 'code', text: '$x$' }]);
     assert.deepEqual(parseInline('$$x and \\[y'), [{ type: 'text', text: '$$x and [y' }]);
     assert.deepEqual(parseMarkdown('```\n$$x$$\n```'), [{ type: 'code', lang: '', text: '$$x$$' }]);
+  });
+});
+
+describe('diff blocks', () => {
+  test('a --- / +++ pair names the files; alone, each is a removed or added line', () => {
+    const lines = ['diff --git a/v.sql b/v.sql', 'index 1..2', '--- a/v.sql', '+++ b/v.sql', '@@ -1,3 +1,3 @@', ' SELECT', '--- old note', '+-- new note', '-AS x', '+AS y', '...'];
+    assert.deepEqual(diffLines(lines), ['meta', 'meta', 'meta', 'meta', 'hunk', 'context', 'del', 'add', 'del', 'add', 'context']);
   });
 });
