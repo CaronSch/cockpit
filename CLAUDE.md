@@ -146,7 +146,8 @@ What runs today:
   pull request onto a pull request window shows there); dropped on a window's head, it joins
   where the pointer is between its tabs, whatever the window. The window shown carries the
   strip in its head in place of its title: each tab its glyph and name (an agent's
-  conversation), an indigo dot while unread, a × on hover and on the shown one; its own
+  conversation), an indigo dot while unread, a × on hover and on the shown one (a name cut short shows whole in a
+  label under it while the pointer rests on it, as a lone window's title does: `src/ui/full-name.js`); its own
   head actions and close act on it. A click shows a tab, a middle click or its × closes it, a
   drag along the strip reorders and out of it moves the window (an edge of its own slot
   splits it out); arrows, Home and End move between tabs and show them, Delete closes one.
@@ -525,7 +526,8 @@ What runs today:
   changed first (`GET /api/plans`), to pick one; **All plans** goes back to the list. The phone
   shows the Plan line but opens no Plan window.
 - Nothing pops up on hover but the top bar's Config, workspace and + Widget menus (`src/ui/hover-menu.js`:
-  open while pointed at, pinned by a click): no tooltips (no `title` attributes), and no other
+  open while pointed at, pinned by a click) and a window's whole name where its tab or title cuts it short
+  (`src/ui/full-name.js`): no tooltips (no `title` attributes), and no other
   menu opens by pointing. Controls named only by a symbol say what they are to screen readers (`aria-label`).
 - Notes windows (the `scratchpad` widget): the pad's text fills the window, as a page; each new
   window, or the + after its title (a tab beside it), starts its own pad, and the window's title
@@ -892,6 +894,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/ui/dom.js` — Element construction helpers: elements, SVG elements, buttons that never submit a form, text that keeps a selection, and file-drag checks.
 - `src/ui/format.js` — Text formatters shared across the UI: error messages, home-relative paths and JSON dumps, with no DOM.
 - `src/ui/frame.js` — One animation frame for every window that draws: first each window's drawing (DOM writes), then the layout reads they asked for (`measure`), then the writes those reads decided.
+- `src/ui/full-name.js` — A window's whole name while the pointer rests on it, where its tab (or its head's title) cuts it short: a quiet label under it, after a short pause, gone as the pointer leaves, presses or drags.
 - `src/ui/hover-menu.js` — Top bar menus that open while the pointer rests on their button (Config, workspaces, + Widget): the menu follows the pointer, closing a moment after it leaves, and a click on the button or in the menu pins it open (a login under way, a widget dragged out of it, never closes under the user).
 - `src/ui/icons.js` — The small line icons buttons show in place of words: drawn as SVG strokes in the text's colour (styles/app.css `.stroke-icon`), so they sit centred and crisp where a font's glyph would not.
 - `src/ui/image-viewer.js` — An image viewer over the workbench: a click on an image (in a reply, a prompt or a note), or on a diagram or chart an agent drew, shows it as large as the window allows, on a dimmed backdrop; Esc or a click anywhere closes it.
