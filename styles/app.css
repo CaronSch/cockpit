@@ -1411,6 +1411,23 @@ body:not(.is-dragging) .ws-row:is(:hover, :focus-within) .ws-row-tools {
   opacity: 0.9;
 }
 
+/* A window's whole name, under its tab or title where that cuts it short (ui/full-name.js). */
+.full-name:popover-open {
+  position-area: bottom span-right;
+  position-try-fallbacks: flip-inline;
+  max-width: min(36rem, calc(100vw - 16px));
+  margin: 4px 0 0;
+  padding: 5px 8px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-m);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lift);
+  color: var(--color-text);
+  font: 500 var(--text-xs) / 1.4 var(--font-ui);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
 /* A manual popover, so it stays above the top bar's menus (which a drag can drop into). */
 .drag-ghost {
   position: fixed;

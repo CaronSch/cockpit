@@ -12,6 +12,7 @@ import { createGridRenderer } from './render/grid-renderer.js';
 import { createDropIndicator } from './render/drop-indicator.js';
 import { createTabStrips, panelId, tabId } from './render/tab-strip.js';
 import { attachSashController } from './interaction/sash-controller.js';
+import { attachFullNames } from './ui/full-name.js';
 import { createDragController } from './interaction/drag-controller.js';
 import { createPalette } from './ui/palette.js';
 import { createWorkspaceSwitcher } from './ui/workspace-switcher.js';
@@ -554,6 +555,7 @@ export async function createApp(root) {
   });
 
   attachSashController(api);
+  attachFullNames(gridEl);
   const drag = createDragController(api);
 
   /** @param {EventTarget | null} target */
