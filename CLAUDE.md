@@ -59,7 +59,9 @@ Planned capabilities:
   Every omp is also given the daemon's own tools (omp's RPC host tools: `set_host_tools` as it is
   set up, `host_tool_call` answered with `host_tool_result`; `HostTools` in
   `daemon/omp-session.js`, several joined by `allHostTools`): the `schedule` tool (`daemon/schedule.js`) and the
-  `plan` tool (`daemon/plans.js`). omp is the `omp` on PATH, else `~/.local/bin/omp` (where omp's
+  `plan` tool (`daemon/plans.js`), and what deep research runs on (`-e daemon/research`, a directory, which omp takes
+  as an extension package: the `cockpit-research` skill and the `research-gatherer` subagent in its `skills/` and
+  `agents/`; `/research`, below). omp is the `omp` on PATH, else `~/.local/bin/omp` (where omp's
   installer puts it without adding it to PATH), unless `--omp` says otherwise. Prefer Bun's own
   APIs where they make the code smaller.
   It also runs the Terminal windows' shells (`daemon/terminals.js`): the user's login shell in a
@@ -265,7 +267,24 @@ What runs today:
   is its terminal UI's) start a new conversation in the window's place, in the same directory: `/new` leaves
   the one it showed in Sessions, to sleep once idle as any does; `/archive` archives it first, as Sessions'
   Archive does (refused while its agent works); one nothing was sent to has no journal and is ended
-  instead, either way. A new conversation, until something is said in it, opens on a welcome card as omp's
+  instead, either way. `/research <question>` (the workbench's own as well) runs deep research. It goes to omp as an ordinary
+  prompt, `Deep research: <question>` and a line telling the agent to read the `cockpit-research` skill (`src/omp/message.js`
+  `researchPrompt`), so the conversation is named, searched and rewound by it; a bare `/research` sends nothing and says why. The
+  skill and its subagent are the daemon's own files (`daemon/research/`), given to every omp and written nowhere in the user's
+  `~/.omp`; the skill is hidden from agents' skill lists, so only the command starts a run. By it the agent leads: it asks up to
+  three scoping questions if an answer would change the plan, splits the question into 6 to 12 narrow sub-questions, listed with
+  their notes files in a brief (`~/research/<slug>/brief.md`), and hands each to a `research-gatherer` subagent on omp's `smol`
+  model (web search, read and write only; at most 12, then at most 6 more on the gaps, never a third wave), which writes notes
+  with a URL and verbatim quotes for every finding (`sources/<n>-<slug>.md`). The agent then runs the quote check, finds out
+  itself whether the sources its answer rests on still stand (withdrawn, retracted, superseded: a small model quotes a retracted
+  paper without noticing), and writes `report.md`: the answer first, each finding with its source and a confidence note, citing
+  only what the check found. The quote check (`daemon/research/skills/cockpit-research/quote-check.js`) is a module the agent
+  imports in its `eval` tool and gives its own read tool, so a page is read as a gatherer read it: it reads each
+  cited page again (kept in the run's `.pages/`), looks for every quoted passage on it with case, punctuation, line breaks and
+  hyphenation set aside (*verbatim*, *near*, *not found*, *page not fetched*, *incomplete*; a Quote line holding its writer's own
+  words beside a passage is not found; the pages of one site are read one after another, and a page lacking a passage once more, since a site that limits requests answers some with part of a page), flags arXiv papers marked withdrawn, lists the report's links no checked finding backs, and
+  writes `sources/quote-check.md`. It says the words are on the page, not that the source is right. A run has no spend cap: its
+  bounds are the skill's. A new conversation, until something is said in it, opens on a welcome card as omp's
   TUI does (`src/omp/welcome.js`): Cockpit's mark and wordmark drawn in pixels, its version (`DaemonConfig`
   `version`, from package.json) and a tip, one picked at random per window. The message box is a card set like the transcript (Inter; code, notes,
   paths and the spend are monospace), lifted by a soft shadow, its faint grey edge a little stronger while it is typed in,
@@ -747,7 +766,7 @@ telemetry views, cmux-parity features beyond the above.
   - `bun run test`: the `bun test` suites in `tests/`: the daemon's security checks (the
     loopback guard and Phone access's gate, against `tests/fixtures/fake-omp.js`, a scripted
     stand-in for omp), and a few pure modules (the layout, Markdown, the transcript reducer,
-    omp's frame decoder)
+    omp's frame decoder, the quote check's matching)
   - `bun run claude-md:check`
 - Tests are kept few on purpose. Write one only when it has a clear purpose worth its upkeep: it
   guards something that would be dangerous or costly to break without noticing (the security
@@ -857,7 +876,7 @@ particular, move a capability into "Current state" when it ships.
 - `src/omp/items-view.js` — DOM for one transcript item of the agent pane (messages, tool cards, shell runs, notes, unrecognised frames), a stretch of folded work (visibility.js `compactWork`), and a turn's decision review, built from text nodes only.
 - `src/omp/markdown-dom.js` — Renders the safe markdown tree from `markdown.js` as DOM nodes (text nodes only, never HTML).
 - `src/omp/markdown.js` — Safe markdown subset for agent text: parses into a small block/inline tree, never HTML.
-- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its place), and side questions: about a quote, or on their own (`/btw <question>`).
+- `src/omp/message.js` — Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its place), `/research <question>` (the prompt that starts deep research), and side questions: about a quote, or on their own (`/btw <question>`).
 - `src/omp/pr-suggest.js` — Pull request suggestions in the agent pane's message box: while the caret ends a `#` mention and the conversation's directory is in a GitHub repository, the suggestion list shows the pull requests it names, each with its title, and Tab, Enter or a click completes it as GitHub writes it (see `github/pr-mention.js`).
 - `src/omp/prompt-history.js` — Up and Down in the agent pane's message box step through what was sent in its conversation, as omp's own editor and a shell do: the user's prompts and `!` commands, newest first.
 - `src/omp/recent-dirs.js` — The directories an agent window's setup screen offers to start in: those of the user's conversations, most recently active first, so the few repositories they work in are a click away instead of typed again; kept free of the DOM so they can be tested.
@@ -947,6 +966,7 @@ particular, move a capability into "Current state" when it ships.
 - `daemon/pins.js` — Which omp conversations the user pinned to the top of the Sessions list: kept in one small file in the state directory, so a pin outlives windows, browsers, daemon restarts and the session itself.
 - `daemon/plans.js` — Plans: for a large task, an agent keeps a plan its user watches live beside the conversation (the Plan window, src/widgets/plan.js, and the Plan line at the foot of the agent window): the goal and approach, the steps, and a log of the decisions it took along the way and why.
 - `daemon/remote.js` — Phone access (settings.js `remote`): while it is on, the daemon also serves the owner's own devices on their tailnet, through a second listener bound to the Mac's Tailscale IPv4 with the same routes as loopback (server.js), behind a whois gate.
+- `daemon/research/skills/cockpit-research/quote-check.js` — The quote check of a deep research run (`/research`, the cockpit-research skill beside this file): every finding in the run's notes names a page and quotes it, and this looks for each quoted passage on its page, read again, so that the report cites only what its sources say.
 - `daemon/restart.js` — Restarting the daemon from the inside (`bun run restart`, scripts/restart.js), so an agent working on the workbench itself can take up its own changes and carry on afterwards.
 - `daemon/schedule.js` — Scheduled prompts: an agent sends its own conversation a prompt later, at a set time or after a while, through the `schedule` tool the daemon gives every omp it launches (omp's RPC host tools: omp-session.js `HostTools`).
 - `daemon/scratchpad.js` — Scratchpads: plain Markdown files the daemon keeps, one per pad, with pasted screenshots and files stored beside them.
@@ -989,6 +1009,6 @@ particular, move a capability into "Current state" when it ships.
 
 ### Test suites
 
-`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/updates.test.js`, `tests/workspaces.test.js`
+`tests/annotation-marks.test.js`, `tests/compute-layout.test.js`, `tests/daemon.test.js`, `tests/drop-zone.test.js`, `tests/frame-decoder.test.js`, `tests/grid-model.test.js`, `tests/markdown.test.js`, `tests/neighbors.test.js`, `tests/omp-transcript.test.js`, `tests/quote-check.test.js`, `tests/remote.test.js`, `tests/snap.test.js`, `tests/updates.test.js`, `tests/workspaces.test.js`
 
 <!-- END GENERATED -->

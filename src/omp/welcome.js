@@ -12,6 +12,7 @@ import { el, svg } from '../ui/dom.js';
 export const TIPS = [
   '`/new` starts a fresh conversation in this window and leaves this one in Sessions; `/archive` archives this one first',
   '`/fork <prompt>` opens a fork of the conversation as a new tab, or drag Send onto the grid to place one where you drop it',
+  '`/research <question>` runs deep research: subagents search the web, every quote is checked against its page, and you get a sourced report',
   'Start a line with `!` to run it as a shell command in the session’s directory, even while the agent works',
   'Send just `.` and the agent carries on with what it was doing, no prompt needed',
   '⌘↑ and ⌘↓ (Ctrl elsewhere) jump between the agent’s responses in a long conversation',
