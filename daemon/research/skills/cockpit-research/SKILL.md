@@ -43,6 +43,8 @@ Date: <today>
 
 Start one `research-gatherer` per sub-question, all in one `task` call. Each task gives the brief's path, the sub-question's number and text, its notes file, what to cover, and any sources you already know to look for. The gatherers know the notes format and the sourcing rules.
 
+Set `agent: "research-gatherer"` in every item of `tasks[]`, the second wave's too. Leave it out and omp starts a general-purpose worker instead: a larger model, with every tool and no notes format. If the reply to `task` says it spawned agents "using task", cancel them at once (`write proc://<job>/kill`), check that none wrote a file, and start them again with the field set.
+
 ## 4. Check the notes
 
 When the gatherers are done, run the quote check. It is a module beside this file, which you call from your `eval` tool with your own read tool, so that it reads pages as you do.
