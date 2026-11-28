@@ -318,6 +318,13 @@ needs (18.12.3's 2.1.280 was refused).
   for a topic the owner researches. *Response:* an extension in `daemon/research/` whose `tool_call`
   refuses a gatherer's `write` outside the run's directory and its `read` of local files outside it
   (omp loads extensions into subagents).
+  The quote check gives each URL a notes file names to the agent's read tool, and a gatherer under
+  such a page may have written one of the page's choosing (an address on the user's machine or
+  network): `refusedUrl` in `quote-check.js` refuses all but `http` and `https` to a public-looking
+  name on its own port, and reports the rest as pages not fetched. It does not see where a name
+  leads in DNS (a public name that resolves to a private address) or where a page sends the reader
+  on, so those stay open; a fix would be to resolve the name and read through a fetcher that
+  refuses private addresses on every hop. `tests/quote-check.test.js` covers the filter.
 
 ## When running sessions start to pile up
 

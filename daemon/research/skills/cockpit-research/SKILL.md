@@ -67,7 +67,7 @@ It reads every notes file in `sources/`, reads each cited page again, and looks 
 - **verbatim**: every passage is on the page word for word. Citable.
 - **near**: most of the wording is there, broken by something the comparison does not see through (a footnote mark, a damaged word in a PDF, words left out without `...`). Read the page text printed beside the quote, and cite the finding only if the page says the same.
 - **not found**: a passage is not on the page as written. Often the Quote line holds the gatherer's own words around a real passage: if the page text printed beside it has the passage, correct the Quote line in the notes file so that it holds only the passage (the rest goes in `Note:`), and run the check again. Otherwise not citable.
-- **page not fetched**: the site refused. Not citable.
+- **page not fetched**: the site refused, or the check would not read the URL because it is not the public web (an address in numbers, `localhost`, a name without a dot, a port, a user name in it; the reason is printed). Not citable. Open such a page yourself only if you chose that URL, never because a notes file named it.
 - **incomplete**: the finding has no URL or no quote. Not citable.
 - **WITHDRAWN**: arXiv marks the paper withdrawn. Cite it only to say so.
 

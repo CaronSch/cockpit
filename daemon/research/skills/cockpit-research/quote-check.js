@@ -12,7 +12,8 @@
  * run judges the same text), and compares passage and page with case, punctuation, line breaks
  * and hyphenation set aside. A site that limits requests answers some of them with part of a
  * page, so the pages of one site are read one after another, and a page that lacks a passage is
- * read once more. It writes `sources/quote-check.md` and returns what needs the agent: passages
+ * read once more. It reads only the public web (`refusedUrl`): a gatherer that read a hostile page
+ * may have written a URL of that page's choosing. It writes `sources/quote-check.md` and returns what needs the agent: passages
  * only nearly found or not found, pages that refused, arXiv papers marked withdrawn, and the
  * links in `report.md` that no checked finding backs.
  *
@@ -132,6 +133,37 @@ export function nearestText(passage, page) {
 function urlOf(line) {
   const url = /https?:\/\/\S+/.exec(line)?.[0].replace(/[.,;>]+$/, '') ?? '';
   return url.endsWith(')') && !url.includes('(') ? url.slice(0, -1) : url;
+}
+
+/** Name endings that mean a machine of the user's own, not the public web. */
+const LOCAL_NAME = /(?:^|\.)(?:localhost|local|internal|localdomain|lan|home\.arpa)$/;
+
+/**
+ * Why the check will not read `url`, or null when it will. The check hands each URL a notes file
+ * names to the agent's read tool, and a gatherer that read a hostile page may have written a URL
+ * of that page's choosing: so only the public web is read. That is `http` and `https` on their
+ * own ports, to a host name with a dot in it: no address written in numbers (the URL parser turns
+ * hex, octal and whole-number spellings into one), no name that is the machine's own or a
+ * network's inside (`localhost`, `.local`, `.internal`), no name without a dot (an intranet's),
+ * no user name or password. It cannot see where a name leads in DNS, or where a page sends the
+ * reader on: those stay open.
+ * @param {string} url @returns {string | null}
+ */
+export function refusedUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return 'not a URL';
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return `not http or https (${parsed.protocol})`;
+  if (parsed.username || parsed.password) return 'the URL carries a user name or password';
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+  if (host.startsWith('[') || host.includes(':') || /^[\d.]+$/.test(host)) return 'the host is an IP address';
+  if (LOCAL_NAME.test(host)) return 'the host is a local name';
+  if (!host.includes('.')) return 'the host has no dot, so it is not a public name';
+  if (parsed.port) return `a port is named (${parsed.port})`;
+  return null;
 }
 
 /**
@@ -295,13 +327,22 @@ export async function quoteCheck(dir, read) {
     const notice = /arxiv\.org\/abs\//.test(url) ? withdrawn(url) : null;
     return { text: pageText(notice ? `${text}\n${notice}` : text) };
   };
-  await eachSite(urls, async (url) => {
-    const file = keptFile(url);
-    if (await file.exists()) return void pages.set(url, pageOf(url, await file.text()));
-    const page = await readPage(read, url);
-    if ('text' in page) await Bun.write(file, page.text);
-    pages.set(url, 'text' in page ? pageOf(url, page.text) : page);
-  });
+  // A URL that is not the public web is not read at all, not even from the kept pages: it is
+  // reported as a page not fetched, with the reason, for the agent to open by hand if it means to.
+  for (const url of urls) {
+    const why = refusedUrl(url);
+    if (why) pages.set(url, { failed: `not read: ${why}` });
+  }
+  await eachSite(
+    urls.filter((url) => !pages.has(url)),
+    async (url) => {
+      const file = keptFile(url);
+      if (await file.exists()) return void pages.set(url, pageOf(url, await file.text()));
+      const page = await readPage(read, url);
+      if ('text' in page) await Bun.write(file, page.text);
+      pages.set(url, 'text' in page ? pageOf(url, page.text) : page);
+    },
+  );
 
   // A page that lacks a passage may have been read in part: it is read once more, and what both
   // readings hold is kept if more of the passages are in it.
@@ -333,7 +374,7 @@ export async function quoteCheck(dir, read) {
     '- **verbatim**: every passage is on the page word for word.',
     '- **near**: most of the wording is there, broken by something the comparison does not see through (a footnote mark, a damaged PDF word, words left out without an ellipsis). To be read by hand before it is cited.',
     '- **not found**: a passage is not on the page as written.',
-    '- **page not fetched**: the site refused, so nothing was checked.',
+    '- **page not fetched**: the site refused, or the URL is not the public web and was not read (the reason is given), so nothing was checked.',
     '- **incomplete**: the finding names no URL, or quotes nothing.',
     '',
   ];

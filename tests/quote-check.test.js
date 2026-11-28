@@ -4,7 +4,10 @@
  * must see through how a page's text differs from a quotation of it, and through nothing else.
  */
 import { expect, test } from 'bun:test';
-import { check, linksOf, pageText, parseNotes, urlKey } from '../daemon/research/skills/cockpit-research/quote-check.js';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { check, linksOf, pageText, parseNotes, quoteCheck, refusedUrl, urlKey } from '../daemon/research/skills/cockpit-research/quote-check.js';
 
 /**
  * How a finding quoting `quotes` checks against a page of `page`.
@@ -87,4 +90,70 @@ test('a report’s links are matched to findings whatever the spelling of their 
   ]);
   expect(urlKey('https://example.org/x%29.pdf#page=2')).toBe(urlKey('https://example.org/x).pdf'));
   expect(urlKey('https://example.org/path/')).toBe(urlKey('https://example.org/path'));
+});
+
+test('only the public web is read: no local, numeric, intranet or credentialed address', () => {
+  for (const url of [
+    'https://example.org/page',
+    'http://sub.example.co.uk/a/b?c=d#e',
+    'https://www.ft.com/content/abc',
+    'https://example.org./trailing-dot-is-still-public',
+  ]) expect(refusedUrl(url)).toBeNull();
+  for (const url of [
+    'file:///etc/passwd',
+    'ftp://example.org/x',
+    'http://localhost/x',
+    'http://cockpit.localhost/?token=abc',
+    'http://printer.local/x',
+    'http://db.internal/x',
+    'http://intranet/x',
+    'http://127.0.0.1/x',
+    'http://2130706433/x', // 127.0.0.1 as one number
+    'http://0x7f.0.0.1/x',
+    'http://0177.0.0.1/x',
+    'http://169.254.169.254/latest/meta-data/',
+    'http://192.168.0.1/',
+    'http://[::1]/x',
+    'http://[::ffff:127.0.0.1]/x',
+    'https://example.org:8443/x',
+    'https://user:pass@example.org/x',
+    'not a url',
+  ]) expect(refusedUrl(url)).not.toBeNull();
+});
+
+test('a URL that is not the public web is never handed to the read tool, and its finding is not citable', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'quote-check-test-'));
+  try {
+    await mkdir(join(dir, 'sources'));
+    await writeFile(
+      join(dir, 'sources', '1-notes.md'),
+      [
+        '# Notes',
+        '',
+        '## Findings',
+        '',
+        '### A public page',
+        '- URL: https://example.org/page',
+        '- Quote: The public page says that the quoted passage is present on it.',
+        '',
+        '### A page a hostile page chose',
+        '- URL: http://127.0.0.1:4777/api/secret',
+        '- Quote: The private page says that the quoted passage is present on it.',
+        '',
+      ].join('\n'),
+    );
+    /** @type {string[]} */
+    const asked = [];
+    const read = async (/** @type {string} */ path) => {
+      asked.push(path);
+      return { text: 'The public page says that the quoted passage is present on it.', details: { method: 'native' } };
+    };
+    const out = await quoteCheck(dir, read);
+    expect(asked).toEqual(['https://example.org/page']);
+    expect(out).toContain('1 verbatim');
+    expect(out).toContain('1 page not fetched');
+    expect(out).toContain('not read: the host is an IP address');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

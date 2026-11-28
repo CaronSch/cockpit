@@ -280,7 +280,7 @@ What runs today:
   paper without noticing), and writes `report.md`: the answer first, each finding with its source and a confidence note, citing
   only what the check found. The quote check (`daemon/research/skills/cockpit-research/quote-check.js`) is a module the agent
   imports in its `eval` tool and gives its own read tool, so a page is read as a gatherer read it: it reads each
-  cited page again (kept in the run's `.pages/`), looks for every quoted passage on it with case, punctuation, line breaks and
+  cited page again (kept in the run's `.pages/`; only the public web is read, `refusedUrl`: `http` and `https` on their own ports to a name with a dot in it, never an address in numbers, `localhost`, an intranet name or a user name in the URL, and a refused URL is a page not fetched, since a gatherer that read a hostile page may have written it), looks for every quoted passage on it with case, punctuation, line breaks and
   hyphenation set aside (*verbatim*, *near*, *not found*, *page not fetched*, *incomplete*; a Quote line holding its writer's own
   words beside a passage is not found; the pages of one site are read one after another, and a page lacking a passage once more, since a site that limits requests answers some with part of a page), flags arXiv papers marked withdrawn, lists the report's links no checked finding backs, and
   writes `sources/quote-check.md`. It says the words are on the page, not that the source is right. A run has no spend cap: its
