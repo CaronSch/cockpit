@@ -2,7 +2,8 @@
  * Builds what the agent pane sends from what the user wrote: the prompt (comments on quoted
  * parts of earlier replies, the draft, then files), `!` shell commands, `/fork <prompt>` (a
  * prompt for a new fork of the conversation), `/new` and `/archive` (a new conversation in its
- * place), and side questions: about a quote, or on their own (`/btw <question>`).
+ * place), `/research <question>` (the prompt that starts deep research), and side questions:
+ * about a quote, or on their own (`/btw <question>`).
  *
  * A comment goes first as a Markdown quote of the text it is about, followed by the comment,
  * the way a reply quotes an email; the model and the transcript both read it naturally.
@@ -111,6 +112,23 @@ export function forkPrompt(draft) {
 export function afreshCommand(draft) {
   const match = /^\/(new|archive)(?:\s+([\s\S]*))?$/.exec(draft.trim());
   return match ? { archive: match[1] === 'archive', rest: (match[2] ?? '').trim() } : null;
+}
+
+/** Where the agent reads how deep research is done: the skill the daemon gives every omp (daemon/research/). */
+const RESEARCH_SKILL = 'Follow the cockpit-research skill: read skill://cockpit-research before anything else.';
+
+/**
+ * The prompt a `/research <question>` draft sends ('' for a bare `/research`), or null when the
+ * draft is not one: the question, then where the agent reads how deep research is done. The
+ * workbench's own command, sent to omp as a prompt like any other, so the conversation is
+ * named, searched and rewound by it.
+ * @param {string} draft
+ */
+export function researchPrompt(draft) {
+  const match = /^\/research(?:\s+([\s\S]*))?$/.exec(draft.trim());
+  if (!match) return null;
+  const question = (match[1] ?? '').trim();
+  return question ? `Deep research: ${question}\n\n${RESEARCH_SKILL}` : '';
 }
 
 /**

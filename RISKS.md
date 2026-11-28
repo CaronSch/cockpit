@@ -228,6 +228,28 @@ needs (18.12.3's 2.1.280 was refused).
   every question hangs until its three-minute timeout. *Response:* re-read `main.ts` (print mode,
   `--tools`, `--auto-approve`) and check a question still answers with only read and grep calls.
 
+- **Deep research leans on omp's extension packages, skills, subagents and read tool.** `/research`
+  runs on `daemon/research/`, passed to every omp with `-e`: omp 18.19.0 takes a directory given that
+  way as an extension package and discovers the skill in its `skills/` and the subagent in its
+  `agents/`, with no `package.json` (checked live: `skill:cockpit-research` in its commands,
+  `research-gatherer` in its `task` tool, the skill absent from the system prompt's list for its
+  `hide: true`). The skill has the agent find itself with `realpath skill://cockpit-research` and
+  import `quote-check.js` in its `eval` tool (`language: "js"`), which reads pages through
+  `tool.read`: a result of `{ text, details }`, where `details.method` is `failed` or `raw-html` for a
+  page it could not read (`details.notes` saying why) and `details.meta.truncation` names the
+  `artifactId` and `totalLines` of a page shown in part, read on as `artifact://<id>:raw:<from>-<to>`;
+  and it reads `https://arxiv.org/abs/<id>:raw` for arXiv's "This paper has been withdrawn" notice.
+  A change shows up as an agent that cannot read the skill or find `research-gatherer` (it falls back
+  to other subagents, or does the searching itself), a quote check that fails to import or marks
+  every page not fetched, long pages checked only by their first part (real quotes reported not
+  found), or withdrawn papers no longer flagged. omp 18.19.0 fetches a URL again on every plain read,
+  and a site that limits requests then answers some in part (PubMed without its abstract, with no
+  failure noted) or refuses: the check reads one site's pages one after another and a page that lacks
+  a passage once more, which a change in how omp caches or paces fetches would make unneeded or
+  insufficient. *Response:* re-read omp's
+  `docs/task-agent-discovery.md`, `docs/skills.md`, `docs/tools/read.md` and `docs/tools/eval.md`, run
+  a small `/research`, and follow the change in `daemon/research/` and `daemon/omp-session.js`.
+
 - **Decision reviews lean on `omp -p` and message timestamps.** `daemon/decisions.js` runs
   `omp -p --no-session --no-tools … --model @smol --thinking off --system-prompt <prompt> <turn>`
   and reads the decisions from its stdout, one a line; a turn is named by its user message's
@@ -275,6 +297,34 @@ needs (18.12.3's 2.1.280 was refused).
   read a fresh Bugbot review with `gh api repos/<repo>/pulls/<n>/reviews` and its comments,
   update `bugbot.js` (and `BUGBOT_COMMAND`, to `bugbot run`, if `bugbot go` stops working) and
   its tests.
+
+## When a deep research run costs more than its user expected
+
+- **A run has no spend cap.** `/research` bounds a run only by what its skill tells the agent: up to
+  18 subagents on omp's `smol` model in two waves, the lead on the conversation's own model. The
+  first run by hand cost about a dollar in subagents, plus the lead's turns; a lead on a large model
+  reading a dozen notes files and writing a long report costs several times that, and an agent that
+  ignores the bounds costs more. *Response:* a budget per run: omp's `task.agentSoftRequestBudget`
+  for `research-gatherer` in `daemon/omp-overlay.yml`, and for the whole run a session of its own
+  launched with omp's `--max-cost`.
+
+## When a deep research run is likely to meet a hostile page
+
+- **A gatherer acts on what it reads.** A `research-gatherer` reads web pages chosen by a search,
+  on a small model, with `read` and `write` over the whole machine: a page written to instruct it
+  could have it read a local file and fetch a URL carrying its contents, or overwrite a file. Any
+  agent that reads the web has this exposure, and a session's main agent has more (a shell); a run
+  adds many pages read by the model least able to refuse. It bites wherever someone can plant a page
+  for a topic the owner researches. *Response:* an extension in `daemon/research/` whose `tool_call`
+  refuses a gatherer's `write` outside the run's directory and its `read` of local files outside it
+  (omp loads extensions into subagents).
+  The quote check gives each URL a notes file names to the agent's read tool, and a gatherer under
+  such a page may have written one of the page's choosing (an address on the user's machine or
+  network): `refusedUrl` in `quote-check.js` refuses all but `http` and `https` to a public-looking
+  name on its own port, and reports the rest as pages not fetched. It does not see where a name
+  leads in DNS (a public name that resolves to a private address) or where a page sends the reader
+  on, so those stay open; a fix would be to resolve the name and read through a fetcher that
+  refuses private addresses on every hop. `tests/quote-check.test.js` covers the filter.
 
 ## When running sessions start to pile up
 

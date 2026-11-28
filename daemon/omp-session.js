@@ -16,7 +16,8 @@
  *
  * The daemon gives the agent tools of its own (omp's RPC host tools, `HostTools`: the
  * `schedule` tool, schedule.js, and the `plan` tool, plans.js), which omp asks the daemon to run
- * when the agent calls one.
+ * when the agent calls one. And it gives omp what `/research` runs on (research/): the skill saying
+ * how deep research is done, and the subagent the searching is handed to.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -65,6 +66,11 @@ export const APPEND_SYSTEM_PROMPT =
 
 /** omp settings every session runs with, over the user's own (`--config`): plain titles. */
 const OMP_OVERLAY = join(import.meta.dir, 'omp-overlay.yml');
+/**
+ * What deep research runs on, given to every session as an extension package (`-e` of a
+ * directory): omp takes the skill and the subagent in its `skills/` and `agents/`.
+ */
+const RESEARCH = join(import.meta.dir, 'research');
 
 /** Successful responses after which omp is logged in to other providers. */
 const LOGIN_CHANGING_COMMANDS = new Set(['login', 'logout']);
@@ -177,7 +183,7 @@ export function launchOmp({ id, cwd, resume, fork, ompPath, emit, now = Date.now
   let child = null;
   try {
     const from = resume ? ['--resume', resume] : fork ? ['--fork', fork] : [];
-    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--config', OMP_OVERLAY, '--append-system-prompt', appendSystemPrompt, ...from], {
+    child = Bun.spawn([ompPath, '--mode', 'rpc-ui', '--config', OMP_OVERLAY, '-e', RESEARCH, '--append-system-prompt', appendSystemPrompt, ...from], {
       cwd,
       env: { ...process.env, ...env },
       stdin: 'pipe',

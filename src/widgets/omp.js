@@ -46,7 +46,7 @@ import { addAsides, addNote, applyEvent, conversationName, createTranscript, nee
 import { renderItem, renderPending, renderResponseMark, renderReview, renderWork } from '../omp/items-view.js';
 import { renderDialog } from '../omp/dialogs-view.js';
 import { createComposer } from '../omp/composer.js';
-import { afreshCommand, btwQuestion, composeAsk, composeSideQuestion, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, shellCommand } from '../omp/message.js';
+import { afreshCommand, btwQuestion, composeAsk, composeSideQuestion, forkPrompt, isCommand, isContinueDirective, outgoingPrompt, researchPrompt, shellCommand } from '../omp/message.js';
 import { pickTip, renderWelcome } from '../omp/welcome.js';
 import { attachSelectionPopup } from '../omp/selection-popup.js';
 import { attachAnnotationMarks } from '../omp/annotation-marks.js';
@@ -124,7 +124,10 @@ const AFRESH_COMMANDS = [
 ];
 /** The workbench's own: a side question (`/btw` is omp's terminal UI's only). @type {SlashCommand} */
 const BTW_COMMAND = { name: 'btw', aliases: [], hint: '<question>', description: 'Ask a side question; the answer stays out of the conversation' };
-const OWN_COMMANDS = new Set(['fork', 'new', 'archive', 'btw']);
+/** The workbench's own: deep research, by the skill the daemon gives every omp (daemon/research/). @type {SlashCommand} */
+const RESEARCH_COMMAND = { name: 'research', aliases: [], hint: '<question>', description: 'Deep research: subagents search the web, every quote is checked against its page, then a sourced report' };
+/** omp's commands the suggestions leave out: those the workbench has its own of, and the skill `/research` starts. */
+const OWN_COMMANDS = new Set(['fork', 'new', 'archive', 'btw', 'research', 'skill:cockpit-research']);
 
 /**
  * Whether the page is going away: its requests are cut off then, which says nothing of whether
@@ -1152,8 +1155,16 @@ function createPane(body, ctx, daemon) {
       // And `/btw <question>`: a side question, answered in the transcript, outside the conversation.
       const aside = btwQuestion(draft.value);
       if (aside !== null) return askAside(aside);
+      // `/research <question>` is the workbench's too, and goes to omp as a prompt: the question,
+      // then where the agent reads how deep research is done. Comments and files go with it.
+      const research = researchPrompt(draft.value);
+      if (research === '') {
+        hideSuggestions();
+        addNote(state, 'error', 'research', 'Nothing sent: say what to research, as in /research how do heat pumps compare with gas boilers in running cost.');
+        return schedule();
+      }
       // `/command` and `!shell` go as typed; comments and attachments wait for the next prompt.
-      const command = isCommand(draft.value);
+      const command = research === null && isCommand(draft.value);
       // A bare `!` names no command: leave it in the box rather than run nothing.
       if (shellCommand(draft.value) === '') return;
       // A file dropped a moment ago may still be on its way to the daemon: send it too.
@@ -1167,7 +1178,8 @@ function createPane(body, ctx, daemon) {
           return schedule();
         }
       }
-      const outgoing = composer.compose({ withCards: !command });
+      // The box may have been edited while the conversation woke: what it holds now is what goes.
+      const outgoing = composer.compose(research ? { withCards: true, draft: (text) => researchPrompt(text) || text } : { withCards: !command });
       const text = outgoing.message;
       if (!text) return;
       // A command runs as it would anyway; the rewind waits for a prompt.
@@ -1560,8 +1572,8 @@ function createPane(body, ctx, daemon) {
       const q = match[1].toLowerCase();
       const starts = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().startsWith(q));
       const contains = (/** @type {SlashCommand} */ c) => [c.name, ...c.aliases].some((n) => n.toLowerCase().includes(q));
-      // `/fork`, `/btw`, `/new` and `/archive` are the workbench's own (send()): omp's are its terminal UI's only.
-      const all = [FORK_COMMAND, BTW_COMMAND, ...AFRESH_COMMANDS, ...state.commands.filter((c) => !OWN_COMMANDS.has(c.name))];
+      // `/fork`, `/btw`, `/new`, `/archive` and `/research` are the workbench's own (send()): omp's `/btw` is its terminal UI's only.
+      const all = [FORK_COMMAND, BTW_COMMAND, ...AFRESH_COMMANDS, RESEARCH_COMMAND, ...state.commands.filter((c) => !OWN_COMMANDS.has(c.name))];
       const commands = [...all.filter(starts), ...all.filter((c) => !starts(c) && contains(c))].slice(0, MAX_SUGGESTIONS);
       suggestions.show(
         commands.map((c) => {
@@ -1616,8 +1628,9 @@ function createPane(body, ctx, daemon) {
     // daemon). This box lets go of it once it is placed.
     sendBtn.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || sendBtn.disabled || !forkable() || afreshCommand(draft.value)) return;
-      const forking = forkPrompt(draft.value);
-      const outgoing = forking !== null ? composer.compose({ withCards: true, draft: () => forking }) : composer.compose({ withCards: !isCommand(draft.value) });
+      // A fork takes `/fork`'s prompt, or `/research`'s, as Send here would send it.
+      const prompt = forkPrompt(draft.value) ?? researchPrompt(draft.value);
+      const outgoing = prompt !== null ? composer.compose({ withCards: true, draft: () => prompt }) : composer.compose({ withCards: !isCommand(draft.value) });
       const line = outgoing.message.replace(/\s+/g, ' ').trim();
       ctx.dragWidget('omp', { fork: file, cwd: cwd() || null, session: null, sessionFile: null, name: null, prompt: outgoing.message || null }, e, {
         label: line ? `Fork: ${line.length > 40 ? `${line.slice(0, 39)}…` : line}` : 'Fork',
